@@ -2,21 +2,23 @@
 
 **Frogy 2.0** is an automated external reconnaissance and Attack Surface Management (ASM) toolkit designed to map out an organization's entire internet presence. It identifies assets, IP addresses, web applications, and other metadata across the public internet and then smartly prioritizes them from P0 (most attractive) to P4 (least attractive) from a bug bounty hunter's perspective.
 
+<img src="https://github.com/user-attachments/assets/1334e811-2f8e-417c-8a17-7abb53f22d3a" alt="graphviz" width="700" height="800"/>
+
 ## Features
 
-- **Comprehensive Recon:**  
+- **Comprehensive recon:**  
   Aggregate subdomains and assets using multiple tools (CHAOS, Subfinder, Assetfinder, crt.sh) to map an organization's entire digital footprint.
   
-- **Live Asset Verification:**  
+- **Live asset verification:**  
   Validate assets with live DNS resolution and port scanning (using DNSX and Naabu) to confirm what is publicly reachable.
   
-- **In-depth Web Recon:**  
+- **In-depth web recon:**  
   Collect detailed HTTP response data (via HTTPX) including metadata, technology stack, status codes, content lengths, and more.
   
-- **Smart Prioritization:**  
+- **Smart prioritization:**  
   Use a composite scoring system that considers homepage status, content length, technology stack, and DNS data to categorize assets from P0 to P4—helping bug bounty hunters and pentesters focus on the most promising targets.
   
-- **Professional Reporting:**  
+- **Professional reporting:**  
   Generate a dynamic, color-coded HTML report with a modern design and dark/light theme toggle.
 
 ## Installation
