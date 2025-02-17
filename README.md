@@ -36,3 +36,6 @@ Clone the repository and run the installer script to set up all dependencies and
 ```bash
 chmod +x frogy.sh
 ./frogy.sh
+```
+
+Video Demo - https://www.youtube.com/watch?v=W0ltDZ5KrWU
