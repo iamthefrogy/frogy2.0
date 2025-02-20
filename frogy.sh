@@ -160,42 +160,9 @@ run_crtsh() {
 }
 
 ##############################################
-# 4e) Identify root domains from master_subdomains
+# 4e) (REMOVED: Identify root domains from master_subdomains)
+#     Function removed as requested
 ##############################################
-identify_root_domains() {
-  local python_script="identify_root_domains.py"
-  cat << 'EOF' > "$python_script"
-#!/usr/bin/env python3
-import sys
-import tldextract
-
-if len(sys.argv) != 3:
-    print("Usage: identify_root_domains.py <master_subdomains> <root_domains_file>")
-    sys.exit(1)
-
-master_file = sys.argv[1]
-root_file   = sys.argv[2]
-
-roots = set()
-with open(master_file, 'r') as f:
-    for line in f:
-        sub = line.strip()
-        if not sub:
-            continue
-        ext = tldextract.extract(sub)
-        root = ext.registered_domain
-        if root:
-            roots.add(root)
-
-with open(root_file, 'w') as f:
-    for r in sorted(roots):
-        f.write(r + "\n")
-EOF
-
-  chmod +x "$python_script"
-  python3 "$python_script" "output/$cdir/master_subdomains.txt" "output/$cdir/root_domains.txt"
-  rm -f "$python_script"
-}
 
 ##############################################
 # 4f) DNSX – Live Domain Check
@@ -285,12 +252,14 @@ build_html_report() {
 
   local report_html="output/$cdir/report.html"
 
+  # Notice: The container & logic for rootDomainChart is removed
+  # from the HTML and JavaScript for buildCharts()
   cat << 'EOF' > "$report_html"
   <!DOCTYPE html>
   <html lang="en">
   <head>
     <meta charset="UTF-8">
-    <title>External Attack Surface Analysis</title>
+    <title>External Attack Surface Analysis - $cdir</title>
     <!-- Chart.js for charts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -445,9 +414,7 @@ build_html_report() {
         <div class="chart-container">
           <canvas id="techChart"></canvas>
         </div>
-        <div class="chart-container">
-          <canvas id="rootDomainChart"></canvas>
-        </div>
+        <!-- Removed rootDomainChart container -->
       </div>
       <!-- SEARCH BOX -->
       <input type="text" id="searchBox" placeholder="Filter table (e.g. domain, status code, tech)..." />
@@ -578,20 +545,12 @@ build_html_report() {
               });
             }
           });
-          const rootDomainCount = {};
-          dnsxData.forEach(d => {
-            if(d.host) {
-              const parts = d.host.split(".");
-              const guess = parts.slice(-2).join(".");
-              rootDomainCount[guess] = (rootDomainCount[guess]||0) + 1;
-            }
-          });
+
           buildCharts({
             statusCount,
             priorityCount,
             portCount,
-            techCount,
-            rootDomainCount
+            techCount
           });
 
           // Build main table
@@ -685,12 +644,11 @@ build_html_report() {
         `;
       }
 
-      function buildCharts({statusCount, priorityCount, portCount, techCount, rootDomainCount}) {
+      function buildCharts({statusCount, priorityCount, portCount, techCount}) {
         const scCanvas   = document.getElementById("statusCodeChart");
         const prCanvas   = document.getElementById("priorityChart");
         const portCanvas = document.getElementById("portChart");
         const techCanvas = document.getElementById("techChart");
-        const rdCanvas   = document.getElementById("rootDomainChart");
 
         // HTTP Status Codes chart
         if(scCanvas) {
@@ -793,32 +751,6 @@ build_html_report() {
             }
           });
         }
-
-        // Root domain usage chart
-        if(rdCanvas) {
-          const sortedRoots = Object.keys(rootDomainCount).sort((a,b)=> rootDomainCount[b]-rootDomainCount[a]);
-          const topRoots = sortedRoots.slice(0,10);
-          const rootVals = topRoots.map(r => rootDomainCount[r]);
-          new Chart(rdCanvas, {
-            type: 'bar',
-            data: {
-              labels: topRoots,
-              datasets: [{
-                label: 'Root Domain Count (Top 10)',
-                data: rootVals,
-                backgroundColor: '#2ecc71'
-              }]
-            },
-            options: {
-              responsive: true,
-              plugins: {
-                legend: { display: false },
-                title: { display: true, text: 'Root Domain Usage (Top 10)' }
-              },
-              scales: { y: { beginAtZero: true } }
-            }
-          });
-        }
       }
 
       loadData();
@@ -829,7 +761,6 @@ EOF
 
   info "HTML report generated at: $report_html"
 }
-
 
 ##############################################
 # 7) Show final summary table
@@ -870,16 +801,7 @@ main() {
   sort -u "$ALL_TEMP" > "$MASTER_SUBS"
   rm -f "$ALL_TEMP"
 
-  # 3) Identify root domains + re-run Subfinder
-  info "Identifying root domains..."
-  identify_root_domains
-  info "Running Subfinder on root domains..."
-  subfinder -dL "output/$cdir/root_domains.txt" -all -silent \
-    -o "output/$cdir/subfinder_root.txt" \
-    >/dev/null 2>&1 || true
-
-  cat "output/$cdir/subfinder_root.txt" >> "$MASTER_SUBS"
-  sort -u -o "$MASTER_SUBS" "$MASTER_SUBS"
+  # (REMOVED: Root domain identification & subsequent subfinder run)
 
   # 4) Run DNSX, Naabu, HTTPX
   run_dnsx
