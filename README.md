@@ -27,8 +27,8 @@
 - Adding security and compliance-related data (SSL/TLS hygiene, SPF, Dmarc, Headers etc)
 - Identifying customer-intended vs colleague-intended applications
 - Identified abandoned and unmainted applications
-- Basic dashboard/analytics if possoible
-- Identifying horizontal and vertical both domains
+- ~~Basic dashboard/analytics if possoible~~
+- ~~Identifying horizontal and vertical both domains~~
 
 ## Installation
 
