@@ -24,10 +24,11 @@
 ## Future Roadmap
 
 - Enhance prioritisation for target picking
-- Adding security and compliance related data (SSL/TLS hygiene, SPF, Dmarc, Headers etc)
-- Identifying customer intended vs colleague intended applications
+- Adding security and compliance-related data (SSL/TLS hygiene, SPF, Dmarc, Headers etc)
+- Identifying customer-intended vs colleague-intended applications
 - Identified abandoned and unmainted applications
 - Basic dashboard/analytics if possoible
+- Identifying horizontal and vertical both domains
 
 ## Installation
 
