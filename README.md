@@ -21,6 +21,14 @@
 - **Professional reporting:**  
   Generate a dynamic, color-coded HTML report with a modern design and dark/light theme toggle.
 
+## Future Roadmap
+
+- Enhance prioritisation for target picking
+- Adding security and compliance related data (SSL/TLS hygiene, SPF, Dmarc, Headers etc)
+- Identifying customer intended vs colleague intended applications
+- Identified abandoned and unmainted applications
+- Basic dashboard/analytics if possoible
+
 ## Installation
 
 Clone the repository and run the installer script to set up all dependencies and tools:
