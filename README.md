@@ -2,7 +2,7 @@
 
 **Frogy 2.0** is an automated external reconnaissance and Attack Surface Management (ASM) toolkit designed to map out an organization's entire internet presence. It identifies assets, IP addresses, web applications, and other metadata across the public internet and then smartly prioritizes them from P0 (most attractive) to P4 (least attractive) from a bug bounty hunter's perspective.
 
-<img src="https://github.com/user-attachments/assets/1334e811-2f8e-417c-8a17-7abb53f22d3a" alt="graphviz" width="700" height="800"/>
+<img src="https://chintangurjar.com/images/frogyasm.png" alt="graphviz" width="700" height="1000"/>
 
 ## Features
 
