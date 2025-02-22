@@ -10,6 +10,7 @@ ASSETFINDER_COUNT=0
 CRT_COUNT=0
 DNSX_LIVE_COUNT=0
 HTTPX_LIVE_COUNT=0
+LOGIN_FOUND_COUNT=0  # Count how many times a login form was detected
 
 ##############################################
 # 1) Helper: Print with colors (minimal logs)
@@ -160,8 +161,7 @@ run_crtsh() {
 }
 
 ##############################################
-# 4e) (REMOVED: Identify root domains from master_subdomains)
-#     Function removed as requested
+# 4e) (REMOVED logic - as in the original)
 ##############################################
 
 ##############################################
@@ -190,6 +190,8 @@ run_dnsx() {
 run_naabu() {
   if [[ "$USE_NAABU" == "true" ]]; then
     info "Running naabu..."
+    # limiting to top ports or specific ports is optional
+    # Adjust to suit your environment
     naabu -silent \
           -l "output/$cdir/master_subdomains.txt" \
           --top-ports 100 \
@@ -223,6 +225,75 @@ run_httpx() {
 }
 
 ##############################################
+# 4i) Login detection
+##############################################
+run_login_detection() {
+  # Only print "Detecting Login panels..." once
+  info "Detecting Login panels...."
+
+  local input_file="output/$cdir/httpx.json"
+  local output_file="output/$cdir/login.json"
+
+  # If no httpx.json, skip
+  if [ ! -f "$input_file" ]; then
+    return
+  fi
+
+  # Ensure jq is installed
+  if ! command -v jq >/dev/null 2>&1; then
+    return
+  fi
+
+  local timeout_duration="10"  # 10-second timeout
+  local urls
+  local -a results=()
+
+  # Extract the URLs from httpx.json
+  urls=$(jq -r '.url' "$input_file")
+
+  for url in $urls; do
+    # We don't print anything while processing each URL
+    response=$(curl -Ls --max-time "$timeout_duration" -w "%{url_effective}\n" "$url" -o response.html 2>/dev/null || true)
+    if [ $? -ne 0 ] || [ -z "$response" ]; then
+      # If curl fails or times out
+      results+=("{\"url\": \"$url\", \"final_url\": \"\", \"login_found\": \"N/A\"}")
+      continue
+    fi
+
+    final_url=$(echo "$response" | tail -n1)
+    local initial_domain=$(echo "$url" | awk -F/ '{print $3}')
+    local final_domain=$(echo "$final_url" | awk -F/ '{print $3}')
+
+    # If domain changes, skip
+    if [[ "$initial_domain" != "$final_domain" ]]; then
+      results+=("{\"url\": \"$url\", \"final_url\": \"$final_url\", \"login_found\": \"No\"}")
+      continue
+    fi
+
+    # Basic login detection: search for typical form-based patterns
+    # Avoid script exit with '|| true' after each grep
+    login_detected=$(
+      grep -Eo '<form[^>]*>' response.html 2>/dev/null || true \
+      | grep -Ei 'login|log-in|sign-in|authentication|username|password|auth|session|token|credential|forgot-password|reset-password|oauth|register|signup|sign-up|user[ _-]?name|pass[ _-]?word|passwd|account|secure|access|member|log[ _-]?on|signoff|sign-off|logoff|log-off|security|authentic|authorize|access[ _-]?control|verify|validat|sso|two-factor|2fa|mfa|lockscreen|biometric|fingerprint|face[ _-]?id|otp|one[ _-]?time[ _-]?pass|recover|recovery' 2>/dev/null || true
+    )
+
+    if [[ -n "$login_detected" ]]; then
+      LOGIN_FOUND_COUNT=$((LOGIN_FOUND_COUNT + 1))
+      results+=("{\"url\": \"$url\", \"final_url\": \"$final_url\", \"login_found\": \"Yes\"}")
+    else
+      results+=("{\"url\": \"$url\", \"final_url\": \"$final_url\", \"login_found\": \"No\"}")
+    fi
+  done
+
+  # Combine all result objects into a JSON array
+  local json_output
+  json_output=$(printf "%s\n" "${results[@]}" | jq -s '.')
+
+  echo "$json_output" > "$output_file"
+  mv response.html output/$cdir/
+}
+
+##############################################
 # 5) Merge line-based JSON -> single-array JSON
 ##############################################
 combine_json() {
@@ -241,7 +312,7 @@ combine_json() {
 build_html_report() {
   info "Building HTML report with analytics..."
 
-  # Merge line-based JSON into arrays (same as before)
+  # Merge line-based JSON into arrays
   combine_json "output/$cdir/dnsx.json"   "output/$cdir/dnsx_merged.json"
   combine_json "output/$cdir/naabu.json"  "output/$cdir/naabu_merged.json"
   combine_json "output/$cdir/httpx.json"  "output/$cdir/httpx_merged.json"
@@ -252,8 +323,7 @@ build_html_report() {
 
   local report_html="output/$cdir/report.html"
 
-  # Notice: The container & logic for rootDomainChart is removed
-  # from the HTML and JavaScript for buildCharts()
+  # Original HTML contents (unchanged)
   cat << 'EOF' > "$report_html"
   <!DOCTYPE html>
   <html lang="en">
@@ -402,11 +472,15 @@ build_html_report() {
       </div>
       <!-- CHARTS -->
       <div class="charts-row">
+        <!-- New Pie Chart for Login Interfaces vs Other Endpoints -->
+        <div class="chart-container">
+          <canvas id="priorityChart"></canvas>
+        </div>
         <div class="chart-container">
           <canvas id="statusCodeChart"></canvas>
         </div>
         <div class="chart-container">
-          <canvas id="priorityChart"></canvas>
+          <canvas id="loginPieChart"></canvas>
         </div>
         <div class="chart-container">
           <canvas id="portChart"></canvas>
@@ -414,7 +488,6 @@ build_html_report() {
         <div class="chart-container">
           <canvas id="techChart"></canvas>
         </div>
-        <!-- Removed rootDomainChart container -->
       </div>
       <!-- SEARCH BOX -->
       <input type="text" id="searchBox" placeholder="Filter table (e.g. domain, status code, tech)..." />
@@ -433,6 +506,7 @@ build_html_report() {
           <th>Redirect Location</th>
           <th>Homepage Title</th>
           <th>Web Server</th>
+          <th>Login Found</th>
           <th>Technology Stack</th>
           <th>Status Code</th>
           <th>Content Length</th>
@@ -495,14 +569,27 @@ build_html_report() {
 
       async function loadData() {
         try {
-          const [dnsxRes, naabuRes, httpxRes] = await Promise.all([
+          const [dnsxRes, naabuRes, httpxRes, loginRes] = await Promise.all([
             fetch("dnsx.json"),
             fetch("naabu.json"),
-            fetch("httpx.json")
+            fetch("httpx.json"),
+            fetch("login.json")
           ]);
           const dnsxData = await dnsxRes.json().catch(() => []);
           const naabuData = await naabuRes.json().catch(() => []);
           const httpxData = await httpxRes.json().catch(() => []);
+          const loginData = await loginRes.json().catch(() => []);
+
+          // Build a lookup for login statuses keyed by URL
+          const loginMap = {};
+          loginData.forEach(item => {
+            loginMap[item.url] = item.login_found;
+          });
+
+          // Compute counts for the pie chart
+          const endpointsCount = httpxData.length;
+          const loginFoundCount = loginData.filter(item => item.login_found === "Yes").length;
+          buildLoginPieChart(endpointsCount, loginFoundCount);
 
           // Build scoreboard
           const liveSubs = dnsxData.filter(d => d.status_code==="NOERROR").length;
@@ -513,8 +600,8 @@ build_html_report() {
           buildScoreboard({
             totalSubdomains,
             liveSubs,
-            totalHttpx: httpxData.length,
-            distinctPorts
+            totalHttpx: endpointsCount,
+            loginFoundCount
           });
 
           // Build distributions for charts
@@ -587,6 +674,7 @@ build_html_report() {
                   <td>${h.location || "N/A"}</td>
                   <td>${h.title || "N/A"}</td>
                   <td>${h.webserver || "N/A"}</td>
+                  <td>${loginMap[h.url] || "N/A"}</td>
                   <td>${(h.tech && h.tech.length) ? h.tech.join("<br>") : "N/A"}</td>
                   <td>${(h.status_code!==undefined) ? h.status_code : "N/A"}</td>
                   <td>${(h.content_length!==undefined) ? h.content_length : "N/A"}</td>
@@ -613,6 +701,7 @@ build_html_report() {
                 <td>N/A</td>
                 <td>N/A</td>
                 <td>N/A</td>
+                <td>N/A</td>
               `;
               table.appendChild(row);
             }
@@ -622,24 +711,24 @@ build_html_report() {
         }
       }
 
-      function buildScoreboard({totalSubdomains, liveSubs, totalHttpx, distinctPorts}) {
+      function buildScoreboard({totalSubdomains, liveSubs, totalHttpx, loginFoundCount}) {
         const sb = document.getElementById("scoreboard");
         sb.innerHTML = `
           <div class="score-card">
             <h2>${totalSubdomains}</h2>
-            <p>Total Assets</p>
+            <p>Total Unique Assets</p>
           </div>
           <div class="score-card">
             <h2>${liveSubs}</h2>
-            <p>Live Assets</p>
+            <p>Total Live Assets</p>
           </div>
           <div class="score-card">
             <h2>${totalHttpx}</h2>
-            <p>Application Endpoints</p>
+            <p>Application Endpoints (Various Ports)</p>
           </div>
           <div class="score-card">
-            <h2>${distinctPorts}</h2>
-            <p>Distinct Open Ports</p>
+            <h2>${loginFoundCount}</h2>
+            <p>Login Interface Found</p>
           </div>
         `;
       }
@@ -649,31 +738,6 @@ build_html_report() {
         const prCanvas   = document.getElementById("priorityChart");
         const portCanvas = document.getElementById("portChart");
         const techCanvas = document.getElementById("techChart");
-
-        // HTTP Status Codes chart
-        if(scCanvas) {
-          const labels = Object.keys(statusCount).sort((a,b)=> +a - +b);
-          const data   = labels.map(l => statusCount[l]);
-          new Chart(scCanvas, {
-            type: 'bar',
-            data: {
-              labels,
-              datasets: [{
-                label: 'HTTP Status Codes',
-                data,
-                backgroundColor: ['#3498db','#1abc9c','#9b59b6','#f1c40f','#e74c3c','#34495e','#95a5a6']
-              }]
-            },
-            options: {
-              responsive: true,
-              plugins: {
-                legend: { display: false },
-                title: { display: true, text: 'HTTP Status Codes' }
-              },
-              scales: { y: { beginAtZero: true } }
-            }
-          });
-        }
 
         // Priority distribution chart
         if(prCanvas) {
@@ -694,6 +758,31 @@ build_html_report() {
               plugins: {
                 legend: { display: false },
                 title: { display: true, text: 'Asset Attractiveness by Hackers' }
+              },
+              scales: { y: { beginAtZero: true } }
+            }
+          });
+        }
+
+        // HTTP Status Codes chart
+        if(scCanvas) {
+          const labels = Object.keys(statusCount).sort((a,b)=> +a - +b);
+          const data   = labels.map(l => statusCount[l]);
+          new Chart(scCanvas, {
+            type: 'bar',
+            data: {
+              labels,
+              datasets: [{
+                label: 'HTTP Status Codes',
+                data,
+                backgroundColor: ['#3498db','#1abc9c','#9b59b6','#f1c40f','#e74c3c','#34495e','#95a5a6']
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: { display: false },
+                title: { display: true, text: 'HTTP Status Codes' }
               },
               scales: { y: { beginAtZero: true } }
             }
@@ -753,6 +842,36 @@ build_html_report() {
         }
       }
 
+      function buildLoginPieChart(endpointsCount, loginFoundCount) {
+        const canvas = document.getElementById("loginPieChart");
+        if (canvas) {
+          new Chart(canvas, {
+            type: 'bar',
+            data: {
+              labels: ["Found", "Not Found"],
+              datasets: [{
+                // no label here
+                data: [loginFoundCount, endpointsCount - loginFoundCount],
+                backgroundColor: ['#e74c3c', '#2ecc71']
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                title: {
+                  display: true,
+                  text: 'Login Interfaces Identified'
+                },
+                legend: {
+                  display: false  // <--- hide the legend
+                }
+              }
+            }
+          });
+        }
+      }
+
+
       loadData();
     </script>
   </body>
@@ -780,7 +899,8 @@ show_summary() {
   printf "%-28s %s\n" "Total assets pre-deduplication:" "$combined_pre_dedup"
   printf "%-28s %s\n" "Final assets post-deduplication:" "$final_subdomains_count"
   printf "%-28s %s\n" "Total Live assets (dnsx):" "$DNSX_LIVE_COUNT"
-  printf "%-28s %s\n" "Total Live websites on all ports (httpx):" "$HTTPX_LIVE_COUNT"
+  printf "%-28s %s\n" "Total Live websites (httpx):" "$HTTPX_LIVE_COUNT"
+  printf "%-28s %s\n" "Detected Login Forms:" "$LOGIN_FOUND_COUNT"
   echo "============================================="
 }
 
@@ -801,12 +921,13 @@ main() {
   sort -u "$ALL_TEMP" > "$MASTER_SUBS"
   rm -f "$ALL_TEMP"
 
-  # (REMOVED: Root domain identification & subsequent subfinder run)
-
-  # 4) Run DNSX, Naabu, HTTPX
+  # 3) Run DNSX, Naabu, HTTPX
   run_dnsx
   run_naabu
   run_httpx
+
+  # 4) Run Login Detection
+  run_login_detection
 
   # 5) Build HTML report
   build_html_report
