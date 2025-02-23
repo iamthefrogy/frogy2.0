@@ -23,14 +23,17 @@
 
 ## Future Roadmap
 
-- Enhance prioritisation for target picking
-- Adding security and compliance-related data (SSL/TLS hygiene, SPF, Dmarc, Headers etc)
-- Identifying customer-intended vs colleague-intended applications
-- Identified abandoned and unwanted applications
-- Identify traditional endpoints vs. API endpoints
-- idenfify login portals
-- ~~Basic dashboard/analytics if possoible~~
-- ~~Identifying horizontal and vertical both domains~~
+- Enhance prioritisation for target picking.
+- ~~Adding security and compliance-related data (SSL/TLS hygiene, SPF, Dmarc, Headers etc)~~
+- Identifying customer-intended vs colleague-intended applications.
+- Identified abandoned and unwanted applications.
+- Identify traditional endpoints vs. API endpoints.
+- Allow to filter column data.
+- Allow to filter displaying columns.
+- Add more analytics based on new data.
+- ~~Idenfify login portals.~~
+- ~~Basic dashboard/analytics if possible.~~
+- ~~Identifying horizontal and vertical both domains.~~
 
 ## Installation
 
