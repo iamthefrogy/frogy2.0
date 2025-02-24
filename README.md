@@ -45,11 +45,16 @@ chmod +x install.sh
 ```
 ## Usage
 
-Clone the repository and run the installer script to set up all dependencies and tools:
-
+OPTION 1 - If you wish to use it against a specific organisation, then utilise frogy.sh. Here, you will enter the organisation's name, which will be searched in the CHAOS database and also fetch assets from there.
 ```bash
 chmod +x frogy.sh
 ./frogy.sh
 ```
 
-Video Demo - https://www.youtube.com/watch?v=W0ltDZ5KrWU
+OPTION 2 - If you do not care about the names of organisations but wish to run it against the list of primary domains in the file, then use this. You can provide any file as the input file.
+```bash
+chmod +x frogy-multiple-domains.sh
+./frogy-multiple-domains.sh domains.txt
+```
+
+Video Demo - https://www.youtube.com/watch?v=LHlU4CYNj1M
