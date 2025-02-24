@@ -194,7 +194,7 @@ run_naabu() {
     # Adjust to suit your environment
     naabu -silent \
           -l "output/$cdir/master_subdomains.txt" \
-          -p 80,443 \
+          --top-ports 100 \
           -o "output/$cdir/naabu.json" \
           -j \
           >/dev/null 2>&1 || true
