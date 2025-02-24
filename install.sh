@@ -17,17 +17,17 @@ echo "Detected OS: $OS"
 install_dependencies() {
   echo "Installing common dependencies for Debian/Ubuntu/Kali..."
   sudo apt-get update
-  sudo apt-get install -y jq curl unzip sed python3 libpcap-dev
+  sudo apt-get install -y jq curl unzip sed python3 libpcap-dev whois dnsutils openssl
 }
 
 install_dependencies_redhat() {
   echo "Installing common dependencies for RedHat-based systems..."
   if command -v dnf > /dev/null 2>&1; then
     sudo dnf install -y epel-release
-    sudo dnf install -y jq curl unzip sed python3 libpcap-devel
+    sudo dnf install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl
   else
     sudo yum install -y epel-release
-    sudo yum install -y jq curl unzip sed python3 libpcap-devel
+    sudo yum install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl
   fi
 }
 
