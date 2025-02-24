@@ -28,6 +28,7 @@
 - Identifying customer-intended vs colleague-intended applications.
 - Identified abandoned and unwanted applications.
 - Identify traditional endpoints vs. API endpoints.
+- Change font color in darkmode.
 - ~~Allow to filter column data.~~
 - ~~Add more analytics based on new data.~~
 - ~~Idenfify login portals.~~
