@@ -19,7 +19,7 @@
   Use a composite scoring system that considers homepage status, content length, technology stack, and DNS data to categorize assets from P0 to P4—helping bug bounty hunters and pentesters focus on the most promising targets.
   
 - **Professional reporting:**  
-  Generate a dynamic, color-coded HTML report with a modern design and dark/light theme toggle.
+  Generate a dynamic, colour-coded HTML report with a modern design and dark/light theme toggle.
 
 ## Future Roadmap
 
@@ -28,9 +28,8 @@
 - Identifying customer-intended vs colleague-intended applications.
 - Identified abandoned and unwanted applications.
 - Identify traditional endpoints vs. API endpoints.
-- Allow to filter column data.
-- Allow to filter displaying columns.
-- Add more analytics based on new data.
+- ~~Allow to filter column data.~~
+- ~~Add more analytics based on new data.~~
 - ~~Idenfify login portals.~~
 - ~~Basic dashboard/analytics if possible.~~
 - ~~Identifying horizontal and vertical both domains.~~
