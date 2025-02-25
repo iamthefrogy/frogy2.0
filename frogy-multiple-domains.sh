@@ -190,7 +190,7 @@ run_naabu() {
     info "Running naabu..."
     naabu -silent \
           -l "$MASTER_SUBS" \
-          --top-ports 100 \
+          -p 80,443 \
           -o "$RUN_DIR/naabu.json" \
           -j \
           >/dev/null 2>&1 || true
@@ -218,10 +218,10 @@ run_httpx() {
 }
 
 ##############################################
-# Login detection
+# Login detection (New Comprehensive Logic with Granular JSON Output)
 ##############################################
 run_login_detection() {
-  info "Detecting Login panels...."
+  info "Detecting Login panels..."
   local input_file="$RUN_DIR/httpx.json"
   local output_file="$RUN_DIR/login.json"
 
@@ -235,42 +235,141 @@ run_login_detection() {
 
   local timeout_duration="10"
   local urls
-  local -a results=()
-
   urls=$(jq -r '.url' "$input_file")
+
+  # Start JSON output array
+  echo "[" > "$output_file"
+  local first_entry=true
+
+  # Inner function for comprehensive login detection.
+  detect_login() {
+      local headers_file="$1"
+      local body_file="$2"
+      local final_url="$3"
+      local -a reasons=()  # Declare and initialize the array
+
+      # --- HTML Content Checks ---
+      if grep -qi -E '<input[^>]*type=["'"'"']password["'"'"']' "$body_file"; then
+          reasons+=("Found password field")
+      fi
+      if grep -qi -E '<input[^>]*(name|id)=["'"'"']?(username|user|email|userid|loginid)' "$body_file"; then
+          reasons+=("Found username/email field")
+      fi
+      if grep -qi -E '<form[^>]*(action|id|name)[[:space:]]*=[[:space:]]*["'"'"'][^"'"'"'>]*(login|log[-]?in|signin|auth|session|user|passwd|pwd|credential|verify|oauth|token|sso)' "$body_file"; then
+          reasons+=("Found form with login-related attributes")
+      fi
+      if grep -qi -E '(<input[^>]*type=["'"'"']submit["'"'"'][^>]*value=["'"'"']?(login|sign[[:space:]]*in|authenticate)|<button[^>]*>([[:space:]]*)?(login|sign[[:space:]]*in|authenticate))' "$body_file"; then
+          reasons+=("Found submit button with login text")
+      fi
+      if grep -qi -E 'Forgot[[:space:]]*Password|Reset[[:space:]]*Password|Sign[[:space:]]*in|Log[[:space:]]*in' "$body_file"; then
+          reasons+=("Found textual indicators for login")
+      fi
+      if grep -qi -E '<input[^>]*type=["'"'"']hidden["'"'"'][^>]*(csrf|token|authenticity|nonce|xsrf)' "$body_file"; then
+          reasons+=("Found hidden token field")
+      fi
+      if grep -qi -E '<meta[^>]+content=["'"'"'][^"'"'"']*(login|sign[[:space:]]*in)[^"'"'"']*["'"'"']' "$body_file"; then
+          reasons+=("Found meta tag mentioning login")
+      fi
+      if grep -qi -E '(recaptcha|g-recaptcha|hcaptcha)' "$body_file"; then
+          reasons+=("Found CAPTCHA widget")
+      fi
+      if grep -qi -E '(loginModal|modal[-_]?login|popup[-_]?login)' "$body_file"; then
+          reasons+=("Found modal/popup login hint")
+      fi
+      if grep -qi -E '(iniciar[[:space:]]+sesión|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
+          reasons+=("Found multi-language login keyword")
+      fi
+      if grep -qi -E '(firebase\.auth|Auth0|passport)' "$body_file"; then
+          reasons+=("Found JavaScript auth library reference")
+      fi
+
+      # --- HTTP Header Checks ---
+      if grep -qi -E '^HTTP/.*[[:space:]]+(401|403|407)' "$headers_file"; then
+          reasons+=("HTTP header indicates authentication requirement (401/403/407)")
+      fi
+      if grep -qi 'WWW-Authenticate' "$headers_file"; then
+          reasons+=("Found WWW-Authenticate header")
+      fi
+      if grep -qi -E 'Set-Cookie:[[:space:]]*(sessionid|PHPSESSID|JSESSIONID|auth_token|jwt)' "$headers_file"; then
+          reasons+=("Found session cookie in headers")
+      fi
+      if grep -qi -E 'Location:.*(login|signin|auth)' "$headers_file"; then
+          reasons+=("Found redirection to login in headers")
+      fi
+
+      # --- URL and Path Analysis ---
+      if echo "$final_url" | grep -qiE '/(login|signin|auth|account|admin|wp-login\.php|wp-admin|users/sign_in|member/login|login\.aspx|signin\.aspx)'; then
+          reasons+=("Final URL path suggests login endpoint")
+      fi
+      if echo "$final_url" | grep -qiE '[?&](redirect|action|auth|callback)='; then
+          reasons+=("Final URL query parameters indicate login action")
+      fi
+
+      local login_found="No"
+      if [ ${#reasons[@]:-0} -gt 0 ]; then
+          login_found="Yes"
+      fi
+
+      local json_details
+      json_details=$(printf '%s\n' "${reasons[@]:-}" | jq -R . | jq -s .)
+
+      jq -n --arg login_found "$login_found" --argjson details "$json_details" \
+            '{login_found: $login_found, login_details: $details}'
+  }
+
   for url in $urls; do
-    response=$(curl -Ls --max-time "$timeout_duration" -w "%{url_effective}\n" "$url" -o response.html 2>/dev/null || true)
-    if [ $? -ne 0 ] || [ -z "$response" ]; then
-      results+=("{\"url\": \"$url\", \"final_url\": \"\", \"login_found\": \"N/A\"}")
-      continue
-    fi
+      local headers_file="final_headers.tmp"
+      local body_file="final_body.tmp"
+      rm -f "$headers_file" "$body_file"
 
-    final_url=$(echo "$response" | tail -n1)
-    local initial_domain
-    initial_domain=$(echo "$url" | awk -F/ '{print $3}')
-    local final_domain
-    final_domain=$(echo "$final_url" | awk -F/ '{print $3}')
+      local curl_err="curl_err.tmp"
+      rm -f "$curl_err"
 
-    if [[ "$initial_domain" != "$final_domain" ]]; then
-      results+=("{\"url\": \"$url\", \"final_url\": \"$final_url\", \"login_found\": \"No\"}")
-      continue
-    fi
+      set +e
+      curl -s -S -L --max-time "$timeout_duration" -D "$headers_file" -o "$body_file" "$url" 2> "$curl_err"
+      local curl_exit=$?
+      set -e
 
-    login_detected=$(grep -Eo '<form[^>]*>' response.html 2>/dev/null | grep -Ei 'login|log-in|sign-in|authentication|username|password|auth|session|token|credential|forgot-password|reset-password|oauth|register|signup|sign-up|user[ _-]?name|pass[ _-]?word|passwd|account|secure|access|member|log[ _-]?on|signoff|sign-off|logoff|log-off|security|authentic|authorize|access[ _-]?control|verify|validat|sso|two-factor|2fa|mfa|lockscreen|biometric|fingerprint|face[ _-]?id|otp|one[ _-]?time[ _-]?pass|recover|recovery' 2>/dev/null || true)
-    if [[ -n "$login_detected" ]]; then
-      LOGIN_FOUND_COUNT=$((LOGIN_FOUND_COUNT + 1))
-      results+=("{\"url\": \"$url\", \"final_url\": \"$final_url\", \"login_found\": \"Yes\"}")
-    else
-      results+=("{\"url\": \"$url\", \"final_url\": \"$final_url\", \"login_found\": \"No\"}")
-    fi
+      if [ $curl_exit -eq 35 ]; then
+          info "Skipping $url due to SSL error."
+          rm -f "$headers_file" "$body_file" "$curl_err"
+          continue
+      fi
+      if [ $curl_exit -ne 0 ]; then
+          if [ "$first_entry" = true ]; then
+              first_entry=false
+          else
+              echo "," >> "$output_file"
+          fi
+          echo "  { \"url\": \"${url}\", \"final_url\": \"\", \"login_detection\": { \"login_found\": \"No\", \"login_details\": [] } }" >> "$output_file"
+          rm -f "$headers_file" "$body_file" "$curl_err"
+          continue
+      fi
+      rm -f "$curl_err"
+
+      local final_url
+      final_url=$(curl -s -o /dev/null -w "%{url_effective}" -L --max-time "$timeout_duration" "$url")
+      [ -z "$final_url" ] && final_url="$url"
+
+      local detection_json
+      detection_json=$(detect_login "$headers_file" "$body_file" "$final_url")
+
+      if echo "$detection_json" | grep -q '"login_found": "Yes"'; then
+          LOGIN_FOUND_COUNT=$((LOGIN_FOUND_COUNT + 1))
+      fi
+
+      if [ "$first_entry" = true ]; then
+          first_entry=false
+      else
+          echo "," >> "$output_file"
+      fi
+      echo "  { \"url\": \"${url}\", \"final_url\": \"${final_url}\", \"login_detection\": $detection_json }" >> "$output_file"
+      rm -f "$headers_file" "$body_file"
   done
 
-  local json_output
-  json_output=$(printf "%s\n" "${results[@]}" | jq -s '.')
-  echo "$json_output" > "$output_file"
-  mv response.html "$RUN_DIR/"
+  echo "]" >> "$output_file"
+  rm -f *.tmp
 }
-
 ##############################################
 # Security Compliance Detection
 ##############################################
@@ -1375,13 +1474,15 @@ build_html_report() {
 
             // Build lookup maps for login and security compliance
             const loginMap = {};
-            loginData.forEach(item => { loginMap[item.url] = item.login_found; });
-            const secMap = {};
+            loginData.forEach(item => {
+              // Access the nested login_found property
+              loginMap[item.url] = item.login_detection.login_found;
+            });            const secMap = {};
             secData.forEach(item => { secMap[item.Domain] = item; });
 
             // Compute scoreboard stats
             const endpointsCount = httpxData.length;
-            const loginFoundCount = loginData.filter(item => item.login_found === "Yes").length;
+            const loginFoundCount = loginData.filter(item => item.login_detection.login_found === "Yes").length;
             const liveSubs = dnsxData.filter(d => d.status_code === "NOERROR").length;
             const domainSet = new Set();
             dnsxData.forEach(d => { if (d.host) domainSet.add(d.host); });
