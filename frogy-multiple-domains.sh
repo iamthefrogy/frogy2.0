@@ -190,7 +190,7 @@ run_naabu() {
     info "Running naabu..."
     naabu -silent \
           -l "$MASTER_SUBS" \
-          -p 80,443 \
+          --top-ports 100 \
           -o "$RUN_DIR/naabu.json" \
           -j \
           >/dev/null 2>&1 || true
