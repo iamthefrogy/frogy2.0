@@ -2,7 +2,7 @@
 
 **Frogy 2.0** is an automated external reconnaissance and Attack Surface Management (ASM) toolkit designed to map out an organization's entire internet presence. It identifies assets, IP addresses, web applications, and other metadata across the public internet and then smartly prioritizes them from P0 (most attractive) to P4 (least attractive) from a bug bounty hunter's perspective.
 
-<img src="https://chintangurjar.com/images/frogyasm.png" alt="graphviz" width="700" height="600"/>
+<img src="https://chintangurjar.com/images/frogyasm.png" alt="graphviz" width="900" height="800"/>
 
 ## Features
 
@@ -59,7 +59,7 @@ chmod +x frogy-multiple-domains.sh
 
 ## Remember
 
-The report.html file can be accessed only if you run a local web server and then access the html report via URL. If you directly open it from your folder, it will show blank content. Reason for that it, when you use a web server, it dynamically fetches all data from all json output stored in that folder.
+The report.html file can be accessed only if you run a local web server (e.g., python3.13 -m http.server 1111) and then access the html report via URL (e.g., http://localhost:1111/. If you directly open it from your folder, it will show blank content. Reason for that it, when you use a web server, it dynamically fetches all data from all json output stored in that folder.
 
 ## Video Demo
 https://www.youtube.com/watch?v=LHlU4CYNj1M
