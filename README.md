@@ -57,4 +57,9 @@ chmod +x frogy-multiple-domains.sh
 ./frogy-multiple-domains.sh domains.txt
 ```
 
-Video Demo - https://www.youtube.com/watch?v=LHlU4CYNj1M
+## Remember
+
+The report.html file can be accessed only if you run a local web server and then access the html report via URL. If you directly open it from your folder, it will show blank content. Reason for that it, when you use a web server, it dynamically fetches all data from all json output stored in that folder.
+
+## Video Demo
+https://www.youtube.com/watch?v=LHlU4CYNj1M
