@@ -1,27 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---------------------------
-# OS Detection and Package Installation
-# ---------------------------
-echo "Detecting OS..."
-if [ -f /etc/os-release ]; then
-  . /etc/os-release
-  OS=$ID
+##
+## OS DETECTION
+##
+
+if [ grep -q arch /etc/*-release ]; then
+  OS_TYPE=arch
+elif [ grep -q debian /etc/*-release ]; then
+  OS_TYPE=debian
+elif [ grep -q rhel /etc/*-release ]; then
+  OS_TYPE=rhel
 else
-  echo "Cannot detect OS type. Exiting."
+  echo "Unable to detect OS type, exiting."
   exit 1
 fi
-echo "Detected OS: $OS"
 
-install_dependencies() {
-  echo "Installing common dependencies for Debian/Ubuntu/Kali..."
+echo "Detected OS type: $OS_TYPE"
+
+##
+## INSTALLER FUNCTIONS
+##
+
+install_dependencies_arch() {
+  echo "Installing tool dependencies for Arch-based systems..."
+  sudo pacman -S --needed jq curl unzip sed python libpcap whois bind openssl
+}
+
+install_dependencies_debian() {
+  echo "Installing tool dependencies for Debian-based systems..."
   sudo apt-get update
   sudo apt-get install -y jq curl unzip sed python3 libpcap-dev whois dnsutils openssl
 }
 
 install_dependencies_redhat() {
-  echo "Installing common dependencies for RedHat-based systems..."
+  echo "Installing tool dependencies for RedHat-based systems..."
   if command -v dnf > /dev/null 2>&1; then
     sudo dnf install -y epel-release
     sudo dnf install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl
@@ -31,37 +44,44 @@ install_dependencies_redhat() {
   fi
 }
 
-case "$OS" in
-  ubuntu|debian|kali)
+##
+## INSTALLER FUNCTION EXECUTION BASED ON OS TYPE
+##
+
+case "$OS_TYPE" in
+  debian)
     echo "Using apt-get for installation..."
-    install_dependencies
+    install_dependencies_debian
     ;;
-  rhel|centos|fedora|redhat)
+  rhel)
     echo "Using yum/dnf for installation..."
     install_dependencies_redhat
     ;;
   *)
-    echo "Unsupported OS: $OS. Exiting."
+    echo "Unsupported OS. Exiting."
     exit 1
     ;;
 esac
 
-# ---------------------------
-# Check for Go and install if missing
-# ---------------------------
+##
+## INSTALL GO AS A DEPENDENCY
+##
+
 if ! command -v go &> /dev/null; then
   echo "Go is not installed. Installing Go..."
   case "$OS" in
-    ubuntu|debian|kali)
+    debian)
       sudo apt-get install -y golang-go
       ;;
-    rhel|centos|fedora|redhat)
+    rhel)
       if command -v dnf &> /dev/null; then
         sudo dnf install -y golang
       else
         sudo yum install -y golang
       fi
       ;;
+    arch)
+      sudo pacman -S --needed go
     *)
       echo "Unsupported OS for automatic Go installation. Please install Go manually."
       exit 1
@@ -71,9 +91,10 @@ else
   echo "Go is already installed."
 fi
 
-# ---------------------------
-# Install Go-Based Tools
-# ---------------------------
+##
+## INSTALL TOOLS BASED ON GO LANG
+##
+
 echo "Installing Go-based tools (ensure your GOPATH/bin is in your PATH)..."
 
 echo "Installing subfinder..."
@@ -91,9 +112,12 @@ go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
 echo "Installing httpx..."
 go install github.com/projectdiscovery/httpx/cmd/httpx@latest
 
-# ---------------------------
-# Copy binaries to /usr/local/bin if not already in PATH
-# ---------------------------
+##
+## Copy binaries to /usr/local/bin if not already in PATH
+##
+
+# FIXME: Below way of handling binaries has significant room for improvement
+
 copy_binaries() {
   echo "Copying installed binaries to /usr/local/bin..."
   GOBIN=$(go env GOPATH)/bin
@@ -110,9 +134,10 @@ copy_binaries() {
 
 copy_binaries
 
-# ---------------------------
-# Verify binaries are available in PATH
-# ---------------------------
+##
+## Verify binaries are available in PATH
+##
+
 check_binaries() {
   echo "Verifying that all tools are installed and available in PATH..."
   local binaries=("subfinder" "assetfinder" "dnsx" "naabu" "httpx")
