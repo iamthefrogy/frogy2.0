@@ -526,7 +526,7 @@ build_html_report() {
   <html lang="en">
     <head>
       <meta charset="UTF-8" />
-      <title>External Attack Surface Analysis - $cdir</title>
+      <title>External Attack Surface Analysis</title>
       <!-- Chart.js for charts -->
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
