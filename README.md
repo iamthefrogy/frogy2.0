@@ -47,17 +47,9 @@ chmod +x install.sh
 ./install.sh
 ```
 ## Usage
-
-OPTION 1 - If you wish to use it against a specific organisation, then utilise frogy.sh. Here, you will enter the organisation's name, which will be searched in the CHAOS database and also fetch assets from there.
 ```bash
 chmod +x frogy.sh
-./frogy.sh
-```
-
-OPTION 2 - If you do not care about the names of organisations but wish to run it against the list of primary domains in the file, then use this. You can provide any file as the input file.
-```bash
-chmod +x frogy-multiple-domains.sh
-./frogy-multiple-domains.sh domains.txt
+./frogy.sh domains.txt
 ```
 
 ## Remember
