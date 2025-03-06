@@ -23,17 +23,19 @@
 
 ## Future Roadmap
 
-- Enhance prioritisation for target picking.
-- ~~Adding security and compliance-related data (SSL/TLS hygiene, SPF, Dmarc, Headers etc)~~
+- - ~~Adding security and compliance-related data (SSL/TLS hygiene, SPF, DMARC, Headers etc)~~
+- ~~Allow to filter column data.~~
+- ~~Add more analytics based on new data.~~
+- ~~Identify login portals.~~
+- ~~Basic dashboard/analytics if possible.~~
+- ~~Identifying horizontal and vertical both domains.~~
+- Enhance prioritisation for target picking. (Scoring based on management ports, login found, customer vs colleague intended apps, security headers not set, ssl/tls usage, etc.)
+- Display all open ports in one of the table columns.
 - Identifying customer-intended vs colleague-intended applications.
 - Identified abandoned and unwanted applications.
 - Identify traditional endpoints vs. API endpoints.
+- Pagination to access information faster without choking or lagging on the home page.
 - Change font color in darkmode.
-- ~~Allow to filter column data.~~
-- ~~Add more analytics based on new data.~~
-- ~~Idenfify login portals.~~
-- ~~Basic dashboard/analytics if possible.~~
-- ~~Identifying horizontal and vertical both domains.~~
 
 ## Installation
 
