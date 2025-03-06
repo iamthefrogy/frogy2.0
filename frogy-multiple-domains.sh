@@ -531,62 +531,113 @@ build_html_report() {
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
         :root {
-          --bg-color: #f7f7f7;
-          --text-color: #333;
-          --header-bg: #fff;
-          --header-text: #333;
-          --table-bg: #fff;
-          --table-header-bg: #eaeaea;
-          --table-border: #ddd;
-          --toggle-bg: #ccc;
-          --toggle-btn: #fff;
+          /* Light theme colors */
+          --light-bg-color: #f9f9f9;
+          --light-text-color: #333;
+          --light-header-bg: #fff;
+          --light-header-text: #333;
+          --light-table-bg: #fff;
+          --light-table-header-bg: #eee;
+          --light-table-border: #ddd;
+          --light-toggle-bg: #ccc;
+          --light-toggle-btn: #fff;
+
+          /* Dark theme colors */
+          --dark-bg-color: #1f1f1f;   /* Slightly darker background */
+          --dark-text-color: #f0f0f0; /* Brighter text for better readability */
+          --dark-header-bg: #2a2a2a;
+          --dark-header-text: #ffffff;
+          --dark-table-bg: #2a2a2a;
+          --dark-table-header-bg: #3a3a3a;
+          --dark-table-border: #444;
+          --dark-toggle-bg: #555;
+          --dark-toggle-btn: #ffffff;
+
+          /* Active theme variables (default to light) */
+          --bg-color: var(--light-bg-color);
+          --text-color: var(--light-text-color);
+          --header-bg: var(--light-header-bg);
+          --header-text: var(--light-header-text);
+          --table-bg: var(--light-table-bg);
+          --table-header-bg: var(--light-table-header-bg);
+          --table-border: var(--light-table-border);
+          --toggle-bg: var(--light-toggle-bg);
+          --toggle-btn: var(--light-toggle-btn);
+
+          /* Font sizing / spacing scale */
+          --font-size-sm: 12px;
+          --font-size-base: 13px;
+          --font-size-md: 14px;
+          --font-size-lg: 16px;
+          --heading-font-size: 22px;
         }
+
+        /* Switch to dark theme variables */
         body.dark {
-          --bg-color: #222;
-          --text-color: #ddd;
-          --header-bg: #333;
-          --header-text: #ddd;
-          --table-bg: #333;
-          --table-header-bg: #444;
-          --table-border: #555;
-          --toggle-bg: #555;
-          --toggle-btn: #222;
+          --bg-color: var(--dark-bg-color);
+          --text-color: var(--dark-text-color);
+          --header-bg: var(--dark-header-bg);
+          --header-text: var(--dark-header-text);
+          --table-bg: var(--dark-table-bg);
+          --table-header-bg: var(--dark-table-header-bg);
+          --table-border: var(--dark-table-border);
+          --toggle-bg: var(--dark-toggle-bg);
+          --toggle-btn: var(--dark-toggle-btn);
         }
+
         body {
+          margin: 0;
           background-color: var(--bg-color);
           color: var(--text-color);
-          margin: 0;
           font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+          font-size: var(--font-size-base);
+          line-height: 1.4;
         }
+
+        /* HEADER */
         .header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           background-color: var(--header-bg);
           color: var(--header-text);
-          padding: 10px 20px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          padding: 12px 20px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         .header h1 {
           margin: 0;
-          font-size: 24px;
+          font-size: var(--heading-font-size);
+          font-weight: 600;
         }
         .toggle-btn {
           background-color: var(--toggle-bg);
           border: none;
           color: var(--toggle-btn);
-          padding: 5px 10px;
+          padding: 6px 12px;
           cursor: pointer;
           border-radius: 4px;
-          font-size: 14px;
+          font-size: var(--font-size-sm);
+          transition: background-color 0.2s, color 0.2s;
         }
+        .toggle-btn:hover {
+          opacity: 0.9;
+        }
+
+        .table-top-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px; /* so there's some space before the table */
+  }
+
+        /* MAIN CONTAINER */
         .container {
           padding: 20px;
           max-width: 1200px;
           margin: 0 auto;
         }
 
-        /* Scoreboard row */
+        /* SCOREBOARD */
         .scoreboard {
           display: flex;
           flex-wrap: wrap;
@@ -603,26 +654,24 @@ build_html_report() {
         }
         .score-card h2 {
           margin: 0;
-          font-size: 2em;
+          font-size: 1.6em;
+          font-weight: 500;
         }
         .score-card p {
-          margin: 0;
-          font-size: 0.9em;
+          margin: 5px 0 0;
+          font-size: var(--font-size-sm);
           color: var(--text-color);
         }
 
-        /* Fluid grid for charts */
+        /* CHARTS GRID */
         .charts-grid {
           display: grid;
           gap: 10px;
-          /* auto-fill + minmax => as many columns as fit, each at least 300px wide */
           grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
           margin-bottom: 20px;
         }
-
         .chart-container {
           position: relative;
-          /* no fixed height => Chart.js will be responsive */
           background-color: var(--table-bg);
           border: 1px solid var(--table-border);
           border-radius: 5px;
@@ -635,35 +684,89 @@ build_html_report() {
           height: auto !important;
         }
 
-        /* Table search box */
+        /* SEARCH BOX */
         #searchBox {
-          margin-top: 20px;
+          margin-top: 10px;
           margin-bottom: 10px;
-          padding: 8px;
-          width: 300px;
-          font-size: 14px;
+          padding: 6px 10px;
+          width: 250px;
+          font-size: var(--font-size-sm);
+          border: 1px solid var(--table-border);
+          border-radius: 4px;
         }
-        /* Main table */
+
+        /* TABLE CONTROLS (Rows per page) */
+        .table-controls {
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+        .table-controls label {
+          margin-right: 6px;
+          font-size: var(--font-size-sm);
+        }
+        .table-controls select {
+          font-size: var(--font-size-sm);
+          padding: 4px 8px;
+          border: 1px solid var(--table-border);
+          border-radius: 4px;
+          background-color: var(--table-bg);
+          color: var(--text-color);
+        }
+
+        /* MAIN TABLE */
         table {
           width: 100%;
           border-collapse: collapse;
-          margin-top: 20px;
+          margin-top: 10px;
           background-color: var(--table-bg);
-          font-size: 12px;
+          font-size: var(--font-size-sm);
         }
         th, td {
           border: 1px solid var(--table-border);
           padding: 8px;
           text-align: left;
           vertical-align: top;
+          color: inherit;
         }
         th {
           background-color: var(--table-header-bg);
+          font-weight: 600;
         }
-        /* Filter row <select> styles */
+
+        /* FILTER DROPDOWN ROW */
         #filter-row select {
           width: 100%;
-          font-size: 12px;
+          font-size: var(--font-size-sm);
+          padding: 2px 4px;
+          border: 1px solid var(--table-border);
+          border-radius: 3px;
+          background-color: var(--table-bg);
+          color: var(--text-color);
+        }
+
+        /* PAGINATION CONTROLS */
+        #paginationControls {
+          margin-top: 10px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 10px;
+        }
+        #paginationControls button {
+          padding: 6px 12px;
+          cursor: pointer;
+          font-size: var(--font-size-sm);
+          border-radius: 4px;
+          border: 1px solid var(--table-border);
+          background-color: var(--toggle-bg);
+          color: var(--toggle-btn);
+          transition: background-color 0.2s, color 0.2s;
+        }
+        #paginationControls button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
       </style>
     </head>
@@ -672,6 +775,7 @@ build_html_report() {
         <h1>External Attack Surface Analysis Report</h1>
         <button id="themeToggle" class="toggle-btn">Change View</button>
       </div>
+
       <div class="container">
         <!-- SCOREBOARD -->
         <div class="scoreboard" id="scoreboard"></div>
@@ -720,9 +824,19 @@ build_html_report() {
           </div>
         </div>
 
-        <!-- SEARCH BOX -->
-        <input type="text" id="searchBox" placeholder="Filter table (e.g. domain, status code, tech)..." />
-
+        <!-- SEARCH BOX AND TABLE CONTROLS: Rows Per Page-->
+        <div class="table-top-controls">
+    <input type="text" id="searchBox" placeholder="Filter table (e.g. domain, status code, tech)..." />
+    <div class="table-controls">
+      <label for="rowsPerPageSelect">Rows per page:</label>
+      <select id="rowsPerPageSelect">
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="all">ALL</option>
+          </select>
+        </div>
+  </div>
         <!-- MAIN TABLE with Filter Row -->
         <table id="report-table">
           <thead>
@@ -796,50 +910,89 @@ build_html_report() {
           </thead>
           <tbody id="report-table-body"></tbody>
         </table>
+        <!-- Pagination Controls -->
+        <div id="paginationControls"></div>
       </div>
 
-      <!-- Register a custom plugin to draw labels on top of each bar -->
+      <!-- Bar label plugin -->
       <script>
         const barLabelPlugin = {
           id: 'barLabelPlugin',
           afterDatasetsDraw(chart, args, options) {
             const { ctx } = chart;
-            // Filter for bar datasets only
             const metaSets = chart.getSortedVisibleDatasetMetas().filter(m => m.type === 'bar');
-
             metaSets.forEach((meta) => {
               meta.data.forEach((element, index) => {
-                // The raw data value for this bar
                 const value = meta._parsed[index][meta.vScale.axis];
-
-                // Skip if value is 0 (remove this line if you want to display "0")
-                if (value === 0) return;
-
-                // Determine bar center for label placement
+                if (value === 0) return; // skip 0
                 const { x, y } = element.tooltipPosition();
                 ctx.save();
-                // Label styling
-                ctx.fillStyle = options.color || '#000';
+                ctx.fillStyle = Chart.defaults.color;
                 ctx.font = options.font || '9px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
-                // Draw the label just above the bar
                 ctx.fillText(value, x, y - 2);
                 ctx.restore();
               });
             });
           }
         };
-        // Make plugin available to all charts globally
         Chart.register(barLabelPlugin);
       </script>
 
       <script>
+        // We'll store references to each chart in these globals
+        let priorityChart, statusCodeChart, loginChart, portChart, techChart;
+        let certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart;
+
+        // Global variables for pagination
+        let allTableRows = [];
+        let currentPage = 1;
+        let rowsPerPage = 20;
+
         // Theme toggle
         const toggleButton = document.getElementById("themeToggle");
         toggleButton.addEventListener("click", () => {
+          // Toggle the dark class
           document.body.classList.toggle("dark");
+          // Re-apply the text color from the new theme
+          updateChartTheme();
         });
+
+        // Re-apply theme color to all existing charts
+        function updateChartTheme() {
+          const newColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
+          // Update Chart.js default color for new charts
+          Chart.defaults.color = newColor;
+
+          // Update each existing chart's options
+          const charts = [
+            priorityChart, statusCodeChart, loginChart, portChart, techChart,
+            certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart
+          ];
+          charts.forEach(chart => {
+            if (chart) {
+              // Axis tick colors
+              if (chart.options.scales) {
+                if (chart.options.scales.x && chart.options.scales.x.ticks) {
+                  chart.options.scales.x.ticks.color = newColor;
+                }
+                if (chart.options.scales.y && chart.options.scales.y.ticks) {
+                  chart.options.scales.y.ticks.color = newColor;
+                }
+              }
+              // Legend label colors
+              if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels) {
+                chart.options.plugins.legend.labels.color = newColor;
+              }
+              // Title color
+              if (chart.options.plugins && chart.options.plugins.title) {
+                chart.options.plugins.title.color = newColor;
+              }
+              chart.update();
+            }
+          });
+        }
 
         // Utility for formatting cell values
         const formatCell = (arr) => (arr && arr.length) ? arr.join("<br>") : "N/A";
@@ -908,15 +1061,13 @@ build_html_report() {
 
           // Priority distribution chart
           if (prCanvas) {
-            const labels = ["P0", "P1", "P2", "P3", "P4"];
-            const data = labels.map(l => priorityCount[l] || 0);
-            new Chart(prCanvas, {
+            priorityChart = new Chart(prCanvas, {
               type: "bar",
               data: {
-                labels,
+                labels: ["P0", "P1", "P2", "P3", "P4"],
                 datasets: [{
                   label: "Priority Buckets",
-                  data,
+                  data: ["P0", "P1", "P2", "P3", "P4"].map(l => priorityCount[l] || 0),
                   backgroundColor: ["#e74c3c", "#e67e22", "#2ecc71", "#3498db", "#85c1e9"]
                 }]
               },
@@ -933,15 +1084,13 @@ build_html_report() {
 
           // HTTP Status Codes chart
           if (scCanvas) {
-            const labels = Object.keys(statusCount).sort((a, b) => +a - +b);
-            const data   = labels.map(l => statusCount[l]);
-            new Chart(scCanvas, {
+            statusCodeChart = new Chart(scCanvas, {
               type: "bar",
               data: {
-                labels,
+                labels: Object.keys(statusCount).sort((a, b) => +a - +b),
                 datasets: [{
                   label: "HTTP Status Codes",
-                  data,
+                  data: Object.keys(statusCount).sort((a, b) => +a - +b).map(l => statusCount[l]),
                   backgroundColor: [
                     "#3498db",
                     "#1abc9c",
@@ -966,15 +1115,13 @@ build_html_report() {
 
           // Port usage chart
           if (portCanvas) {
-            const sortedPorts = Object.keys(portCount).sort((a, b) => +a - +b);
-            const portVals = sortedPorts.map(p => portCount[p]);
-            new Chart(portCanvas, {
+            portChart = new Chart(portCanvas, {
               type: "bar",
               data: {
-                labels: sortedPorts,
+                labels: Object.keys(portCount).sort((a, b) => +a - +b),
                 datasets: [{
                   label: "Open Ports",
-                  data: portVals,
+                  data: Object.keys(portCount).sort((a, b) => +a - +b).map(p => portCount[p]),
                   backgroundColor: "#f39c12"
                 }]
               },
@@ -993,14 +1140,13 @@ build_html_report() {
           if (techCanvas) {
             const sortedTech = Object.keys(techCount).sort((a, b) => techCount[b] - techCount[a]);
             const top10 = sortedTech.slice(0, 10);
-            const topVals = top10.map(t => techCount[t]);
-            new Chart(techCanvas, {
+            techChart = new Chart(techCanvas, {
               type: "bar",
               data: {
                 labels: top10,
                 datasets: [{
                   label: "Tech Usage (Top 10)",
-                  data: topVals,
+                  data: top10.map(t => techCount[t]),
                   backgroundColor: "#9b59b6"
                 }]
               },
@@ -1021,7 +1167,7 @@ build_html_report() {
         function buildLoginPieChart(endpointsCount, loginFoundCount) {
           const canvas = document.getElementById("loginPieChart");
           if (canvas) {
-            new Chart(canvas, {
+            loginChart = new Chart(canvas, {
               type: "bar",
               data: {
                 labels: ["Found", "Not Found"],
@@ -1040,8 +1186,6 @@ build_html_report() {
             });
           }
         }
-
-        // ===== New Analytics Widgets =====
 
         // 1. Certificate Expiry Chart
         function buildCertExpiryChart(secData) {
@@ -1062,25 +1206,20 @@ build_html_report() {
                   } else if (diffDays <= 30) {
                     exp30++;
                   }
-                  // if >30 do nothing
                 }
               }
             }
           });
 
           const ctx = document.getElementById("certExpiryChart").getContext("2d");
-          new Chart(ctx, {
+          certExpiryChart = new Chart(ctx, {
             type: "bar",
             data: {
               labels: ["Next 7 Days", "Next 14 Days", "Next 30 Days"],
               datasets: [{
                 label: "Certs Expiring",
                 data: [exp7, exp14, exp30],
-                backgroundColor: [
-                  "#e74c3c", // Dark Red
-                  "#e67e22", // Orange
-                  "#3498db"  // Blue
-                ]
+                backgroundColor: ["#e74c3c", "#e67e22", "#3498db"]
               }]
             },
             options: {
@@ -1105,7 +1244,7 @@ build_html_report() {
           const labels = Object.keys(tlsCounts);
           const data = labels.map(l => tlsCounts[l]);
           const ctx = document.getElementById("tlsUsageChart").getContext("2d");
-          new Chart(ctx, {
+          tlsUsageChart = new Chart(ctx, {
             type: "bar",
             data: {
               labels,
@@ -1144,7 +1283,7 @@ build_html_report() {
             }
           });
           const ctx = document.getElementById("headersChart").getContext("2d");
-          new Chart(ctx, {
+          headersChart = new Chart(ctx, {
             type: "bar",
             data: {
               labels: ["HSTS", "X-Frame Options", "CSP"],
@@ -1189,7 +1328,7 @@ build_html_report() {
             if (dmarc.toLowerCase().includes("dmarc1")) dmarcSet++; else dmarcMissing++;
           });
           const ctx = document.getElementById("emailSecChart").getContext("2d");
-          new Chart(ctx, {
+          emailSecChart = new Chart(ctx, {
             type: "bar",
             data: {
               labels: ["SPF", "DKIM", "DMARC"],
@@ -1233,7 +1372,7 @@ build_html_report() {
           const labels = Object.keys(cdnCounts);
           const data = labels.map(l => cdnCounts[l]);
           const ctx = document.getElementById("cdnChart").getContext("2d");
-          new Chart(ctx, {
+          cdnChart = new Chart(ctx, {
             type: "bar",
             data: {
               labels,
@@ -1254,22 +1393,159 @@ build_html_report() {
           });
         }
 
-        // Populate filter dropdowns for table columns
-        function populateColumnFilters() {
+        // -----------------------------
+        // NEW FUNCTIONS FOR FILTERING & PAGINATION
+        // -----------------------------
+        function getFilteredRows() {
+          const query = document.getElementById("searchBox").value.toLowerCase();
+          const filters = {
+            priority: document.getElementById("priority-filter").value.toLowerCase(),
+            domain: document.getElementById("domain-filter").value.toLowerCase(),
+            resolvers: document.getElementById("resolvers-filter").value.toLowerCase(),
+            arecords: document.getElementById("arecords-filter").value.toLowerCase(),
+            dnsstatus: document.getElementById("dnsstatus-filter").value.toLowerCase(),
+            cdnname: document.getElementById("cdnname-filter").value.toLowerCase(),
+            cdntype: document.getElementById("cdntype-filter").value.toLowerCase(),
+            port: document.getElementById("port-filter").value.toLowerCase(),
+            url: document.getElementById("url-filter").value.toLowerCase(),
+            redirect: document.getElementById("redirect-filter").value.toLowerCase(),
+            title: document.getElementById("title-filter").value.toLowerCase(),
+            webserver: document.getElementById("webserver-filter").value.toLowerCase(),
+            login: document.getElementById("login-filter").value.toLowerCase(),
+            tech: document.getElementById("tech-filter").value.toLowerCase(),
+            statuscode: document.getElementById("statuscode-filter").value.toLowerCase(),
+            contentlength: document.getElementById("contentlength-filter").value.toLowerCase(),
+            cdn: document.getElementById("cdn-filter").value.toLowerCase(),
+            spf: document.getElementById("spf-filter").value.toLowerCase(),
+            dkim: document.getElementById("dkim-filter").value.toLowerCase(),
+            dmarc: document.getElementById("dmarc-filter").value.toLowerCase(),
+            dnssec: document.getElementById("dnssec-filter").value.toLowerCase(),
+            sslversion: document.getElementById("sslversion-filter").value.toLowerCase(),
+            certexpiry: document.getElementById("certexpiry-filter").value.toLowerCase(),
+            sslissuer: document.getElementById("sslissuer-filter").value.toLowerCase(),
+            sts: document.getElementById("sts-filter").value.toLowerCase(),
+            xfo: document.getElementById("xfo-filter").value.toLowerCase(),
+            csp: document.getElementById("csp-filter").value.toLowerCase(),
+            xss: document.getElementById("xss-filter").value.toLowerCase(),
+            rp: document.getElementById("rp-filter").value.toLowerCase(),
+            pp: document.getElementById("pp-filter").value.toLowerCase(),
+          };
+          return allTableRows.filter((row) => {
+            const cells = row.getElementsByTagName("td");
+            // Match column filters
+            if (filters.priority   && cells[0].innerText.toLowerCase() !== filters.priority)   return false;
+            if (filters.domain     && cells[1].innerText.toLowerCase() !== filters.domain)     return false;
+            if (filters.resolvers  && cells[2].innerText.toLowerCase() !== filters.resolvers)  return false;
+            if (filters.arecords   && cells[3].innerText.toLowerCase() !== filters.arecords)   return false;
+            if (filters.dnsstatus  && cells[4].innerText.toLowerCase() !== filters.dnsstatus)  return false;
+            if (filters.cdnname    && cells[5].innerText.toLowerCase() !== filters.cdnname)    return false;
+            if (filters.cdntype    && cells[6].innerText.toLowerCase() !== filters.cdntype)    return false;
+            if (filters.port       && cells[7].innerText.toLowerCase() !== filters.port)       return false;
+            if (filters.url        && cells[8].innerText.toLowerCase() !== filters.url)        return false;
+            if (filters.redirect   && cells[9].innerText.toLowerCase() !== filters.redirect)   return false;
+            if (filters.title      && cells[10].innerText.toLowerCase() !== filters.title)     return false;
+            if (filters.webserver  && cells[11].innerText.toLowerCase() !== filters.webserver) return false;
+            if (filters.login      && cells[12].innerText.toLowerCase() !== filters.login)     return false;
+            if (filters.tech       && cells[13].innerText.toLowerCase() !== filters.tech)      return false;
+            if (filters.statuscode && cells[14].innerText.toLowerCase() !== filters.statuscode) return false;
+            if (filters.contentlength && cells[15].innerText.toLowerCase() !== filters.contentlength) return false;
+            if (filters.cdn        && cells[16].innerText.toLowerCase() !== filters.cdn)       return false;
+            if (filters.spf        && cells[17].innerText.toLowerCase() !== filters.spf)       return false;
+            if (filters.dkim       && cells[18].innerText.toLowerCase() !== filters.dkim)      return false;
+            if (filters.dmarc      && cells[19].innerText.toLowerCase() !== filters.dmarc)     return false;
+            if (filters.dnssec     && cells[20].innerText.toLowerCase() !== filters.dnssec)    return false;
+            if (filters.sslversion && cells[21].innerText.toLowerCase() !== filters.sslversion) return false;
+            if (filters.certexpiry && cells[22].innerText.toLowerCase() !== filters.certexpiry) return false;
+            if (filters.sslissuer  && cells[23].innerText.toLowerCase() !== filters.sslissuer) return false;
+            if (filters.sts        && cells[24].innerText.toLowerCase() !== filters.sts)       return false;
+            if (filters.xfo        && cells[25].innerText.toLowerCase() !== filters.xfo)       return false;
+            if (filters.csp        && cells[26].innerText.toLowerCase() !== filters.csp)       return false;
+            if (filters.xss        && cells[27].innerText.toLowerCase() !== filters.xss)       return false;
+            if (filters.rp         && cells[28].innerText.toLowerCase() !== filters.rp)        return false;
+            if (filters.pp         && cells[29].innerText.toLowerCase() !== filters.pp)        return false;
+
+            // Match global search
+            if (query && !row.innerText.toLowerCase().includes(query)) return false;
+            return true;
+          });
+        }
+
+        function renderTable(filteredRows) {
           const tBody = document.getElementById("report-table-body");
-          const rows = tBody.getElementsByTagName("tr");
+          tBody.innerHTML = "";
+          let startIndex = 0;
+          let endIndex = filteredRows.length;
+          if (rowsPerPage !== "all" && rowsPerPage !== Infinity) {
+            startIndex = (currentPage - 1) * rowsPerPage;
+            endIndex = startIndex + rowsPerPage;
+          }
+          const rowsToShow = filteredRows.slice(startIndex, endIndex);
+          rowsToShow.forEach((row) => tBody.appendChild(row));
+          renderPaginationControls(filteredRows.length);
+        }
+
+        function renderPaginationControls(totalRows) {
+          const paginationDiv = document.getElementById("paginationControls");
+          paginationDiv.innerHTML = "";
+          if (rowsPerPage === "all" || rowsPerPage === Infinity) return;
+          const totalPages = Math.ceil(totalRows / rowsPerPage);
+          const pageInfo = document.createElement("span");
+          pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+          paginationDiv.appendChild(pageInfo);
+
+          const prevBtn = document.createElement("button");
+          prevBtn.textContent = "Prev";
+          prevBtn.disabled = currentPage === 1;
+          prevBtn.addEventListener("click", () => {
+            if (currentPage > 1) {
+              currentPage--;
+              renderTable(getFilteredRows());
+            }
+          });
+          paginationDiv.appendChild(prevBtn);
+
+          const nextBtn = document.createElement("button");
+          nextBtn.textContent = "Next";
+          nextBtn.disabled = currentPage === totalPages;
+          nextBtn.addEventListener("click", () => {
+            if (currentPage < totalPages) {
+              currentPage++;
+              renderTable(getFilteredRows());
+            }
+          });
+          paginationDiv.appendChild(nextBtn);
+        }
+
+        function onFilterChange() {
+          currentPage = 1;
+          renderTable(getFilteredRows());
+        }
+
+        function updateRowsPerPage() {
+          const select = document.getElementById("rowsPerPageSelect");
+          const value = select.value;
+          if (value === "all") {
+            rowsPerPage = Infinity;
+          } else {
+            rowsPerPage = parseInt(value, 10);
+          }
+          currentPage = 1;
+          renderTable(getFilteredRows());
+        }
+
+        function populateColumnFilters() {
           const uniqueCols = Array.from({ length: 30 }, () => new Set());
-          for (let i = 0; i < rows.length; i++) {
-            const cells = rows[i].getElementsByTagName("td");
+          allTableRows.forEach((row) => {
+            const cells = row.getElementsByTagName("td");
             for (let col = 0; col < 30; col++) {
               uniqueCols[col].add(cells[col].innerText.trim());
             }
-          }
+          });
           function fillSelectOptions(selectId, values) {
             const select = document.getElementById(selectId);
             const existing = select.querySelectorAll("option:not([value=''])");
-            existing.forEach(opt => opt.remove());
-            values.forEach(val => {
+            existing.forEach((opt) => opt.remove());
+            values.forEach((val) => {
               const option = document.createElement("option");
               option.value = val;
               option.textContent = val;
@@ -1308,7 +1584,6 @@ build_html_report() {
           fillSelectOptions("pp-filter",         [...uniqueCols[29]].sort());
         }
 
-        // Attach filter events to dropdowns
         function attachFilterEvents() {
           [
             "priority-filter",
@@ -1341,120 +1616,16 @@ build_html_report() {
             "xss-filter",
             "rp-filter",
             "pp-filter"
-          ].forEach(id => {
+          ].forEach((id) => {
             const el = document.getElementById(id);
             if (el) {
-              el.addEventListener("change", filterTable);
+              el.addEventListener("change", onFilterChange);
             }
           });
         }
 
-        // Filter table based on global search and column filters
-        function filterTable() {
-          const tBody = document.getElementById("report-table-body");
-          const rows = tBody.getElementsByTagName("tr");
-          const query = document.getElementById("searchBox").value.toLowerCase();
-          const selPriority   = document.getElementById("priority-filter").value.toLowerCase();
-          const selDomain     = document.getElementById("domain-filter").value.toLowerCase();
-          const selResolvers  = document.getElementById("resolvers-filter").value.toLowerCase();
-          const selARecords   = document.getElementById("arecords-filter").value.toLowerCase();
-          const selDNSStatus  = document.getElementById("dnsstatus-filter").value.toLowerCase();
-          const selCDNName    = document.getElementById("cdnname-filter").value.toLowerCase();
-          const selCDNType    = document.getElementById("cdntype-filter").value.toLowerCase();
-          const selPort       = document.getElementById("port-filter").value.toLowerCase();
-          const selURL        = document.getElementById("url-filter").value.toLowerCase();
-          const selRedirect   = document.getElementById("redirect-filter").value.toLowerCase();
-          const selTitle      = document.getElementById("title-filter").value.toLowerCase();
-          const selWebserver  = document.getElementById("webserver-filter").value.toLowerCase();
-          const selLogin      = document.getElementById("login-filter").value.toLowerCase();
-          const selTech       = document.getElementById("tech-filter").value.toLowerCase();
-          const selStatusCode = document.getElementById("statuscode-filter").value.toLowerCase();
-          const selCLength    = document.getElementById("contentlength-filter").value.toLowerCase();
-          const selCDN        = document.getElementById("cdn-filter").value.toLowerCase();
-          const selSPF        = document.getElementById("spf-filter").value.toLowerCase();
-          const selDKIM       = document.getElementById("dkim-filter").value.toLowerCase();
-          const selDMARC      = document.getElementById("dmarc-filter").value.toLowerCase();
-          const selDNSSEC     = document.getElementById("dnssec-filter").value.toLowerCase();
-          const selSSLVersion = document.getElementById("sslversion-filter").value.toLowerCase();
-          const selCertExpiry = document.getElementById("certexpiry-filter").value.toLowerCase();
-          const selSSLIssuer  = document.getElementById("sslissuer-filter").value.toLowerCase();
-          const selSTS        = document.getElementById("sts-filter").value.toLowerCase();
-          const selXFO        = document.getElementById("xfo-filter").value.toLowerCase();
-          const selCSP        = document.getElementById("csp-filter").value.toLowerCase();
-          const selXSS        = document.getElementById("xss-filter").value.toLowerCase();
-          const selRP         = document.getElementById("rp-filter").value.toLowerCase();
-          const selPP         = document.getElementById("pp-filter").value.toLowerCase();
-
-          for (let i = 0; i < rows.length; i++) {
-            const cells = rows[i].getElementsByTagName("td");
-            const colPriority   = cells[0].innerText.toLowerCase();
-            const colDomain     = cells[1].innerText.toLowerCase();
-            const colResolvers  = cells[2].innerText.toLowerCase();
-            const colARecords   = cells[3].innerText.toLowerCase();
-            const colDNSStatus  = cells[4].innerText.toLowerCase();
-            const colCDNName    = cells[5].innerText.toLowerCase();
-            const colCDNType    = cells[6].innerText.toLowerCase();
-            const colPort       = cells[7].innerText.toLowerCase();
-            const colURL        = cells[8].innerText.toLowerCase();
-            const colRedirect   = cells[9].innerText.toLowerCase();
-            const colTitle      = cells[10].innerText.toLowerCase();
-            const colWebserver  = cells[11].innerText.toLowerCase();
-            const colLogin      = cells[12].innerText.toLowerCase();
-            const colTech       = cells[13].innerText.toLowerCase();
-            const colStatusCode = cells[14].innerText.toLowerCase();
-            const colCLength    = cells[15].innerText.toLowerCase();
-            const colCDN        = cells[16].innerText.toLowerCase();
-            const colSPF        = cells[17].innerText.toLowerCase();
-            const colDKIM       = cells[18].innerText.toLowerCase();
-            const colDMARC      = cells[19].innerText.toLowerCase();
-            const colDNSSEC     = cells[20].innerText.toLowerCase();
-            const colSSLVersion = cells[21].innerText.toLowerCase();
-            const colCertExpiry = cells[22].innerText.toLowerCase();
-            const colSSLIssuer  = cells[23].innerText.toLowerCase();
-            const colSTS        = cells[24].innerText.toLowerCase();
-            const colXFO        = cells[25].innerText.toLowerCase();
-            const colCSP        = cells[26].innerText.toLowerCase();
-            const colXSS        = cells[27].innerText.toLowerCase();
-            const colRP         = cells[28].innerText.toLowerCase();
-            const colPP         = cells[29].innerText.toLowerCase();
-            let match = true;
-            if (selPriority   && colPriority   !== selPriority)   match = false;
-            if (selDomain     && colDomain     !== selDomain)     match = false;
-            if (selResolvers  && colResolvers  !== selResolvers)  match = false;
-            if (selARecords   && colARecords   !== selARecords)   match = false;
-            if (selDNSStatus  && colDNSStatus  !== selDNSStatus)  match = false;
-            if (selCDNName    && colCDNName    !== selCDNName)    match = false;
-            if (selCDNType    && colCDNType    !== selCDNType)    match = false;
-            if (selPort       && colPort       !== selPort)       match = false;
-            if (selURL        && colURL        !== selURL)        match = false;
-            if (selRedirect   && colRedirect   !== selRedirect)   match = false;
-            if (selTitle      && colTitle      !== selTitle)      match = false;
-            if (selWebserver  && colWebserver  !== selWebserver)  match = false;
-            if (selLogin      && colLogin      !== selLogin)      match = false;
-            if (selTech       && colTech       !== selTech)       match = false;
-            if (selStatusCode && colStatusCode !== selStatusCode) match = false;
-            if (selCLength    && colCLength    !== selCLength)    match = false;
-            if (selCDN        && colCDN        !== selCDN)        match = false;
-            if (selSPF        && colSPF        !== selSPF)        match = false;
-            if (selDKIM       && colDKIM       !== selDKIM)       match = false;
-            if (selDMARC      && colDMARC      !== selDMARC)      match = false;
-            if (selDNSSEC     && colDNSSEC     !== selDNSSEC)     match = false;
-            if (selSSLVersion && colSSLVersion !== selSSLVersion) match = false;
-            if (selCertExpiry && colCertExpiry !== selCertExpiry) match = false;
-            if (selSSLIssuer  && colSSLIssuer  !== selSSLIssuer)  match = false;
-            if (selSTS        && colSTS        !== selSTS)        match = false;
-            if (selXFO        && colXFO        !== selXFO)        match = false;
-            if (selCSP        && colCSP        !== selCSP)        match = false;
-            if (selXSS        && colXSS        !== selXSS)        match = false;
-            if (selRP         && colRP         !== selRP)         match = false;
-            if (selPP         && colPP         !== selPP)         match = false;
-            const rowText = rows[i].innerText.toLowerCase();
-            if (!rowText.includes(document.getElementById("searchBox").value.toLowerCase())) {
-              match = false;
-            }
-            rows[i].style.display = match ? "" : "none";
-          }
-        }
+        document.getElementById("searchBox").addEventListener("input", onFilterChange);
+        document.getElementById("rowsPerPageSelect").addEventListener("change", updateRowsPerPage);
 
         // ===== Load Data and Build Report =====
         async function loadData() {
@@ -1475,9 +1646,9 @@ build_html_report() {
             // Build lookup maps for login and security compliance
             const loginMap = {};
             loginData.forEach(item => {
-              // Access the nested login_found property
               loginMap[item.url] = item.login_detection.login_found;
-            });            const secMap = {};
+            });
+            const secMap = {};
             secData.forEach(item => { secMap[item.Domain] = item; });
 
             // Compute scoreboard stats
@@ -1488,6 +1659,7 @@ build_html_report() {
             dnsxData.forEach(d => { if (d.host) domainSet.add(d.host); });
             const totalSubdomains = domainSet.size;
 
+            // Build scoreboard
             buildLoginPieChart(endpointsCount, loginFoundCount);
             buildScoreboard({
               totalSubdomains,
@@ -1496,7 +1668,7 @@ build_html_report() {
               loginFoundCount
             });
 
-            // Build distributions for original charts
+            // Build distributions for charts
             const statusCount = {};
             httpxData.forEach(h => {
               const code = h.status_code || 0;
@@ -1524,7 +1696,7 @@ build_html_report() {
             });
             buildCharts({ statusCount, priorityCount, portCount, techCount });
 
-            // Merge DNS + HTTP data for table
+            // Merge DNS + HTTP data, build table rows
             const combinedData = {};
             dnsxData.forEach(d => {
               const domain = d.host;
@@ -1536,7 +1708,8 @@ build_html_report() {
               else combinedData[domain].http.push(h);
             });
 
-            const tBody = document.getElementById("report-table-body");
+            // Build row elements, store them in allTableRows
+            allTableRows = [];
             Object.keys(combinedData).forEach(domain => {
               const { dns, http } = combinedData[domain];
               const dnsResolvers = dns && dns.resolver ? dns.resolver : [];
@@ -1593,9 +1766,10 @@ build_html_report() {
                     <td>${rpFlag}</td>
                     <td>${ppFlag}</td>
                   `;
-                  tBody.appendChild(row);
+                  allTableRows.push(row);
                 });
               } else {
+                // No HTTP data => single row
                 const row = document.createElement("tr");
                 row.innerHTML = `
                   <td>N/A</td>
@@ -1629,16 +1803,16 @@ build_html_report() {
                   <td>${rpFlag}</td>
                   <td>${ppFlag}</td>
                 `;
-                tBody.appendChild(row);
+                allTableRows.push(row);
               }
             });
 
+            // Populate filters, attach events, render table
             populateColumnFilters();
             attachFilterEvents();
-            document.getElementById("searchBox").addEventListener("input", filterTable);
+            renderTable(getFilteredRows());
 
-            // ===== Build New Analytics Charts =====
-            // Filter secData to only include records where the domain has a valid URL (not "N/A")
+            // Build new analytics charts
             const validDomains = new Set();
             httpxData.forEach(h => {
               if (h.url && h.url !== "N/A") {
@@ -1647,18 +1821,23 @@ build_html_report() {
             });
             const secDataValid = secData.filter(item => validDomains.has(item.Domain));
 
-            // Only build TLS and Cert Expiry charts if there is at least one valid domain
+            // Build TLS & Cert Expiry if there's at least one valid domain
             if (secDataValid.length > 0) {
               buildCertExpiryChart(secDataValid);
               buildTLSUsageChart(secDataValid);
             } else {
-              document.getElementById("certExpiryChart").parentElement.innerHTML = "<p>No valid website data available for certificate analysis.</p>";
-              document.getElementById("tlsUsageChart").parentElement.innerHTML = "<p>No valid website data available for TLS usage analysis.</p>";
+              document.getElementById("certExpiryChart").parentElement.innerHTML =
+                "<p>No valid website data available for certificate analysis.</p>";
+              document.getElementById("tlsUsageChart").parentElement.innerHTML =
+                "<p>No valid website data available for TLS usage analysis.</p>";
             }
 
             buildHeadersChart(httpxData, secMap);
             buildEmailSecChart(secData);
             buildCDNChart(httpxData);
+
+            // Finally, ensure the charts match the current theme color
+            updateChartTheme();
           } catch (err) {
             console.error("Error loading data or building report:", err);
           }
