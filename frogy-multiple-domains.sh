@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+
+# If $BASH_VERSION is empty, it means we're not actually running in Bash.
+# For example, if the user did `sh script.sh` or `zsh script.sh`.
+if [ -z "$BASH_VERSION" ]; then
+  # Check if Bash is installed and re-run with Bash
+  if command -v bash >/dev/null 2>&1; then
+    exec bash "$0" "$@"
+  else
+    echo "Error: This script requires Bash, but it isn't installed. Aborting."
+    exit 1
+  fi
+fi
+
 set -euo pipefail
 
 ##############################################
@@ -162,7 +175,7 @@ run_crtsh() {
 }
 
 ##############################################
-# DNSX – Live Domain Check
+# DNSX â€“ Live Domain Check
 ##############################################
 run_dnsx() {
   if [[ "$USE_DNSX" == "true" ]]; then
@@ -177,7 +190,7 @@ run_dnsx() {
 }
 
 ##############################################
-# Naabu – Port Scanning (Custom port list)
+# Naabu â€“ Port Scanning (Custom port list)
 ##############################################
 run_naabu() {
   if [[ "$USE_NAABU" == "true" ]]; then
@@ -194,7 +207,7 @@ run_naabu() {
 }
 
 ##############################################
-# HTTPX – Web Recon
+# HTTPX â€“ Web Recon
 ##############################################
 run_httpx() {
   if [[ "$USE_HTTPX" == "true" ]]; then
@@ -259,7 +272,7 @@ run_login_detection() {
       if grep -qi -E '(loginModal|modal[-_]?login|popup[-_]?login)' "$body_file"; then
           reasons+=("Found modal/popup login hint")
       fi
-      if grep -qi -E '(iniciar[[:space:]]+sesión|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
+      if grep -qi -E '(iniciar[[:space:]]+sesiÃ³n|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
           reasons+=("Found multi-language login keyword")
       fi
       if grep -qi -E '(firebase\.auth|Auth0|passport)' "$body_file"; then
@@ -284,7 +297,8 @@ run_login_detection() {
           reasons+=("Final URL query parameters indicate login action")
       fi
       local login_found="No"
-      if [ ${#reasons[@]:-0} -gt 0 ]; then
+		if [ "${#reasons[@]}" -gt 0 ]; then
+
           login_found="Yes"
       fi
       local json_details
