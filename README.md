@@ -23,7 +23,7 @@
 
 ## Future Roadmap
 
-- - ~~Adding security and compliance-related data (SSL/TLS hygiene, SPF, DMARC, Headers etc)~~
+- ~~Adding security and compliance-related data (SSL/TLS hygiene, SPF, DMARC, Headers etc)~~
 - ~~Allow to filter column data.~~
 - ~~Add more analytics based on new data.~~
 - ~~Identify login portals.~~
