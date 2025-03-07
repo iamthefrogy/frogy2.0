@@ -132,7 +132,7 @@ run_assetfinder() {
 ##############################################
 run_crtsh() {
   info "Running crt.sh..."
-  local crt_file="$RUN_DIR/whois.txtls"
+  local crt_file="$RUN_DIR/whois.txt"
   > "$crt_file"
   while read -r domain; do
     {
@@ -341,7 +341,7 @@ run_login_detection() {
 ##############################################
 # Security Compliance Detection
 ##############################################
-securitycompliance() {
+run_security_compliance() {
   info "Analyzing security hygiene (it will take some time)..."
   local input_file="$MASTER_SUBS"
   local output_file="$RUN_DIR/securitycompliance.json"
@@ -464,6 +464,31 @@ combine_json() {
 }
 
 ##############################################
+# API Endpoint Identification
+##############################################
+run_api_identification() {
+  info "Identifying API endpoints..."
+  local api_file="$RUN_DIR/api_identification.json"
+  echo "[" > "$api_file"
+  local first_entry=true
+  while read -r domain; do
+    # Check if the domain/subdomain contains .api. or -api- or -api.
+    if echo "$domain" | grep -E -i '(\.api\.|-api-|-api\.)' > /dev/null; then
+      api_status="Yes"
+    else
+      api_status="No"
+    fi
+    if [ "$first_entry" = true ]; then
+      first_entry=false
+    else
+      echo "," >> "$api_file"
+    fi
+    echo "  { \"domain\": \"${domain}\", \"api_endpoint\": \"${api_status}\" }" >> "$api_file"
+  done < "$MASTER_SUBS"
+  echo "]" >> "$api_file"
+}
+
+##############################################
 # Build HTML Report
 ##############################################
 build_html_report() {
@@ -476,816 +501,898 @@ build_html_report() {
   mv "$RUN_DIR/httpx_merged.json" "$RUN_DIR/httpx.json"
   local report_html="$RUN_DIR/report.html"
   cat << 'EOF' > "$report_html"
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>External Attack Surface Analysis</title>
-    <!-- Chart.js for charts -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-      :root {
-        /* Light theme colors */
-        --light-bg-color: #f9f9f9;
-        --light-text-color: #333;
-        --light-header-bg: #fff;
-        --light-header-text: #333;
-        --light-table-bg: #fff;
-        --light-table-header-bg: #eee;
-        --light-table-border: #ddd;
-        --light-toggle-bg: #ccc;
-        --light-toggle-btn: #fff;
-        /* Dark theme colors */
-        --dark-bg-color: #1f1f1f;
-        --dark-text-color: #f0f0f0;
-        --dark-header-bg: #2a2a2a;
-        --dark-header-text: #ffffff;
-        --dark-table-bg: #2a2a2a;
-        --dark-table-header-bg: #3a3a3a;
-        --dark-table-border: #444;
-        --dark-toggle-bg: #555;
-        --dark-toggle-btn: #ffffff;
-        /* Active theme variables */
-        --bg-color: var(--light-bg-color);
-        --text-color: var(--light-text-color);
-        --header-bg: var(--light-header-bg);
-        --header-text: var(--light-header-text);
-        --table-bg: var(--light-table-bg);
-        --table-header-bg: var(--light-table-header-bg);
-        --table-border: var(--light-table-border);
-        --toggle-bg: var(--light-toggle-bg);
-        --toggle-btn: var(--light-toggle-btn);
-        /* Font sizing */
-        --font-size-sm: 12px;
-        --font-size-base: 13px;
-        --font-size-md: 14px;
-        --font-size-lg: 16px;
-        --heading-font-size: 22px;
-      }
-      body.dark {
-        --bg-color: var(--dark-bg-color);
-        --text-color: var(--dark-text-color);
-        --header-bg: var(--dark-header-bg);
-        --header-text: var(--dark-header-text);
-        --table-bg: var(--dark-table-bg);
-        --table-header-bg: var(--dark-table-header-bg);
-        --table-border: var(--dark-table-border);
-        --toggle-bg: var(--dark-toggle-bg);
-        --toggle-btn: var(--dark-toggle-btn);
-      }
-      body {
-        margin: 0;
-        background-color: var(--bg-color);
-        color: var(--text-color);
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        font-size: var(--font-size-base);
-        line-height: 1.4;
-      }
-      /* HEADER */
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background-color: var(--header-bg);
-        color: var(--header-text);
-        padding: 12px 20px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      }
-      .header h1 {
-        margin: 0;
-        font-size: var(--heading-font-size);
-        font-weight: 600;
-      }
-      .toggle-btn {
-        background-color: var(--toggle-bg);
-        border: none;
-        color: var(--toggle-btn);
-        padding: 6px 12px;
-        cursor: pointer;
-        border-radius: 4px;
-        font-size: var(--font-size-sm);
-        transition: background-color 0.2s, color 0.2s;
-      }
-      .toggle-btn:hover {
-        opacity: 0.9;
-      }
-      .table-top-controls {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-      }
-      /* MAIN CONTAINER */
-      .container {
-        padding: 20px;
-        max-width: 1200px;
-        margin: 0 auto;
-      }
-      /* SCOREBOARD */
-      .scoreboard {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-bottom: 20px;
-      }
-      .score-card {
-        background-color: var(--table-bg);
-        border: 1px solid var(--table-border);
-        border-radius: 5px;
-        flex: 1 1 200px;
-        padding: 10px;
-        text-align: center;
-      }
-      .score-card h2 {
-        margin: 0;
-        font-size: 1.6em;
-        font-weight: 500;
-      }
-      .score-card p {
-        margin: 5px 0 0;
-        font-size: var(--font-size-sm);
-        color: var(--text-color);
-      }
-      /* CHARTS GRID */
-      .charts-grid {
-        display: grid;
-        gap: 10px;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        margin-bottom: 20px;
-      }
-      .chart-container {
-        position: relative;
-        background-color: var(--table-bg);
-        border: 1px solid var(--table-border);
-        border-radius: 5px;
-        padding: 10px;
-        box-sizing: border-box;
-      }
-      .chart-container canvas {
-        display: block;
-        width: 100% !important;
-        height: auto !important;
-      }
-      /* SEARCH BOX */
-      #searchBox {
-        margin: 0;
-        padding: 6px 10px;
-        width: 250px;
-        font-size: var(--font-size-sm);
-        border: 1px solid var(--table-border);
-        border-radius: 4px;
-      }
-      /* TABLE CONTROLS */
-      .table-controls {
-        margin: 0;
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-      }
-      .table-controls label {
-        margin-right: 6px;
-        font-size: var(--font-size-sm);
-      }
-      .table-controls select {
-        font-size: var(--font-size-sm);
-        padding: 4px 8px;
-        border: 1px solid var(--table-border);
-        border-radius: 4px;
-        background-color: var(--table-bg);
-        color: var(--text-color);
-      }
-      /* MAIN TABLE */
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-        background-color: var(--table-bg);
-        font-size: var(--font-size-sm);
-      }
-      th, td {
-        border: 1px solid var(--table-border);
-        padding: 8px;
-        text-align: left;
-        vertical-align: top;
-        color: inherit;
-      }
-      th {
-        background-color: var(--table-header-bg);
-        font-weight: 600;
-      }
-      /* FILTER DROPDOWN ROW */
-      #filter-row select {
-        width: 100%;
-        font-size: var(--font-size-sm);
-        padding: 2px 4px;
-        border: 1px solid var(--table-border);
-        border-radius: 3px;
-        background-color: var(--table-bg);
-        color: var(--text-color);
-      }
-      /* PAGINATION CONTROLS */
-      #paginationControls {
-        margin-top: 10px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 10px;
-      }
-      #paginationControls button {
-        padding: 6px 12px;
-        cursor: pointer;
-        font-size: var(--font-size-sm);
-        border-radius: 4px;
-        border: 1px solid var(--table-border);
-        background-color: var(--toggle-bg);
-        color: var(--toggle-btn);
-        transition: background-color 0.2s, color 0.2s;
-      }
-      #paginationControls button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      /* NEW: Additional header for Open Ports/Services column */
-      th:nth-child(31) {
-        white-space: nowrap;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="header">
-      <h1>External Attack Surface Analysis Report</h1>
-      <button id="themeToggle" class="toggle-btn">Change View</button>
-    </div>
-    <div class="container">
-      <div class="scoreboard" id="scoreboard"></div>
-      <div class="charts-grid">
-        <div class="chart-container">
-          <canvas id="priorityChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="statusCodeChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="loginPieChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="portChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="techChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="certExpiryChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="tlsUsageChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="headersChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="emailSecChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="cdnChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <canvas id="serviceChart"></canvas>
-        </div>
+  <!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <title>External Attack Surface Analysis</title>
+      <!-- Chart.js for charts -->
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+      <style>
+        :root {
+          /* Light theme colors */
+          --light-bg-color: #f9f9f9;
+          --light-text-color: #333;
+          --light-header-bg: #fff;
+          --light-header-text: #333;
+          --light-table-bg: #fff;
+          --light-table-header-bg: #eee;
+          --light-table-border: #ddd;
+          --light-toggle-bg: #ccc;
+          --light-toggle-btn: #fff;
+          /* Dark theme colors */
+          --dark-bg-color: #1f1f1f;
+          --dark-text-color: #f0f0f0;
+          --dark-header-bg: #2a2a2a;
+          --dark-header-text: #ffffff;
+          --dark-table-bg: #2a2a2a;
+          --dark-table-header-bg: #3a3a3a;
+          --dark-table-border: #444;
+          --dark-toggle-bg: #555;
+          --dark-toggle-btn: #ffffff;
+          /* Active theme variables */
+          --bg-color: var(--light-bg-color);
+          --text-color: var(--light-text-color);
+          --header-bg: var(--light-header-bg);
+          --header-text: var(--light-header-text);
+          --table-bg: var(--light-table-bg);
+          --table-header-bg: var(--light-table-header-bg);
+          --table-border: var(--light-table-border);
+          --toggle-bg: var(--light-toggle-bg);
+          --toggle-btn: var(--light-toggle-btn);
+          /* Font sizing */
+          --font-size-sm: 12px;
+          --font-size-base: 13px;
+          --font-size-md: 14px;
+          --font-size-lg: 16px;
+          --heading-font-size: 22px;
+        }
+        body.dark {
+          --bg-color: var(--dark-bg-color);
+          --text-color: var(--dark-text-color);
+          --header-bg: var(--dark-header-bg);
+          --header-text: var(--dark-header-text);
+          --table-bg: var(--dark-table-bg);
+          --table-header-bg: var(--dark-table-header-bg);
+          --table-border: var(--dark-table-border);
+          --toggle-bg: var(--dark-toggle-bg);
+          --toggle-btn: var(--dark-toggle-btn);
+        }
+        body {
+          margin: 0;
+          background-color: var(--bg-color);
+          color: var(--text-color);
+          font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+          font-size: var(--font-size-base);
+          line-height: 1.4;
+        }
+        /* HEADER */
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background-color: var(--header-bg);
+          color: var(--header-text);
+          padding: 12px 20px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+          margin: 0;
+          font-size: var(--heading-font-size);
+          font-weight: 600;
+        }
+        .toggle-btn {
+          background-color: var(--toggle-bg);
+          border: none;
+          color: var(--toggle-btn);
+          padding: 6px 12px;
+          cursor: pointer;
+          border-radius: 4px;
+          font-size: var(--font-size-sm);
+          transition: background-color 0.2s, color 0.2s;
+        }
+        .toggle-btn:hover {
+          opacity: 0.9;
+        }
+        .table-top-controls {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+        /* MAIN CONTAINER */
+        .container {
+          padding: 20px;
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+        /* SCOREBOARD */
+        .scoreboard {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-bottom: 20px;
+        }
+        .score-card {
+          background-color: var(--table-bg);
+          border: 1px solid var(--table-border);
+          border-radius: 5px;
+          flex: 1 1 200px;
+          padding: 10px;
+          text-align: center;
+        }
+        .score-card h2 {
+          margin: 0;
+          font-size: 1.6em;
+          font-weight: 500;
+        }
+        .score-card p {
+          margin: 5px 0 0;
+          font-size: var(--font-size-sm);
+          color: var(--text-color);
+        }
+        /* CHARTS GRID */
+        .charts-grid {
+          display: grid;
+          gap: 10px;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          margin-bottom: 20px;
+        }
+        .chart-container {
+          position: relative;
+          background-color: var(--table-bg);
+          border: 1px solid var(--table-border);
+          border-radius: 5px;
+          padding: 10px;
+          box-sizing: border-box;
+        }
+        .chart-container canvas {
+          display: block;
+          width: 100% !important;
+          height: auto !important;
+        }
+        /* SEARCH BOX */
+        #searchBox {
+          margin: 0;
+          padding: 6px 10px;
+          width: 250px;
+          font-size: var(--font-size-sm);
+          border: 1px solid var(--table-border);
+          border-radius: 4px;
+        }
+        /* TABLE CONTROLS */
+        .table-controls {
+          margin: 0;
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+        }
+        .table-controls label {
+          margin-right: 6px;
+          font-size: var(--font-size-sm);
+        }
+        .table-controls select {
+          font-size: var(--font-size-sm);
+          padding: 4px 8px;
+          border: 1px solid var(--table-border);
+          border-radius: 4px;
+          background-color: var(--table-bg);
+          color: var(--text-color);
+        }
+        /* MAIN TABLE */
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 10px;
+          background-color: var(--table-bg);
+          font-size: var(--font-size-sm);
+        }
+        th, td {
+          border: 1px solid var(--table-border);
+          padding: 8px;
+          text-align: left;
+          vertical-align: top;
+          color: inherit;
+        }
+        th {
+          background-color: var(--table-header-bg);
+          font-weight: 600;
+        }
+        /* FILTER DROPDOWN ROW */
+        #filter-row select {
+          width: 100%;
+          font-size: var(--font-size-sm);
+          padding: 2px 4px;
+          border: 1px solid var(--table-border);
+          border-radius: 3px;
+          background-color: var(--table-bg);
+          color: var(--text-color);
+        }
+        /* PAGINATION CONTROLS */
+        #paginationControls {
+          margin-top: 10px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 10px;
+        }
+        #paginationControls button {
+          padding: 6px 12px;
+          cursor: pointer;
+          font-size: var(--font-size-sm);
+          border-radius: 4px;
+          border: 1px solid var(--table-border);
+          background-color: var(--toggle-bg);
+          color: var(--toggle-btn);
+          transition: background-color 0.2s, color 0.2s;
+        }
+        #paginationControls button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        /* Additional header for the last columns */
+        th:nth-child(32) {
+          white-space: nowrap;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>External Attack Surface Analysis Report</h1>
+        <button id="themeToggle" class="toggle-btn">Change View</button>
       </div>
-      <div class="table-top-controls">
-        <input type="text" id="searchBox" placeholder="Filter table (e.g. domain, status code, tech)..." />
-        <div class="table-controls">
-          <label for="rowsPerPageSelect">Rows per page:</label>
-          <select id="rowsPerPageSelect">
-            <option value="20">20</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-            <option value="all">ALL</option>
-          </select>
+      <div class="container">
+        <div class="scoreboard" id="scoreboard"></div>
+        <div class="charts-grid">
+          <div class="chart-container">
+            <canvas id="priorityChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="statusCodeChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="loginPieChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="portChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="techChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="certExpiryChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="tlsUsageChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="headersChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="emailSecChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="cdnChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="serviceChart"></canvas>
+          </div>
+          <!-- ADDED: API Endpoint Chart -->
+          <div class="chart-container">
+            <canvas id="apiEndpointChart"></canvas>
+          </div>
         </div>
+        <div class="table-top-controls">
+          <input type="text" id="searchBox" placeholder="Filter table (e.g. domain, status code, tech)..." />
+          <div class="table-controls">
+            <label for="rowsPerPageSelect">Rows per page:</label>
+            <select id="rowsPerPageSelect">
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="all">ALL</option>
+            </select>
+          </div>
+        </div>
+        <table id="report-table">
+          <thead>
+            <tr>
+              <th>Priority</th>
+              <th>Domain</th>
+              <th>Resolvers</th>
+              <th>A records</th>
+              <th>DNS Status</th>
+              <th>CDN Name</th>
+              <th>CDN Type</th>
+              <th>Port</th>
+              <th>URL</th>
+              <th>Redirect Location</th>
+              <th>Homepage Title</th>
+              <th>Web Server</th>
+              <th>Login Found</th>
+              <!-- ADDED: API Endpoint Column -->
+              <th>API Endpoint</th>
+              <th>Technology Stack</th>
+              <th>Status Code</th>
+              <th>Content Length</th>
+              <th>CDN</th>
+              <th>SPF Record</th>
+              <th>DKIM Record</th>
+              <th>DMARC Record</th>
+              <th>DNSSEC Record</th>
+              <th>SSL/TLS Version</th>
+              <th>Cert Expiry Date</th>
+              <th>SSL/TLS Issuer</th>
+              <th>Strict-Transport-Security</th>
+              <th>X-Frame-Options</th>
+              <th>Content-Security-Policy</th>
+              <th>X-XSS-Protection</th>
+              <th>Referrer Policy</th>
+              <th>Permissions Policy</th>
+              <th>Open Ports / Services</th>
+            </tr>
+            <tr id="filter-row">
+              <th><select id="priority-filter"><option value="">All</option></select></th>
+              <th><select id="domain-filter"><option value="">All</option></select></th>
+              <th><select id="resolvers-filter"><option value="">All</option></select></th>
+              <th><select id="arecords-filter"><option value="">All</option></select></th>
+              <th><select id="dnsstatus-filter"><option value="">All</option></select></th>
+              <th><select id="cdnname-filter"><option value="">All</option></select></th>
+              <th><select id="cdntype-filter"><option value="">All</option></select></th>
+              <th><select id="port-filter"><option value="">All</option></select></th>
+              <th><select id="url-filter"><option value="">All</option></select></th>
+              <th><select id="redirect-filter"><option value="">All</option></select></th>
+              <th><select id="title-filter"><option value="">All</option></select></th>
+              <th><select id="webserver-filter"><option value="">All</option></select></th>
+              <th><select id="login-filter"><option value="">All</option></select></th>
+              <!-- ADDED: API Endpoint Filter -->
+              <th><select id="api-endpoint-filter"><option value="">All</option></select></th>
+              <th><select id="tech-filter"><option value="">All</option></select></th>
+              <th><select id="statuscode-filter"><option value="">All</option></select></th>
+              <th><select id="contentlength-filter"><option value="">All</option></select></th>
+              <th><select id="cdn-filter"><option value="">All</option></select></th>
+              <th><select id="spf-filter"><option value="">All</option></select></th>
+              <th><select id="dkim-filter"><option value="">All</option></select></th>
+              <th><select id="dmarc-filter"><option value="">All</option></select></th>
+              <th><select id="dnssec-filter"><option value="">All</option></select></th>
+              <th><select id="sslversion-filter"><option value="">All</option></select></th>
+              <th><select id="certexpiry-filter"><option value="">All</option></select></th>
+              <th><select id="sslissuer-filter"><option value="">All</option></select></th>
+              <th><select id="sts-filter"><option value="">All</option></select></th>
+              <th><select id="xfo-filter"><option value="">All</option></select></th>
+              <th><select id="csp-filter"><option value="">All</option></select></th>
+              <th><select id="xss-filter"><option value="">All</option></select></th>
+              <th><select id="rp-filter"><option value="">All</option></select></th>
+              <th><select id="pp-filter"><option value="">All</option></select></th>
+              <th><select id="ports-services-filter"><option value="">All</option></select></th>
+            </tr>
+          </thead>
+          <tbody id="report-table-body"></tbody>
+        </table>
+        <div id="paginationControls"></div>
       </div>
-      <table id="report-table">
-        <thead>
-          <tr>
-            <th>Priority</th>
-            <th>Domain</th>
-            <th>Resolvers</th>
-            <th>A records</th>
-            <th>DNS Status</th>
-            <th>CDN Name</th>
-            <th>CDN Type</th>
-            <th>Port</th>
-            <th>URL</th>
-            <th>Redirect Location</th>
-            <th>Homepage Title</th>
-            <th>Web Server</th>
-            <th>Login Found</th>
-            <th>Technology Stack</th>
-            <th>Status Code</th>
-            <th>Content Length</th>
-            <th>CDN</th>
-            <th>SPF Record</th>
-            <th>DKIM Record</th>
-            <th>DMARC Record</th>
-            <th>DNSSEC Record</th>
-            <th>SSL/TLS Version</th>
-            <th>Cert Expiry Date</th>
-            <th>SSL/TLS Issuer</th>
-            <th>Strict-Transport-Security</th>
-            <th>X-Frame-Options</th>
-            <th>Content-Security-Policy</th>
-            <th>X-XSS-Protection</th>
-            <th>Referrer Policy</th>
-            <th>Permissions Policy</th>
-            <th>Open Ports / Services</th>
-          </tr>
-          <tr id="filter-row">
-            <th><select id="priority-filter"><option value="">All</option></select></th>
-            <th><select id="domain-filter"><option value="">All</option></select></th>
-            <th><select id="resolvers-filter"><option value="">All</option></select></th>
-            <th><select id="arecords-filter"><option value="">All</option></select></th>
-            <th><select id="dnsstatus-filter"><option value="">All</option></select></th>
-            <th><select id="cdnname-filter"><option value="">All</option></select></th>
-            <th><select id="cdntype-filter"><option value="">All</option></select></th>
-            <th><select id="port-filter"><option value="">All</option></select></th>
-            <th><select id="url-filter"><option value="">All</option></select></th>
-            <th><select id="redirect-filter"><option value="">All</option></select></th>
-            <th><select id="title-filter"><option value="">All</option></select></th>
-            <th><select id="webserver-filter"><option value="">All</option></select></th>
-            <th><select id="login-filter"><option value="">All</option></select></th>
-            <th><select id="tech-filter"><option value="">All</option></select></th>
-            <th><select id="statuscode-filter"><option value="">All</option></select></th>
-            <th><select id="contentlength-filter"><option value="">All</option></select></th>
-            <th><select id="cdn-filter"><option value="">All</option></select></th>
-            <th><select id="spf-filter"><option value="">All</option></select></th>
-            <th><select id="dkim-filter"><option value="">All</option></select></th>
-            <th><select id="dmarc-filter"><option value="">All</option></select></th>
-            <th><select id="dnssec-filter"><option value="">All</option></select></th>
-            <th><select id="sslversion-filter"><option value="">All</option></select></th>
-            <th><select id="certexpiry-filter"><option value="">All</option></select></th>
-            <th><select id="sslissuer-filter"><option value="">All</option></select></th>
-            <th><select id="sts-filter"><option value="">All</option></select></th>
-            <th><select id="xfo-filter"><option value="">All</option></select></th>
-            <th><select id="csp-filter"><option value="">All</option></select></th>
-            <th><select id="xss-filter"><option value="">All</option></select></th>
-            <th><select id="rp-filter"><option value="">All</option></select></th>
-            <th><select id="pp-filter"><option value="">All</option></select></th>
-            <th><select id="ports-services-filter"><option value="">All</option></select></th>
-          </tr>
-        </thead>
-        <tbody id="report-table-body"></tbody>
-      </table>
-      <div id="paginationControls"></div>
-    </div>
-    <script>
-      const barLabelPlugin = {
-        id: 'barLabelPlugin',
-        afterDatasetsDraw(chart, args, options) {
-          const { ctx } = chart;
-          const metaSets = chart.getSortedVisibleDatasetMetas().filter(m => m.type === 'bar');
-          metaSets.forEach((meta) => {
-            meta.data.forEach((element, index) => {
-              const value = meta._parsed[index][meta.vScale.axis];
-              if (value === 0) return;
-              const { x, y } = element.tooltipPosition();
-              ctx.save();
-              ctx.fillStyle = Chart.defaults.color;
-              ctx.font = options.font || '9px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'bottom';
-              ctx.fillText(value, x, y - 2);
-              ctx.restore();
+      <script>
+        const barLabelPlugin = {
+          id: 'barLabelPlugin',
+          afterDatasetsDraw(chart, args, options) {
+            const { ctx } = chart;
+            const metaSets = chart.getSortedVisibleDatasetMetas().filter(m => m.type === 'bar');
+            metaSets.forEach((meta) => {
+              meta.data.forEach((element, index) => {
+                const value = meta._parsed[index][meta.vScale.axis];
+                if (value === 0) return;
+                const { x, y } = element.tooltipPosition();
+                ctx.save();
+                ctx.fillStyle = Chart.defaults.color;
+                ctx.font = options.font || '9px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(value, x, y - 2);
+                ctx.restore();
+              });
             });
+          }
+        };
+        Chart.register(barLabelPlugin);
+      </script>
+      <script>
+        // ADDED: Add apiChart variable
+        let priorityChart, statusCodeChart, loginChart, portChart, techChart;
+        let certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart, serviceChart, apiChart;
+
+        let allTableRows = [];
+        let currentPage = 1;
+        let rowsPerPage = 20;
+        const toggleButton = document.getElementById("themeToggle");
+        toggleButton.addEventListener("click", () => {
+          document.body.classList.toggle("dark");
+          updateChartTheme();
+        });
+        function updateChartTheme() {
+          const newColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
+          Chart.defaults.color = newColor;
+          const charts = [
+            priorityChart, statusCodeChart, loginChart, portChart, techChart,
+            certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart,
+            serviceChart, apiChart // ADDED: include apiChart here
+          ];
+          charts.forEach(chart => {
+            if (chart) {
+              if (chart.options.scales) {
+                if (chart.options.scales.x && chart.options.scales.x.ticks) {
+                  chart.options.scales.x.ticks.color = newColor;
+                }
+                if (chart.options.scales.y && chart.options.scales.y.ticks) {
+                  chart.options.scales.y.ticks.color = newColor;
+                }
+              }
+              if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels) {
+                chart.options.plugins.legend.labels.color = newColor;
+              }
+              if (chart.options.plugins && chart.options.plugins.title) {
+                chart.options.plugins.title.color = newColor;
+              }
+              chart.update();
+            }
           });
         }
-      };
-      Chart.register(barLabelPlugin);
-    </script>
-    <script>
-      let priorityChart, statusCodeChart, loginChart, portChart, techChart;
-      let certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart, serviceChart;
-      let allTableRows = [];
-      let currentPage = 1;
-      let rowsPerPage = 20;
-      const toggleButton = document.getElementById("themeToggle");
-      toggleButton.addEventListener("click", () => {
-        document.body.classList.toggle("dark");
-        updateChartTheme();
-      });
-      function updateChartTheme() {
-        const newColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
-        Chart.defaults.color = newColor;
-        const charts = [priorityChart, statusCodeChart, loginChart, portChart, techChart,
-                        certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart, serviceChart];
-        charts.forEach(chart => {
-          if (chart) {
-            if (chart.options.scales) {
-              if (chart.options.scales.x && chart.options.scales.x.ticks) {
-                chart.options.scales.x.ticks.color = newColor;
-              }
-              if (chart.options.scales.y && chart.options.scales.y.ticks) {
-                chart.options.scales.y.ticks.color = newColor;
-              }
-            }
-            if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels) {
-              chart.options.plugins.legend.labels.color = newColor;
-            }
-            if (chart.options.plugins && chart.options.plugins.title) {
-              chart.options.plugins.title.color = newColor;
-            }
-            chart.update();
+        const formatCell = (arr) => (arr && arr.length) ? arr.join("<br>") : "N/A";
+        function computePriority(httpRecord, dnsRecord) {
+          let score = 0;
+          if (httpRecord.status_code === 200) score += 5;
+          else if ([301,302].includes(httpRecord.status_code)) score += 3;
+          else if (httpRecord.status_code >= 400) score += 1;
+          else score += 1;
+          if (httpRecord.content_length !== undefined) {
+            if (httpRecord.content_length > 100000) score += 3;
+            else if (httpRecord.content_length > 50000) score += 2;
+            else if (httpRecord.content_length > 10000) score += 1;
           }
-        });
-      }
-      const formatCell = (arr) => (arr && arr.length) ? arr.join("<br>") : "N/A";
-      function computePriority(httpRecord, dnsRecord) {
-        let score = 0;
-        if (httpRecord.status_code === 200) score += 5;
-        else if ([301,302].includes(httpRecord.status_code)) score += 3;
-        else if (httpRecord.status_code >= 400) score += 1;
-        else score += 1;
-        if (httpRecord.content_length !== undefined) {
-          if (httpRecord.content_length > 100000) score += 3;
-          else if (httpRecord.content_length > 50000) score += 2;
-          else if (httpRecord.content_length > 10000) score += 1;
+          if (httpRecord.tech && httpRecord.tech.length > 0) score += 2;
+          if (dnsRecord && dnsRecord.status_code === "NOERROR") score += 1;
+          if (score >= 10) return "P0";
+          if (score >= 8)  return "P1";
+          if (score >= 6)  return "P2";
+          if (score >= 4)  return "P3";
+          return "P4";
         }
-        if (httpRecord.tech && httpRecord.tech.length > 0) score += 2;
-        if (dnsRecord && dnsRecord.status_code === "NOERROR") score += 1;
-        if (score >= 10) return "P0";
-        if (score >= 8)  return "P1";
-        if (score >= 6)  return "P2";
-        if (score >= 4)  return "P3";
-        return "P4";
-      }
-      function getPriorityColor(priority) {
-        switch (priority) {
-          case "P0": return "#e74c3c";
-          case "P1": return "#e67e22";
-          case "P2": return "#2ecc71";
-          case "P3": return "#3498db";
-          case "P4": return "#85c1e9";
-          default: return "inherit";
+        function getPriorityColor(priority) {
+          switch (priority) {
+            case "P0": return "#e74c3c";
+            case "P1": return "#e67e22";
+            case "P2": return "#2ecc71";
+            case "P3": return "#3498db";
+            case "P4": return "#85c1e9";
+            default: return "inherit";
+          }
         }
-      }
-      function buildScoreboard({ totalSubdomains, liveSubs, totalHttpx, loginFoundCount }) {
-        const sb = document.getElementById("scoreboard");
-        sb.innerHTML = `
-          <div class="score-card">
-            <h2>${totalSubdomains}</h2>
-            <p>Total Unique Assets</p>
-          </div>
-          <div class="score-card">
-            <h2>${liveSubs}</h2>
-            <p>Total Live Assets</p>
-          </div>
-          <div class="score-card">
-            <h2>${totalHttpx}</h2>
-            <p>Application Endpoints (Various Ports)</p>
-          </div>
-          <div class="score-card">
-            <h2>${loginFoundCount}</h2>
-            <p>Login Interface Found</p>
-          </div>
-        `;
-      }
-      function buildCharts({ statusCount, priorityCount, portCount, techCount }) {
-        const scCanvas = document.getElementById("statusCodeChart");
-        const prCanvas = document.getElementById("priorityChart");
-        const portCanvas = document.getElementById("portChart");
-        const techCanvas = document.getElementById("techChart");
-        if (prCanvas) {
-          priorityChart = new Chart(prCanvas, {
+        function buildScoreboard({ totalSubdomains, liveSubs, totalHttpx, loginFoundCount }) {
+          const sb = document.getElementById("scoreboard");
+          sb.innerHTML = `
+            <div class="score-card">
+              <h2>${totalSubdomains}</h2>
+              <p>Total Unique Assets</p>
+            </div>
+            <div class="score-card">
+              <h2>${liveSubs}</h2>
+              <p>Total Live Assets</p>
+            </div>
+            <div class="score-card">
+              <h2>${totalHttpx}</h2>
+              <p>Application Endpoints (Various Ports)</p>
+            </div>
+            <div class="score-card">
+              <h2>${loginFoundCount}</h2>
+              <p>Login Interface Found</p>
+            </div>
+          `;
+        }
+        function buildCharts({ statusCount, priorityCount, portCount, techCount }) {
+          const scCanvas = document.getElementById("statusCodeChart");
+          const prCanvas = document.getElementById("priorityChart");
+          const portCanvas = document.getElementById("portChart");
+          const techCanvas = document.getElementById("techChart");
+          if (prCanvas) {
+            priorityChart = new Chart(prCanvas, {
+              type: "bar",
+              data: {
+                labels: ["P0", "P1", "P2", "P3", "P4"],
+                datasets: [{
+                  label: "Priority Buckets",
+                  data: ["P0", "P1", "P2", "P3", "P4"].map(l => priorityCount[l] || 0),
+                  backgroundColor: ["#e74c3c", "#e67e22", "#2ecc71", "#3498db", "#85c1e9"]
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { display: false }, title: { display: true, text: "Asset Attractiveness by Hackers" } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          }
+          if (scCanvas) {
+            statusCodeChart = new Chart(scCanvas, {
+              type: "bar",
+              data: {
+                labels: Object.keys(statusCount).sort((a, b) => +a - +b),
+                datasets: [{
+                  label: "HTTP Status Codes",
+                  data: Object.keys(statusCount).sort((a, b) => +a - +b).map(l => statusCount[l]),
+                  backgroundColor: ["#3498db","#1abc9c","#9b59b6","#f1c40f","#e74c3c","#34495e","#95a5a6"]
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { display: false }, title: { display: true, text: "HTTP Status Codes" } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          }
+          if (portCanvas) {
+            portChart = new Chart(portCanvas, {
+              type: "bar",
+              data: {
+                labels: Object.keys(portCount).sort((a, b) => +a - +b),
+                datasets: [{
+                  label: "Open Ports",
+                  data: Object.keys(portCount).sort((a, b) => +a - +b).map(p => portCount[p]),
+                  backgroundColor: "#f39c12"
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { display: false }, title: { display: true, text: "Port Usage" } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          }
+          if (techCanvas) {
+            const sortedTech = Object.keys(techCount).sort((a, b) => techCount[b] - techCount[a]);
+            const top10 = sortedTech.slice(0, 10);
+            techChart = new Chart(techCanvas, {
+              type: "bar",
+              data: {
+                labels: top10,
+                datasets: [{
+                  label: "Tech Usage (Top 10)",
+                  data: top10.map(t => techCount[t]),
+                  backgroundColor: "#9b59b6"
+                }]
+              },
+              options: {
+                responsive: true,
+                indexAxis: "x",
+                plugins: { legend: { display: false }, title: { display: true, text: "Top 10 Technologies" } },
+                scales: { x: { beginAtZero: true } }
+              }
+            });
+          }
+        }
+        function buildLoginPieChart(endpointsCount, loginFoundCount) {
+          const canvas = document.getElementById("loginPieChart");
+          if (canvas) {
+            loginChart = new Chart(canvas, {
+              type: "bar",
+              data: {
+                labels: ["Found", "Not Found"],
+                datasets: [{
+                  data: [loginFoundCount, endpointsCount - loginFoundCount],
+                  backgroundColor: ["#e74c3c", "#2ecc71"]
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { title: { display: true, text: "Login Interfaces Identified" }, legend: { display: false } }
+              }
+            });
+          }
+        }
+        function buildCertExpiryChart(secData) {
+          let now = new Date();
+          let exp7 = 0, exp14 = 0, exp30 = 0;
+          secData.forEach(item => {
+            const expiryStr = item["Cert Expiry Date"];
+            if (expiryStr && expiryStr !== "N/A") {
+              let expiryDate = new Date(expiryStr);
+              if (!isNaN(expiryDate)) {
+                let diffDays = (expiryDate - now) / (1000 * 60 * 60 * 24);
+                if (diffDays >= 0) {
+                  if (diffDays <= 7) { exp7++; }
+                  else if (diffDays <= 14) { exp14++; }
+                  else if (diffDays <= 30) { exp30++; }
+                }
+              }
+            }
+          });
+          const ctx = document.getElementById("certExpiryChart").getContext("2d");
+          certExpiryChart = new Chart(ctx, {
             type: "bar",
             data: {
-              labels: ["P0", "P1", "P2", "P3", "P4"],
-              datasets: [{
-                label: "Priority Buckets",
-                data: ["P0", "P1", "P2", "P3", "P4"].map(l => priorityCount[l] || 0),
-                backgroundColor: ["#e74c3c", "#e67e22", "#2ecc71", "#3498db", "#85c1e9"]
-              }]
+              labels: ["Next 7 Days", "Next 14 Days", "Next 30 Days"],
+              datasets: [{ label: "Certs Expiring", data: [exp7, exp14, exp30], backgroundColor: ["#e74c3c", "#e67e22", "#3498db"] }]
             },
             options: {
               responsive: true,
-              plugins: { legend: { display: false }, title: { display: true, text: "Asset Attractiveness by Hackers" } },
+              plugins: { title: { display: true, text: "Certificate Expiry" }, legend: { display: false } },
               scales: { y: { beginAtZero: true } }
             }
           });
         }
-        if (scCanvas) {
-          statusCodeChart = new Chart(scCanvas, {
+        function buildTLSUsageChart(secData) {
+          const tlsCounts = {};
+          secData.forEach(item => {
+            let ver = item["SSL/TLS Version"];
+            ver = ver ? ver.trim() : "Unknown";
+            tlsCounts[ver] = (tlsCounts[ver] || 0) + 1;
+          });
+          const labels = Object.keys(tlsCounts);
+          const data = labels.map(l => tlsCounts[l]);
+          const ctx = document.getElementById("tlsUsageChart").getContext("2d");
+          tlsUsageChart = new Chart(ctx, {
             type: "bar",
-            data: {
-              labels: Object.keys(statusCount).sort((a, b) => +a - +b),
-              datasets: [{
-                label: "HTTP Status Codes",
-                data: Object.keys(statusCount).sort((a, b) => +a - +b).map(l => statusCount[l]),
-                backgroundColor: ["#3498db","#1abc9c","#9b59b6","#f1c40f","#e74c3c","#34495e","#95a5a6"]
-              }]
-            },
+            data: { labels, datasets: [{ label: "TLS Version Usage", data, backgroundColor: "#2ecc71" }] },
             options: {
               responsive: true,
-              plugins: { legend: { display: false }, title: { display: true, text: "HTTP Status Codes" } },
+              plugins: { title: { display: true, text: "SSL/TLS Usage" }, legend: { display: false } },
               scales: { y: { beginAtZero: true } }
             }
           });
         }
-        if (portCanvas) {
-          portChart = new Chart(portCanvas, {
+        function buildHeadersChart(httpxData, secMap) {
+          let hstsSet = 0, hstsMissing = 0;
+          let xfoSet = 0, xfoMissing = 0;
+          let cspSet = 0, cspMissing = 0;
+          httpxData.forEach(record => {
+            if (record.status_code === 200) {
+              const domain = (record.input || "").split(":")[0];
+              const sec = secMap[domain] || {};
+              const hsts = (sec["Strict-Transport-Security"] || "").trim();
+              const xfo = (sec["X-Frame-Options"] || "").trim();
+              const csp = (sec["Content-Security-Policy"] || "").trim();
+              if (hsts) hstsSet++; else hstsMissing++;
+              if (xfo) xfoSet++; else xfoMissing++;
+              if (csp) cspSet++; else cspMissing++;
+            }
+          });
+          const ctx = document.getElementById("headersChart").getContext("2d");
+          headersChart = new Chart(ctx, {
             type: "bar",
             data: {
-              labels: Object.keys(portCount).sort((a, b) => +a - +b),
-              datasets: [{
-                label: "Open Ports",
-                data: Object.keys(portCount).sort((a, b) => +a - +b).map(p => portCount[p]),
-                backgroundColor: "#f39c12"
-              }]
+              labels: ["HSTS", "X-Frame Options", "CSP"],
+              datasets: [
+                { label: "Present", data: [hstsSet, xfoSet, cspSet], backgroundColor: "#2ecc71" },
+                { label: "Missing", data: [hstsMissing, xfoMissing, cspMissing], backgroundColor: "#e74c3c" }
+              ]
             },
             options: {
               responsive: true,
-              plugins: { legend: { display: false }, title: { display: true, text: "Port Usage" } },
+              plugins: { title: { display: true, text: "Security Headers (Status 200)" }, tooltip: { mode: "index", intersect: false } },
+              scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+            }
+          });
+        }
+        function buildEmailSecChart(secData) {
+          let spfSet = 0, spfMissing = 0;
+          let dkimSet = 0, dkimMissing = 0;
+          let dmarcSet = 0, dmarcMissing = 0;
+          secData.forEach(item => {
+            const spf = item["SPF Record"] || "";
+            const dkim = item["DKIM Record"] || "";
+            const dmarc = item["DMARC Record"] || "";
+            if (spf.toLowerCase().includes("spf1")) spfSet++; else spfMissing++;
+            if (dkim.toLowerCase().includes("dkim1")) dkimSet++; else dkimMissing++;
+            if (dmarc.toLowerCase().includes("dmarc1")) dmarcSet++; else dmarcMissing++;
+          });
+          const ctx = document.getElementById("emailSecChart").getContext("2d");
+          emailSecChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels: ["SPF", "DKIM", "DMARC"],
+              datasets: [
+                { label: "Present", data: [spfSet, dkimSet, dmarcSet], backgroundColor: "#2ecc71" },
+                { label: "Missing", data: [spfMissing, dkimMissing, dmarcMissing], backgroundColor: "#e74c3c" }
+              ]
+            },
+            options: {
+              responsive: true,
+              plugins: { title: { display: true, text: "Email Security Records" }, tooltip: { mode: "index", intersect: false } },
+              scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+            }
+          });
+        }
+        function buildCDNChart(httpxData) {
+          const cdnCounts = {};
+          httpxData.forEach(record => {
+            let cdn = record.cdn_name;
+            if (cdn && cdn !== "N/A") {
+              cdn = cdn.trim();
+              cdnCounts[cdn] = (cdnCounts[cdn] || 0) + 1;
+            }
+          });
+          const labels = Object.keys(cdnCounts);
+          const data = labels.map(l => cdnCounts[l]);
+          const ctx = document.getElementById("cdnChart").getContext("2d");
+          cdnChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels,
+              datasets: [{ label: "CDN Usage Distribution", data, backgroundColor: "#3498db" }]
+            },
+            options: {
+              responsive: true,
+              plugins: { title: { display: true, text: "CDN Usage" }, legend: { display: false } },
               scales: { y: { beginAtZero: true } }
             }
           });
         }
-        if (techCanvas) {
-          const sortedTech = Object.keys(techCount).sort((a, b) => techCount[b] - techCount[a]);
-          const top10 = sortedTech.slice(0, 10);
-          techChart = new Chart(techCanvas, {
+        // Build Service Chart (Open Ports by Service)
+        function buildServiceChart(naabuData) {
+          const naabuMap = {};
+          const serviceCount = {};
+          naabuData.forEach(n => {
+            const domain = n.host;
+            const port = n.port;
+            let service = "Unknown";
+            const portServiceDB = {
+              "7": "Echo", "9": "Discard", "13": "Daytime", "21": "FTP", "22": "SSH",
+              "23": "Telnet", "25": "SMTP", "26": "SMTP", "37": "Time", "53": "DNS",
+              "79": "Finger", "80": "HTTP", "81": "HTTP", "88": "Kerberos", "106": "POP3",
+              "110": "POP3", "111": "RPC", "113": "Ident", "119": "NNTP", "135": "RPC",
+              "139": "SMB", "143": "IMAP", "144": "IMAP", "179": "BGP", "199": "SMUX",
+              "389": "LDAP", "427": "SLP", "443": "HTTPS", "444": "N/A", "445": "SMB",
+              "465": "SMTPS", "513": "rlogin", "514": "rsh", "515": "Printer",
+              "543": "Klogin", "544": "Kshell", "548": "AFP", "554": "RTSP", "587": "SMTP Submission",
+              "631": "IPP", "646": "LDP", "873": "rsync", "990": "FTPS", "993": "IMAPS",
+              "995": "POP3S", "1433": "MSSQL", "1720": "H.323", "1723": "PPTP", "1755": "Windows Media",
+              "1900": "SSDP", "2000": "CISCO SCCP", "2001": "CISCO SCCP", "2049": "NFS",
+              "2121": "FTP-Alt", "2717": "MS-SQL", "3000": "HTTP-Alt", "3128": "Squid",
+              "3306": "MySQL", "3389": "RDP", "3986": "N/A", "4899": "N/A", "5000": "UPnP",
+              "5009": "N/A", "5051": "NNTP-Posting", "5060": "SIP", "5101": "N/A", "5190": "ICQ",
+              "5357": "WSD", "5432": "PostgreSQL", "5631": "pcANYWHERE", "5666": "NSClient++",
+              "5800": "VNC", "5900": "VNC", "6000": "X11", "6001": "X11", "6646": "IRC",
+              "7070": "RealAudio", "8000": "HTTP-Alt", "8008": "HTTP-Alt", "8009": "AJP13",
+              "8080": "HTTP-Alt", "8081": "HTTP-Alt", "8443": "HTTPS-Alt", "8888": "HTTP-Alt",
+              "9100": "Printer", "9999": "N/A", "10000": "N/A", "32768": "N/A",
+              "49152": "N/A", "49153": "N/A", "49154": "N/A", "49155": "N/A", "49156": "N/A", "49157": "N/A"
+            };
+            if (portServiceDB[port]) { service = portServiceDB[port]; }
+            if (!naabuMap[domain]) naabuMap[domain] = [];
+            naabuMap[domain].push({ port, service });
+            serviceCount[service] = (serviceCount[service] || 0) + 1;
+          });
+          window.naabuMap = naabuMap;
+          const ctx = document.getElementById("serviceChart").getContext("2d");
+          const labels = Object.keys(serviceCount).sort((a, b) => serviceCount[b] - serviceCount[a]);
+          const data = labels.map(l => serviceCount[l]);
+          serviceChart = new Chart(ctx, {
             type: "bar",
             data: {
-              labels: top10,
+              labels,
+              datasets: [{ label: "Open Ports by Service", data, backgroundColor: "#9b59b6" }]
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { display: false }, title: { display: true, text: "Open Services" } },
+              scales: { y: { beginAtZero: true } }
+            }
+          });
+        }
+
+        // ADDED: Build API Chart
+        function buildApiChart(apiData) {
+          const countYes = apiData.filter(x => x.api_endpoint === "Yes").length;
+          const countNo  = apiData.filter(x => x.api_endpoint === "No").length;
+          const ctx = document.getElementById("apiEndpointChart").getContext("2d");
+          apiChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels: ["API Endpoints", "Traditional Endpoints"],
               datasets: [{
-                label: "Tech Usage (Top 10)",
-                data: top10.map(t => techCount[t]),
-                backgroundColor: "#9b59b6"
+                label: "API Endpoint Count",
+                data: [countYes, countNo],
+                backgroundColor: ["#8e44ad", "#2ecc71"]
               }]
             },
             options: {
               responsive: true,
-              indexAxis: "x",
-              plugins: { legend: { display: false }, title: { display: true, text: "Top 10 Technologies" } },
-              scales: { x: { beginAtZero: true } }
+              plugins: {
+                title: { display: true, text: "API vs Traditional Endpoints" },
+                legend: { display: false }
+              },
+              scales: { y: { beginAtZero: true } }
             }
           });
         }
-      }
-      function buildLoginPieChart(endpointsCount, loginFoundCount) {
-        const canvas = document.getElementById("loginPieChart");
-        if (canvas) {
-          loginChart = new Chart(canvas, {
-            type: "bar",
-            data: {
-              labels: ["Found", "Not Found"],
-              datasets: [{
-                data: [loginFoundCount, endpointsCount - loginFoundCount],
-                backgroundColor: ["#e74c3c", "#2ecc71"]
-              }]
-            },
-            options: {
-              responsive: true,
-              plugins: { title: { display: true, text: "Login Interfaces Identified" }, legend: { display: false } }
-            }
-          });
-        }
-      }
-      function buildCertExpiryChart(secData) {
-        let now = new Date();
-        let exp7 = 0, exp14 = 0, exp30 = 0;
-        secData.forEach(item => {
-          const expiryStr = item["Cert Expiry Date"];
-          if (expiryStr && expiryStr !== "N/A") {
-            let expiryDate = new Date(expiryStr);
-            if (!isNaN(expiryDate)) {
-              let diffDays = (expiryDate - now) / (1000 * 60 * 60 * 24);
-              if (diffDays >= 0) {
-                if (diffDays <= 7) { exp7++; }
-                else if (diffDays <= 14) { exp14++; }
-                else if (diffDays <= 30) { exp30++; }
-              }
-            }
-          }
-        });
-        const ctx = document.getElementById("certExpiryChart").getContext("2d");
-        certExpiryChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: ["Next 7 Days", "Next 14 Days", "Next 30 Days"],
-            datasets: [{ label: "Certs Expiring", data: [exp7, exp14, exp30], backgroundColor: ["#e74c3c", "#e67e22", "#3498db"] }]
-          },
-          options: {
-            responsive: true,
-            plugins: { title: { display: true, text: "Certificate Expiry" }, legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
-          }
-        });
-      }
-      function buildTLSUsageChart(secData) {
-        const tlsCounts = {};
-        secData.forEach(item => {
-          let ver = item["SSL/TLS Version"];
-          ver = ver ? ver.trim() : "Unknown";
-          tlsCounts[ver] = (tlsCounts[ver] || 0) + 1;
-        });
-        const labels = Object.keys(tlsCounts);
-        const data = labels.map(l => tlsCounts[l]);
-        const ctx = document.getElementById("tlsUsageChart").getContext("2d");
-        tlsUsageChart = new Chart(ctx, {
-          type: "bar",
-          data: { labels, datasets: [{ label: "TLS Version Usage", data, backgroundColor: "#2ecc71" }] },
-          options: {
-            responsive: true,
-            plugins: { title: { display: true, text: "SSL/TLS Usage" }, legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
-          }
-        });
-      }
-      function buildHeadersChart(httpxData, secMap) {
-        let hstsSet = 0, hstsMissing = 0;
-        let xfoSet = 0, xfoMissing = 0;
-        let cspSet = 0, cspMissing = 0;
-        httpxData.forEach(record => {
-          if (record.status_code === 200) {
-            const domain = (record.input || "").split(":")[0];
+
+        // MODIFIED: buildTableRows now takes an extra apiMap parameter, and includes a new <td> for "API Endpoint"
+        function buildTableRows(combinedData, secMap, loginMap, apiMap) {
+          allTableRows = [];
+          Object.keys(combinedData).forEach(domain => {
+            const { dns, http } = combinedData[domain];
+            const dnsResolvers = dns && dns.resolver ? dns.resolver : [];
+            const dnsA = dns && dns.a ? dns.a : [];
+            const dnsStatus = dns ? dns.status_code : "N/A";
             const sec = secMap[domain] || {};
-            const hsts = (sec["Strict-Transport-Security"] || "").trim();
-            const xfo = (sec["X-Frame-Options"] || "").trim();
-            const csp = (sec["Content-Security-Policy"] || "").trim();
-            if (hsts) hstsSet++; else hstsMissing++;
-            if (xfo) xfoSet++; else xfoMissing++;
-            if (csp) cspSet++; else cspMissing++;
-          }
-        });
-        const ctx = document.getElementById("headersChart").getContext("2d");
-        headersChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: ["HSTS", "X-Frame Options", "CSP"],
-            datasets: [
-              { label: "Present", data: [hstsSet, xfoSet, cspSet], backgroundColor: "#2ecc71" },
-              { label: "Missing", data: [hstsMissing, xfoMissing, cspMissing], backgroundColor: "#e74c3c" }
-            ]
-          },
-          options: {
-            responsive: true,
-            plugins: { title: { display: true, text: "Security Headers (Status 200)" }, tooltip: { mode: "index", intersect: false } },
-            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
-          }
-        });
-      }
-      function buildEmailSecChart(secData) {
-        let spfSet = 0, spfMissing = 0;
-        let dkimSet = 0, dkimMissing = 0;
-        let dmarcSet = 0, dmarcMissing = 0;
-        secData.forEach(item => {
-          const spf = item["SPF Record"] || "";
-          const dkim = item["DKIM Record"] || "";
-          const dmarc = item["DMARC Record"] || "";
-          if (spf.toLowerCase().includes("spf1")) spfSet++; else spfMissing++;
-          if (dkim.toLowerCase().includes("dkim1")) dkimSet++; else dkimMissing++;
-          if (dmarc.toLowerCase().includes("dmarc1")) dmarcSet++; else dmarcMissing++;
-        });
-        const ctx = document.getElementById("emailSecChart").getContext("2d");
-        emailSecChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: ["SPF", "DKIM", "DMARC"],
-            datasets: [
-              { label: "Present", data: [spfSet, dkimSet, dmarcSet], backgroundColor: "#2ecc71" },
-              { label: "Missing", data: [spfMissing, dkimMissing, dmarcMissing], backgroundColor: "#e74c3c" }
-            ]
-          },
-          options: {
-            responsive: true,
-            plugins: { title: { display: true, text: "Email Security Records" }, tooltip: { mode: "index", intersect: false } },
-            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
-          }
-        });
-      }
-      function buildCDNChart(httpxData) {
-        const cdnCounts = {};
-        httpxData.forEach(record => {
-          let cdn = record.cdn_name;
-          if (cdn && cdn !== "N/A") {
-            cdn = cdn.trim();
-            cdnCounts[cdn] = (cdnCounts[cdn] || 0) + 1;
-          }
-        });
-        const labels = Object.keys(cdnCounts);
-        const data = labels.map(l => cdnCounts[l]);
-        const ctx = document.getElementById("cdnChart").getContext("2d");
-        cdnChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels,
-            datasets: [{ label: "CDN Usage Distribution", data, backgroundColor: "#3498db" }]
-          },
-          options: {
-            responsive: true,
-            plugins: { title: { display: true, text: "CDN Usage" }, legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
-          }
-        });
-      }
-      // NEW: Build Service Chart (Open Ports by Service)
-      function buildServiceChart(naabuData) {
-        const naabuMap = {};
-        const serviceCount = {};
-        naabuData.forEach(n => {
-          const domain = n.host;
-          const port = n.port;
-          let service = "Unknown";
-          const portServiceDB = {
-            "7": "Echo", "9": "Discard", "13": "Daytime", "21": "FTP", "22": "SSH",
-            "23": "Telnet", "25": "SMTP", "26": "SMTP", "37": "Time", "53": "DNS",
-            "79": "Finger", "80": "HTTP", "81": "HTTP", "88": "Kerberos", "106": "POP3",
-            "110": "POP3", "111": "RPC", "113": "Ident", "119": "NNTP", "135": "RPC",
-            "139": "SMB", "143": "IMAP", "144": "IMAP", "179": "BGP", "199": "SMUX",
-            "389": "LDAP", "427": "SLP", "443": "HTTPS", "444": "N/A", "445": "SMB",
-            "465": "SMTPS", "513": "rlogin", "514": "rsh", "515": "Printer",
-            "543": "Klogin", "544": "Kshell", "548": "AFP", "554": "RTSP", "587": "SMTP Submission",
-            "631": "IPP", "646": "LDP", "873": "rsync", "990": "FTPS", "993": "IMAPS",
-            "995": "POP3S", "1433": "MSSQL", "1720": "H.323", "1723": "PPTP", "1755": "Windows Media",
-            "1900": "SSDP", "2000": "CISCO SCCP", "2001": "CISCO SCCP", "2049": "NFS",
-            "2121": "FTP-Alt", "2717": "MS-SQL", "3000": "HTTP-Alt", "3128": "Squid",
-            "3306": "MySQL", "3389": "RDP", "3986": "N/A", "4899": "N/A", "5000": "UPnP",
-            "5009": "N/A", "5051": "NNTP-Posting", "5060": "SIP", "5101": "N/A", "5190": "ICQ",
-            "5357": "WSD", "5432": "PostgreSQL", "5631": "pcANYWHERE", "5666": "NSClient++",
-            "5800": "VNC", "5900": "VNC", "6000": "X11", "6001": "X11", "6646": "IRC",
-            "7070": "RealAudio", "8000": "HTTP-Alt", "8008": "HTTP-Alt", "8009": "AJP13",
-            "8080": "HTTP-Alt", "8081": "HTTP-Alt", "8443": "HTTPS-Alt", "8888": "HTTP-Alt",
-            "9100": "Printer", "9999": "N/A", "10000": "N/A", "32768": "N/A",
-            "49152": "N/A", "49153": "N/A", "49154": "N/A", "49155": "N/A", "49156": "N/A", "49157": "N/A"
-          };
-          if (portServiceDB[port]) { service = portServiceDB[port]; }
-          if (!naabuMap[domain]) naabuMap[domain] = [];
-          naabuMap[domain].push({ port, service });
-          serviceCount[service] = (serviceCount[service] || 0) + 1;
-        });
-        window.naabuMap = naabuMap;
-        const ctx = document.getElementById("serviceChart").getContext("2d");
-        const labels = Object.keys(serviceCount).sort((a, b) => serviceCount[b] - serviceCount[a]);
-        const data = labels.map(l => serviceCount[l]);
-        serviceChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels,
-            datasets: [{ label: "Open Ports by Service", data, backgroundColor: "#9b59b6" }]
-          },
-          options: {
-            responsive: true,
-            plugins: { legend: { display: false }, title: { display: true, text: "Open Services" } },
-            scales: { y: { beginAtZero: true } }
-          }
-        });
-      }
-      function buildTableRows(combinedData, secMap, loginMap) {
-        allTableRows = [];
-        Object.keys(combinedData).forEach(domain => {
-          const { dns, http } = combinedData[domain];
-          const dnsResolvers = dns && dns.resolver ? dns.resolver : [];
-          const dnsA = dns && dns.a ? dns.a : [];
-          const dnsStatus = dns ? dns.status_code : "N/A";
-          const sec = secMap[domain] || {};
-          const spf = sec["SPF Record"] || "N/A";
-          const dkim = sec["DKIM Record"] || "N/A";
-          const dmarc = sec["DMARC Record"] || "N/A";
-          const dnssec = sec["DNSSEC Status"] || "N/A";
-          const sslVersion = sec["SSL/TLS Version"] || "N/A";
-          const certExpiry = sec["Cert Expiry Date"] || "N/A";
-          const sslIssuer = sec["SSL/TLS Issuer"] || "N/A";
-          const stsFlag = (sec["Strict-Transport-Security"] || "").trim() !== "" ? "True" : "False";
-          const xfoFlag = (sec["X-Frame-Options"] || "").trim() !== "" ? "True" : "False";
-          const cspFlag = (sec["Content-Security-Policy"] || "").trim() !== "" ? "True" : "False";
-          const xssFlag = (sec["X-XSS-Protection"] || "").trim() !== "" ? "True" : "False";
-          const rpFlag = (sec["Referrer-Policy"] || "").trim() !== "" ? "True" : "False";
-          const ppFlag = (sec["Permissions-Policy"] || "").trim() !== "" ? "True" : "False";
-          let openPortsHTML = "";
-          if (window.naabuMap && window.naabuMap[domain]) {
-            openPortsHTML = window.naabuMap[domain].map(p => `${p.port} (${p.service})`).join("<br>");
-          }
-          if (http && http.length) {
-            http.forEach(h => {
-              const prio = computePriority(h, dns);
+            const spf = sec["SPF Record"] || "N/A";
+            const dkim = sec["DKIM Record"] || "N/A";
+            const dmarc = sec["DMARC Record"] || "N/A";
+            const dnssec = sec["DNSSEC Status"] || "N/A";
+            const sslVersion = sec["SSL/TLS Version"] || "N/A";
+            const certExpiry = sec["Cert Expiry Date"] || "N/A";
+            const sslIssuer = sec["SSL/TLS Issuer"] || "N/A";
+            const stsFlag = (sec["Strict-Transport-Security"] || "").trim() !== "" ? "True" : "False";
+            const xfoFlag = (sec["X-Frame-Options"] || "").trim() !== "" ? "True" : "False";
+            const cspFlag = (sec["Content-Security-Policy"] || "").trim() !== "" ? "True" : "False";
+            const xssFlag = (sec["X-XSS-Protection"] || "").trim() !== "" ? "True" : "False";
+            const rpFlag = (sec["Referrer-Policy"] || "").trim() !== "" ? "True" : "False";
+            const ppFlag = (sec["Permissions-Policy"] || "").trim() !== "" ? "True" : "False";
+            let openPortsHTML = "";
+            if (window.naabuMap && window.naabuMap[domain]) {
+              openPortsHTML = window.naabuMap[domain].map(p => `${p.port} (${p.service})`).join("<br>");
+            }
+            if (http && http.length) {
+              http.forEach(h => {
+                const prio = computePriority(h, dns);
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                  <td style="background-color:${getPriorityColor(prio)}; color:#fff;">${prio}</td>
+                  <td>${domain}</td>
+                  <td>${formatCell(dnsResolvers)}</td>
+                  <td>${formatCell(dnsA)}</td>
+                  <td>${dnsStatus}</td>
+                  <td>${h.cdn_name || "N/A"}</td>
+                  <td>${h.cdn_type || "N/A"}</td>
+                  <td>${h.port || "N/A"}</td>
+                  <td>${h.url || "N/A"}</td>
+                  <td>${h.location || "N/A"}</td>
+                  <td>${h.title || "N/A"}</td>
+                  <td>${h.webserver || "N/A"}</td>
+                  <td>${loginMap[h.url] || "N/A"}</td>
+                  <!-- ADDED: new column referencing apiMap -->
+                  <td>${apiMap[domain] || "No"}</td>
+                  <td>${(h.tech && h.tech.length) ? h.tech.join("<br>") : "N/A"}</td>
+                  <td>${(h.status_code !== undefined) ? h.status_code : "N/A"}</td>
+                  <td>${(h.content_length !== undefined) ? h.content_length : "N/A"}</td>
+                  <td>${(h.cdn !== undefined) ? h.cdn : "N/A"}</td>
+                  <td>${spf}</td>
+                  <td>${dkim}</td>
+                  <td>${dmarc}</td>
+                  <td>${dnssec}</td>
+                  <td>${sslVersion}</td>
+                  <td>${certExpiry}</td>
+                  <td>${sslIssuer}</td>
+                  <td>${stsFlag}</td>
+                  <td>${xfoFlag}</td>
+                  <td>${cspFlag}</td>
+                  <td>${xssFlag}</td>
+                  <td>${rpFlag}</td>
+                  <td>${ppFlag}</td>
+                  <td>${openPortsHTML}</td>
+                `;
+                allTableRows.push(row);
+              });
+            } else {
               const row = document.createElement("tr");
               row.innerHTML = `
-                <td style="background-color:${getPriorityColor(prio)}; color:#fff;">${prio}</td>
+                <td>N/A</td>
                 <td>${domain}</td>
                 <td>${formatCell(dnsResolvers)}</td>
                 <td>${formatCell(dnsA)}</td>
                 <td>${dnsStatus}</td>
-                <td>${h.cdn_name || "N/A"}</td>
-                <td>${h.cdn_type || "N/A"}</td>
-                <td>${h.port || "N/A"}</td>
-                <td>${h.url || "N/A"}</td>
-                <td>${h.location || "N/A"}</td>
-                <td>${h.title || "N/A"}</td>
-                <td>${h.webserver || "N/A"}</td>
-                <td>${loginMap[h.url] || "N/A"}</td>
-                <td>${(h.tech && h.tech.length) ? h.tech.join("<br>") : "N/A"}</td>
-                <td>${(h.status_code !== undefined) ? h.status_code : "N/A"}</td>
-                <td>${(h.content_length !== undefined) ? h.content_length : "N/A"}</td>
-                <td>${(h.cdn !== undefined) ? h.cdn : "N/A"}</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <!-- ADDED: new column referencing apiMap -->
+                <td>${apiMap[domain] || "No"}</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <td>N/A</td>
+                <td>N/A</td>
                 <td>${spf}</td>
                 <td>${dkim}</td>
                 <td>${dmarc}</td>
@@ -1299,315 +1406,340 @@ build_html_report() {
                 <td>${xssFlag}</td>
                 <td>${rpFlag}</td>
                 <td>${ppFlag}</td>
-                <td>${openPortsHTML}</td>
+                <td>N/A</td>
               `;
               allTableRows.push(row);
-            });
-          } else {
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td>N/A</td>
-              <td>${domain}</td>
-              <td>${formatCell(dnsResolvers)}</td>
-              <td>${formatCell(dnsA)}</td>
-              <td>${dnsStatus}</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>${spf}</td>
-              <td>${dkim}</td>
-              <td>${dmarc}</td>
-              <td>${dnssec}</td>
-              <td>${sslVersion}</td>
-              <td>${certExpiry}</td>
-              <td>${sslIssuer}</td>
-              <td>${stsFlag}</td>
-              <td>${xfoFlag}</td>
-              <td>${cspFlag}</td>
-              <td>${xssFlag}</td>
-              <td>${rpFlag}</td>
-              <td>${ppFlag}</td>
-              <td>N/A</td>
-            `;
-            allTableRows.push(row);
-          }
-        });
-      }
-      function getFilteredRows() {
-        const query = document.getElementById("searchBox").value.toLowerCase();
-        const filters = {
-          priority: document.getElementById("priority-filter").value.toLowerCase(),
-          domain: document.getElementById("domain-filter").value.toLowerCase(),
-          resolvers: document.getElementById("resolvers-filter").value.toLowerCase(),
-          arecords: document.getElementById("arecords-filter").value.toLowerCase(),
-          dnsstatus: document.getElementById("dnsstatus-filter").value.toLowerCase(),
-          cdnname: document.getElementById("cdnname-filter").value.toLowerCase(),
-          cdntype: document.getElementById("cdntype-filter").value.toLowerCase(),
-          port: document.getElementById("port-filter").value.toLowerCase(),
-          url: document.getElementById("url-filter").value.toLowerCase(),
-          redirect: document.getElementById("redirect-filter").value.toLowerCase(),
-          title: document.getElementById("title-filter").value.toLowerCase(),
-          webserver: document.getElementById("webserver-filter").value.toLowerCase(),
-          login: document.getElementById("login-filter").value.toLowerCase(),
-          tech: document.getElementById("tech-filter").value.toLowerCase(),
-          statuscode: document.getElementById("statuscode-filter").value.toLowerCase(),
-          contentlength: document.getElementById("contentlength-filter").value.toLowerCase(),
-          cdn: document.getElementById("cdn-filter").value.toLowerCase(),
-          spf: document.getElementById("spf-filter").value.toLowerCase(),
-          dkim: document.getElementById("dkim-filter").value.toLowerCase(),
-          dmarc: document.getElementById("dmarc-filter").value.toLowerCase(),
-          dnssec: document.getElementById("dnssec-filter").value.toLowerCase(),
-          sslversion: document.getElementById("sslversion-filter").value.toLowerCase(),
-          certexpiry: document.getElementById("certexpiry-filter").value.toLowerCase(),
-          sslissuer: document.getElementById("sslissuer-filter").value.toLowerCase(),
-          sts: document.getElementById("sts-filter").value.toLowerCase(),
-          xfo: document.getElementById("xfo-filter").value.toLowerCase(),
-          csp: document.getElementById("csp-filter").value.toLowerCase(),
-          xss: document.getElementById("xss-filter").value.toLowerCase(),
-          rp: document.getElementById("rp-filter").value.toLowerCase(),
-          pp: document.getElementById("pp-filter").value.toLowerCase(),
-          portsservices: document.getElementById("ports-services-filter").value.toLowerCase()
-        };
-        return allTableRows.filter((row) => {
-          const cells = row.getElementsByTagName("td");
-          if (filters.priority   && cells[0].innerText.toLowerCase() !== filters.priority) return false;
-          if (filters.domain     && cells[1].innerText.toLowerCase() !== filters.domain) return false;
-          if (filters.resolvers  && cells[2].innerText.toLowerCase() !== filters.resolvers) return false;
-          if (filters.arecords   && cells[3].innerText.toLowerCase() !== filters.arecords) return false;
-          if (filters.dnsstatus  && cells[4].innerText.toLowerCase() !== filters.dnsstatus) return false;
-          if (filters.cdnname    && cells[5].innerText.toLowerCase() !== filters.cdnname) return false;
-          if (filters.cdntype    && cells[6].innerText.toLowerCase() !== filters.cdntype) return false;
-          if (filters.port       && cells[7].innerText.toLowerCase() !== filters.port) return false;
-          if (filters.url        && cells[8].innerText.toLowerCase() !== filters.url) return false;
-          if (filters.redirect   && cells[9].innerText.toLowerCase() !== filters.redirect) return false;
-          if (filters.title      && cells[10].innerText.toLowerCase() !== filters.title) return false;
-          if (filters.webserver  && cells[11].innerText.toLowerCase() !== filters.webserver) return false;
-          if (filters.login      && cells[12].innerText.toLowerCase() !== filters.login) return false;
-          if (filters.tech       && cells[13].innerText.toLowerCase() !== filters.tech) return false;
-          if (filters.statuscode && cells[14].innerText.toLowerCase() !== filters.statuscode) return false;
-          if (filters.contentlength && cells[15].innerText.toLowerCase() !== filters.contentlength) return false;
-          if (filters.cdn        && cells[16].innerText.toLowerCase() !== filters.cdn) return false;
-          if (filters.spf        && cells[17].innerText.toLowerCase() !== filters.spf) return false;
-          if (filters.dkim       && cells[18].innerText.toLowerCase() !== filters.dkim) return false;
-          if (filters.dmarc      && cells[19].innerText.toLowerCase() !== filters.dmarc) return false;
-          if (filters.dnssec     && cells[20].innerText.toLowerCase() !== filters.dnssec) return false;
-          if (filters.sslversion && cells[21].innerText.toLowerCase() !== filters.sslversion) return false;
-          if (filters.certexpiry && cells[22].innerText.toLowerCase() !== filters.certexpiry) return false;
-          if (filters.sslissuer  && cells[23].innerText.toLowerCase() !== filters.sslissuer) return false;
-          if (filters.sts        && cells[24].innerText.toLowerCase() !== filters.sts) return false;
-          if (filters.xfo        && cells[25].innerText.toLowerCase() !== filters.xfo) return false;
-          if (filters.csp        && cells[26].innerText.toLowerCase() !== filters.csp) return false;
-          if (filters.xss        && cells[27].innerText.toLowerCase() !== filters.xss) return false;
-          if (filters.rp         && cells[28].innerText.toLowerCase() !== filters.rp) return false;
-          if (filters.pp         && cells[29].innerText.toLowerCase() !== filters.pp) return false;
-          if (filters.portsservices && !cells[30].innerText.toLowerCase().includes(filters.portsservices)) return false;
-          if (query && !row.innerText.toLowerCase().includes(query)) return false;
-          return true;
-        });
-      }
-      function renderTable(filteredRows) {
-        const tBody = document.getElementById("report-table-body");
-        tBody.innerHTML = "";
-        let startIndex = 0;
-        let endIndex = filteredRows.length;
-        if (rowsPerPage !== "all" && rowsPerPage !== Infinity) {
-          startIndex = (currentPage - 1) * rowsPerPage;
-          endIndex = startIndex + rowsPerPage;
-        }
-        const rowsToShow = filteredRows.slice(startIndex, endIndex);
-        rowsToShow.forEach((row) => tBody.appendChild(row));
-        renderPaginationControls(filteredRows.length);
-      }
-      function renderPaginationControls(totalRows) {
-        const paginationDiv = document.getElementById("paginationControls");
-        paginationDiv.innerHTML = "";
-        if (rowsPerPage === "all" || rowsPerPage === Infinity) return;
-        const totalPages = Math.ceil(totalRows / rowsPerPage);
-        const pageInfo = document.createElement("span");
-        pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-        paginationDiv.appendChild(pageInfo);
-        const prevBtn = document.createElement("button");
-        prevBtn.textContent = "Prev";
-        prevBtn.disabled = currentPage === 1;
-        prevBtn.addEventListener("click", () => { if (currentPage > 1) { currentPage--; renderTable(getFilteredRows()); } });
-        paginationDiv.appendChild(prevBtn);
-        const nextBtn = document.createElement("button");
-        nextBtn.textContent = "Next";
-        nextBtn.disabled = currentPage === totalPages;
-        nextBtn.addEventListener("click", () => { if (currentPage < totalPages) { currentPage++; renderTable(getFilteredRows()); } });
-        paginationDiv.appendChild(nextBtn);
-      }
-      function onFilterChange() { currentPage = 1; renderTable(getFilteredRows()); }
-      function updateRowsPerPage() {
-        const select = document.getElementById("rowsPerPageSelect");
-        const value = select.value;
-        if (value === "all") { rowsPerPage = Infinity; } else { rowsPerPage = parseInt(value, 10); }
-        currentPage = 1; renderTable(getFilteredRows());
-      }
-      function populateColumnFilters() {
-        const uniqueCols = Array.from({ length: 31 }, () => new Set());
-        allTableRows.forEach((row) => {
-          const cells = row.getElementsByTagName("td");
-          for (let col = 0; col < 31; col++) { uniqueCols[col].add(cells[col].innerText.trim()); }
-        });
-        function fillSelectOptions(selectId, values) {
-          const select = document.getElementById(selectId);
-          const existing = select.querySelectorAll("option:not([value=''])");
-          existing.forEach((opt) => opt.remove());
-          values.forEach((val) => {
-            const option = document.createElement("option");
-            option.value = val;
-            option.textContent = val;
-            select.appendChild(option);
-          });
-        }
-        fillSelectOptions("priority-filter",   [...uniqueCols[0]].sort());
-        fillSelectOptions("domain-filter",     [...uniqueCols[1]].sort());
-        fillSelectOptions("resolvers-filter",  [...uniqueCols[2]].sort());
-        fillSelectOptions("arecords-filter",   [...uniqueCols[3]].sort());
-        fillSelectOptions("dnsstatus-filter",  [...uniqueCols[4]].sort());
-        fillSelectOptions("cdnname-filter",    [...uniqueCols[5]].sort());
-        fillSelectOptions("cdntype-filter",    [...uniqueCols[6]].sort());
-        fillSelectOptions("port-filter",       [...uniqueCols[7]].sort());
-        fillSelectOptions("url-filter",        [...uniqueCols[8]].sort());
-        fillSelectOptions("redirect-filter",   [...uniqueCols[9]].sort());
-        fillSelectOptions("title-filter",      [...uniqueCols[10]].sort());
-        fillSelectOptions("webserver-filter",  [...uniqueCols[11]].sort());
-        fillSelectOptions("login-filter",      [...uniqueCols[12]].sort());
-        fillSelectOptions("tech-filter",       [...uniqueCols[13]].sort());
-        fillSelectOptions("statuscode-filter", [...uniqueCols[14]].sort());
-        fillSelectOptions("contentlength-filter", [...uniqueCols[15]].sort());
-        fillSelectOptions("cdn-filter",        [...uniqueCols[16]].sort());
-        fillSelectOptions("spf-filter",        [...uniqueCols[17]].sort());
-        fillSelectOptions("dkim-filter",       [...uniqueCols[18]].sort());
-        fillSelectOptions("dmarc-filter",      [...uniqueCols[19]].sort());
-        fillSelectOptions("dnssec-filter",     [...uniqueCols[20]].sort());
-        fillSelectOptions("sslversion-filter", [...uniqueCols[21]].sort());
-        fillSelectOptions("certexpiry-filter", [...uniqueCols[22]].sort());
-        fillSelectOptions("sslissuer-filter",  [...uniqueCols[23]].sort());
-        fillSelectOptions("sts-filter",        [...uniqueCols[24]].sort());
-        fillSelectOptions("xfo-filter",        [...uniqueCols[25]].sort());
-        fillSelectOptions("csp-filter",        [...uniqueCols[26]].sort());
-        fillSelectOptions("xss-filter",        [...uniqueCols[27]].sort());
-        fillSelectOptions("rp-filter",         [...uniqueCols[28]].sort());
-        fillSelectOptions("pp-filter",         [...uniqueCols[29]].sort());
-        fillSelectOptions("ports-services-filter", [...uniqueCols[30]].sort());
-      }
-      function attachFilterEvents() {
-        [
-          "priority-filter", "domain-filter", "resolvers-filter", "arecords-filter", "dnsstatus-filter",
-          "cdnname-filter", "cdntype-filter", "port-filter", "url-filter", "redirect-filter", "title-filter",
-          "webserver-filter", "login-filter", "tech-filter", "statuscode-filter", "contentlength-filter",
-          "cdn-filter", "spf-filter", "dkim-filter", "dmarc-filter", "dnssec-filter", "sslversion-filter",
-          "certexpiry-filter", "sslissuer-filter", "sts-filter", "xfo-filter", "csp-filter", "xss-filter",
-          "rp-filter", "pp-filter", "ports-services-filter"
-        ].forEach((id) => {
-          const el = document.getElementById(id);
-          if (el) { el.addEventListener("change", onFilterChange); }
-        });
-      }
-      document.getElementById("searchBox").addEventListener("input", onFilterChange);
-      document.getElementById("rowsPerPageSelect").addEventListener("change", updateRowsPerPage);
-      async function loadData() {
-        try {
-          const [dnsxRes, naabuRes, httpxRes, loginRes, secRes] = await Promise.all([
-            fetch("dnsx.json"),
-            fetch("naabu.json"),
-            fetch("httpx.json"),
-            fetch("login.json"),
-            fetch("securitycompliance.json")
-          ]);
-          const dnsxData  = await dnsxRes.json().catch(() => []);
-          const naabuData = await naabuRes.json().catch(() => []);
-          const httpxData = await httpxRes.json().catch(() => []);
-          const loginData = await loginRes.json().catch(() => []);
-          const secData   = await secRes.json().catch(() => []);
-          const loginMap = {};
-          loginData.forEach(item => { loginMap[item.url] = item.login_detection.login_found; });
-          const secMap = {};
-          secData.forEach(item => { secMap[item.Domain] = item; });
-          const endpointsCount = httpxData.length;
-          const loginFoundCount = loginData.filter(item => item.login_detection.login_found === "Yes").length;
-          const liveSubs = dnsxData.filter(d => d.status_code === "NOERROR").length;
-          const domainSet = new Set();
-          dnsxData.forEach(d => { if (d.host) domainSet.add(d.host); });
-          const totalSubdomains = domainSet.size;
-          buildLoginPieChart(endpointsCount, loginFoundCount);
-          buildScoreboard({ totalSubdomains, liveSubs, totalHttpx: endpointsCount, loginFoundCount });
-          const statusCount = {};
-          httpxData.forEach(h => {
-            const code = h.status_code || 0;
-            statusCount[code] = (statusCount[code] || 0) + 1;
-          });
-          const priorityCount = { P0: 0, P1: 0, P2: 0, P3: 0, P4: 0 };
-          const dnsMap = {};
-          dnsxData.forEach(d => { dnsMap[d.host] = d; });
-          httpxData.forEach(h => {
-            const domain = (h.input || "").split(":")[0];
-            const dnsRec = dnsMap[domain] || null;
-            const prio = computePriority(h, dnsRec);
-            priorityCount[prio] = (priorityCount[prio] || 0) + 1;
-          });
-          const portCount = {};
-          naabuData.forEach(n => {
-            const p = n.port || "unknown";
-            portCount[p] = (portCount[p] || 0) + 1;
-          });
-          const techCount = {};
-          httpxData.forEach(h => {
-            if (h.tech && Array.isArray(h.tech)) {
-              h.tech.forEach(t => { techCount[t] = (techCount[t] || 0) + 1; });
             }
           });
-          buildCharts({ statusCount, priorityCount, portCount, techCount });
-          buildServiceChart(naabuData);
-          const combinedData = {};
-          dnsxData.forEach(d => {
-            const domain = d.host;
-            combinedData[domain] = { dns: d, http: [] };
-          });
-          httpxData.forEach(h => {
-            const domain = (h.input || "").split(":")[0];
-            if (!combinedData[domain]) combinedData[domain] = { dns: null, http: [h] };
-            else combinedData[domain].http.push(h);
-          });
-          buildTableRows(combinedData, secMap, loginMap);
-          populateColumnFilters();
-          attachFilterEvents();
-          renderTable(getFilteredRows());
-          const validDomains = new Set();
-          httpxData.forEach(h => { if (h.url && h.url !== "N/A") { validDomains.add((h.input || "").split(":")[0]); } });
-          const secDataValid = secData.filter(item => validDomains.has(item.Domain));
-          if (secDataValid.length > 0) {
-            buildCertExpiryChart(secDataValid);
-            buildTLSUsageChart(secDataValid);
-          } else {
-            document.getElementById("certExpiryChart").parentElement.innerHTML =
-              "<p>No valid website data available for certificate analysis.</p>";
-            document.getElementById("tlsUsageChart").parentElement.innerHTML =
-              "<p>No valid website data available for TLS usage analysis.</p>";
-          }
-          buildHeadersChart(httpxData, secMap);
-          buildEmailSecChart(secData);
-          buildCDNChart(httpxData);
-          updateChartTheme();
-        } catch (err) {
-          console.error("Error loading data or building report:", err);
         }
-      }
-      loadData();
-    </script>
-  </body>
-</html>
+        function getFilteredRows() {
+          const query = document.getElementById("searchBox").value.toLowerCase();
+          const filters = {
+            priority: document.getElementById("priority-filter").value.toLowerCase(),
+            domain: document.getElementById("domain-filter").value.toLowerCase(),
+            resolvers: document.getElementById("resolvers-filter").value.toLowerCase(),
+            arecords: document.getElementById("arecords-filter").value.toLowerCase(),
+            dnsstatus: document.getElementById("dnsstatus-filter").value.toLowerCase(),
+            cdnname: document.getElementById("cdnname-filter").value.toLowerCase(),
+            cdntype: document.getElementById("cdntype-filter").value.toLowerCase(),
+            port: document.getElementById("port-filter").value.toLowerCase(),
+            url: document.getElementById("url-filter").value.toLowerCase(),
+            redirect: document.getElementById("redirect-filter").value.toLowerCase(),
+            title: document.getElementById("title-filter").value.toLowerCase(),
+            webserver: document.getElementById("webserver-filter").value.toLowerCase(),
+            login: document.getElementById("login-filter").value.toLowerCase(),
+            // ADDED: new filter for API endpoint (column index 13)
+            apiEndpoint: document.getElementById("api-endpoint-filter").value.toLowerCase(),
+            tech: document.getElementById("tech-filter").value.toLowerCase(),
+            statuscode: document.getElementById("statuscode-filter").value.toLowerCase(),
+            contentlength: document.getElementById("contentlength-filter").value.toLowerCase(),
+            cdn: document.getElementById("cdn-filter").value.toLowerCase(),
+            spf: document.getElementById("spf-filter").value.toLowerCase(),
+            dkim: document.getElementById("dkim-filter").value.toLowerCase(),
+            dmarc: document.getElementById("dmarc-filter").value.toLowerCase(),
+            dnssec: document.getElementById("dnssec-filter").value.toLowerCase(),
+            sslversion: document.getElementById("sslversion-filter").value.toLowerCase(),
+            certexpiry: document.getElementById("certexpiry-filter").value.toLowerCase(),
+            sslissuer: document.getElementById("sslissuer-filter").value.toLowerCase(),
+            sts: document.getElementById("sts-filter").value.toLowerCase(),
+            xfo: document.getElementById("xfo-filter").value.toLowerCase(),
+            csp: document.getElementById("csp-filter").value.toLowerCase(),
+            xss: document.getElementById("xss-filter").value.toLowerCase(),
+            rp: document.getElementById("rp-filter").value.toLowerCase(),
+            pp: document.getElementById("pp-filter").value.toLowerCase(),
+            portsservices: document.getElementById("ports-services-filter").value.toLowerCase()
+          };
+          return allTableRows.filter((row) => {
+            const cells = row.getElementsByTagName("td");
+            // Indices now shift by 1 after column 12:
+            if (filters.priority   && cells[0].innerText.toLowerCase() !== filters.priority) return false;
+            if (filters.domain     && cells[1].innerText.toLowerCase() !== filters.domain) return false;
+            if (filters.resolvers  && cells[2].innerText.toLowerCase() !== filters.resolvers) return false;
+            if (filters.arecords   && cells[3].innerText.toLowerCase() !== filters.arecords) return false;
+            if (filters.dnsstatus  && cells[4].innerText.toLowerCase() !== filters.dnsstatus) return false;
+            if (filters.cdnname    && cells[5].innerText.toLowerCase() !== filters.cdnname) return false;
+            if (filters.cdntype    && cells[6].innerText.toLowerCase() !== filters.cdntype) return false;
+            if (filters.port       && cells[7].innerText.toLowerCase() !== filters.port) return false;
+            if (filters.url        && cells[8].innerText.toLowerCase() !== filters.url) return false;
+            if (filters.redirect   && cells[9].innerText.toLowerCase() !== filters.redirect) return false;
+            if (filters.title      && cells[10].innerText.toLowerCase() !== filters.title) return false;
+            if (filters.webserver  && cells[11].innerText.toLowerCase() !== filters.webserver) return false;
+            if (filters.login      && cells[12].innerText.toLowerCase() !== filters.login) return false;
+            // Column 13 is API Endpoint
+            if (filters.apiEndpoint && cells[13].innerText.toLowerCase() !== filters.apiEndpoint) return false;
+            if (filters.tech       && cells[14].innerText.toLowerCase() !== filters.tech) return false;
+            if (filters.statuscode && cells[15].innerText.toLowerCase() !== filters.statuscode) return false;
+            if (filters.contentlength && cells[16].innerText.toLowerCase() !== filters.contentlength) return false;
+            if (filters.cdn        && cells[17].innerText.toLowerCase() !== filters.cdn) return false;
+            if (filters.spf        && cells[18].innerText.toLowerCase() !== filters.spf) return false;
+            if (filters.dkim       && cells[19].innerText.toLowerCase() !== filters.dkim) return false;
+            if (filters.dmarc      && cells[20].innerText.toLowerCase() !== filters.dmarc) return false;
+            if (filters.dnssec     && cells[21].innerText.toLowerCase() !== filters.dnssec) return false;
+            if (filters.sslversion && cells[22].innerText.toLowerCase() !== filters.sslversion) return false;
+            if (filters.certexpiry && cells[23].innerText.toLowerCase() !== filters.certexpiry) return false;
+            if (filters.sslissuer  && cells[24].innerText.toLowerCase() !== filters.sslissuer) return false;
+            if (filters.sts        && cells[25].innerText.toLowerCase() !== filters.sts) return false;
+            if (filters.xfo        && cells[26].innerText.toLowerCase() !== filters.xfo) return false;
+            if (filters.csp        && cells[27].innerText.toLowerCase() !== filters.csp) return false;
+            if (filters.xss        && cells[28].innerText.toLowerCase() !== filters.xss) return false;
+            if (filters.rp         && cells[29].innerText.toLowerCase() !== filters.rp) return false;
+            if (filters.pp         && cells[30].innerText.toLowerCase() !== filters.pp) return false;
+            if (filters.portsservices && !cells[31].innerText.toLowerCase().includes(filters.portsservices)) return false;
+            if (query && !row.innerText.toLowerCase().includes(query)) return false;
+            return true;
+          });
+        }
+        function renderTable(filteredRows) {
+          const tBody = document.getElementById("report-table-body");
+          tBody.innerHTML = "";
+          let startIndex = 0;
+          let endIndex = filteredRows.length;
+          if (rowsPerPage !== "all" && rowsPerPage !== Infinity) {
+            startIndex = (currentPage - 1) * rowsPerPage;
+            endIndex = startIndex + rowsPerPage;
+          }
+          const rowsToShow = filteredRows.slice(startIndex, endIndex);
+          rowsToShow.forEach((row) => tBody.appendChild(row));
+          renderPaginationControls(filteredRows.length);
+        }
+        function renderPaginationControls(totalRows) {
+          const paginationDiv = document.getElementById("paginationControls");
+          paginationDiv.innerHTML = "";
+          if (rowsPerPage === "all" || rowsPerPage === Infinity) return;
+          const totalPages = Math.ceil(totalRows / rowsPerPage);
+          const pageInfo = document.createElement("span");
+          pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+          paginationDiv.appendChild(pageInfo);
+          const prevBtn = document.createElement("button");
+          prevBtn.textContent = "Prev";
+          prevBtn.disabled = currentPage === 1;
+          prevBtn.addEventListener("click", () => { if (currentPage > 1) { currentPage--; renderTable(getFilteredRows()); } });
+          paginationDiv.appendChild(prevBtn);
+          const nextBtn = document.createElement("button");
+          nextBtn.textContent = "Next";
+          nextBtn.disabled = currentPage === totalPages;
+          nextBtn.addEventListener("click", () => { if (currentPage < totalPages) { currentPage++; renderTable(getFilteredRows()); } });
+          paginationDiv.appendChild(nextBtn);
+        }
+        function onFilterChange() { currentPage = 1; renderTable(getFilteredRows()); }
+        function updateRowsPerPage() {
+          const select = document.getElementById("rowsPerPageSelect");
+          const value = select.value;
+          if (value === "all") { rowsPerPage = Infinity; } else { rowsPerPage = parseInt(value, 10); }
+          currentPage = 1; renderTable(getFilteredRows());
+        }
+        // MODIFIED: length changed to 32 columns
+        function populateColumnFilters() {
+          const uniqueCols = Array.from({ length: 32 }, () => new Set());
+          allTableRows.forEach((row) => {
+            const cells = row.getElementsByTagName("td");
+            for (let col = 0; col < 32; col++) {
+              uniqueCols[col].add(cells[col].innerText.trim());
+            }
+          });
+          function fillSelectOptions(selectId, values) {
+            const select = document.getElementById(selectId);
+            const existing = select.querySelectorAll("option:not([value=''])");
+            existing.forEach((opt) => opt.remove());
+            values.forEach((val) => {
+              const option = document.createElement("option");
+              option.value = val;
+              option.textContent = val;
+              select.appendChild(option);
+            });
+          }
+          fillSelectOptions("priority-filter",   [...uniqueCols[0]].sort());
+          fillSelectOptions("domain-filter",     [...uniqueCols[1]].sort());
+          fillSelectOptions("resolvers-filter",  [...uniqueCols[2]].sort());
+          fillSelectOptions("arecords-filter",   [...uniqueCols[3]].sort());
+          fillSelectOptions("dnsstatus-filter",  [...uniqueCols[4]].sort());
+          fillSelectOptions("cdnname-filter",    [...uniqueCols[5]].sort());
+          fillSelectOptions("cdntype-filter",    [...uniqueCols[6]].sort());
+          fillSelectOptions("port-filter",       [...uniqueCols[7]].sort());
+          fillSelectOptions("url-filter",        [...uniqueCols[8]].sort());
+          fillSelectOptions("redirect-filter",   [...uniqueCols[9]].sort());
+          fillSelectOptions("title-filter",      [...uniqueCols[10]].sort());
+          fillSelectOptions("webserver-filter",  [...uniqueCols[11]].sort());
+          fillSelectOptions("login-filter",      [...uniqueCols[12]].sort());
+          // ADDED: api-endpoint-filter uses column 13
+          fillSelectOptions("api-endpoint-filter", [...uniqueCols[13]].sort());
+          fillSelectOptions("tech-filter",       [...uniqueCols[14]].sort());
+          fillSelectOptions("statuscode-filter", [...uniqueCols[15]].sort());
+          fillSelectOptions("contentlength-filter", [...uniqueCols[16]].sort());
+          fillSelectOptions("cdn-filter",        [...uniqueCols[17]].sort());
+          fillSelectOptions("spf-filter",        [...uniqueCols[18]].sort());
+          fillSelectOptions("dkim-filter",       [...uniqueCols[19]].sort());
+          fillSelectOptions("dmarc-filter",      [...uniqueCols[20]].sort());
+          fillSelectOptions("dnssec-filter",     [...uniqueCols[21]].sort());
+          fillSelectOptions("sslversion-filter", [...uniqueCols[22]].sort());
+          fillSelectOptions("certexpiry-filter", [...uniqueCols[23]].sort());
+          fillSelectOptions("sslissuer-filter",  [...uniqueCols[24]].sort());
+          fillSelectOptions("sts-filter",        [...uniqueCols[25]].sort());
+          fillSelectOptions("xfo-filter",        [...uniqueCols[26]].sort());
+          fillSelectOptions("csp-filter",        [...uniqueCols[27]].sort());
+          fillSelectOptions("xss-filter",        [...uniqueCols[28]].sort());
+          fillSelectOptions("rp-filter",         [...uniqueCols[29]].sort());
+          fillSelectOptions("pp-filter",         [...uniqueCols[30]].sort());
+          fillSelectOptions("ports-services-filter", [...uniqueCols[31]].sort());
+        }
+        function attachFilterEvents() {
+          [
+            "priority-filter", "domain-filter", "resolvers-filter", "arecords-filter", "dnsstatus-filter",
+            "cdnname-filter", "cdntype-filter", "port-filter", "url-filter", "redirect-filter", "title-filter",
+            "webserver-filter", "login-filter", "api-endpoint-filter", // ADDED
+            "tech-filter", "statuscode-filter", "contentlength-filter",
+            "cdn-filter", "spf-filter", "dkim-filter", "dmarc-filter", "dnssec-filter", "sslversion-filter",
+            "certexpiry-filter", "sslissuer-filter", "sts-filter", "xfo-filter", "csp-filter", "xss-filter",
+            "rp-filter", "pp-filter", "ports-services-filter"
+          ].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) { el.addEventListener("change", onFilterChange); }
+          });
+        }
+        document.getElementById("searchBox").addEventListener("input", onFilterChange);
+        document.getElementById("rowsPerPageSelect").addEventListener("change", updateRowsPerPage);
+
+        async function loadData() {
+          try {
+            // ADDED: fetch api_identification.json
+            const [dnsxRes, naabuRes, httpxRes, loginRes, secRes, apiRes] = await Promise.all([
+              fetch("dnsx.json"),
+              fetch("naabu.json"),
+              fetch("httpx.json"),
+              fetch("login.json"),
+              fetch("securitycompliance.json"),
+              fetch("api_identification.json") // ADDED
+            ]);
+            const dnsxData  = await dnsxRes.json().catch(() => []);
+            const naabuData = await naabuRes.json().catch(() => []);
+            const httpxData = await httpxRes.json().catch(() => []);
+            const loginData = await loginRes.json().catch(() => []);
+            const secData   = await secRes.json().catch(() => []);
+            const apiData   = await apiRes.json().catch(() => []); // ADDED
+
+            // Build loginMap
+            const loginMap = {};
+            loginData.forEach(item => {
+              loginMap[item.url] = item.login_detection.login_found;
+            });
+
+            // Build secMap
+            const secMap = {};
+            secData.forEach(item => {
+              secMap[item.Domain] = item;
+            });
+
+            // ADDED: build apiMap
+            const apiMap = {};
+            apiData.forEach(item => {
+              apiMap[item.domain] = item.api_endpoint;
+            });
+
+            // Existing scoreboard logic
+            const endpointsCount = httpxData.length;
+            const loginFoundCount = loginData.filter(item => item.login_detection.login_found === "Yes").length;
+            const liveSubs = dnsxData.filter(d => d.status_code === "NOERROR").length;
+            const domainSet = new Set();
+            dnsxData.forEach(d => { if (d.host) domainSet.add(d.host); });
+            const totalSubdomains = domainSet.size;
+
+            // Build scoreboard & login chart
+            buildLoginPieChart(endpointsCount, loginFoundCount);
+            buildScoreboard({ totalSubdomains, liveSubs, totalHttpx: endpointsCount, loginFoundCount });
+
+            // Build statusCount
+            const statusCount = {};
+            httpxData.forEach(h => {
+              const code = h.status_code || 0;
+              statusCount[code] = (statusCount[code] || 0) + 1;
+            });
+
+            // Build priorityCount
+            const priorityCount = { P0: 0, P1: 0, P2: 0, P3: 0, P4: 0 };
+            const dnsMap = {};
+            dnsxData.forEach(d => { dnsMap[d.host] = d; });
+            httpxData.forEach(h => {
+              const domain = (h.input || "").split(":")[0];
+              const dnsRec = dnsMap[domain] || null;
+              const prio = computePriority(h, dnsRec);
+              priorityCount[prio] = (priorityCount[prio] || 0) + 1;
+            });
+
+            // Build portCount
+            const portCount = {};
+            naabuData.forEach(n => {
+              const p = n.port || "unknown";
+              portCount[p] = (portCount[p] || 0) + 1;
+            });
+
+            // Build techCount
+            const techCount = {};
+            httpxData.forEach(h => {
+              if (h.tech && Array.isArray(h.tech)) {
+                h.tech.forEach(t => { techCount[t] = (techCount[t] || 0) + 1; });
+              }
+            });
+
+            // Build the main bar charts
+            buildCharts({ statusCount, priorityCount, portCount, techCount });
+            buildServiceChart(naabuData);
+
+            // ADDED: build API chart
+            buildApiChart(apiData);
+
+            // Merge DNS and HTTP data into combinedData
+            const combinedData = {};
+            dnsxData.forEach(d => {
+              const domain = d.host;
+              combinedData[domain] = { dns: d, http: [] };
+            });
+            httpxData.forEach(h => {
+              const domain = (h.input || "").split(":")[0];
+              if (!combinedData[domain]) {
+                combinedData[domain] = { dns: null, http: [h] };
+              } else {
+                combinedData[domain].http.push(h);
+              }
+            });
+
+            // Build table rows
+            buildTableRows(combinedData, secMap, loginMap, apiMap);
+            populateColumnFilters();
+            attachFilterEvents();
+            renderTable(getFilteredRows());
+
+            // Build or skip certificate / TLS charts if we have valid domain data
+            const validDomains = new Set();
+            httpxData.forEach(h => {
+              if (h.url && h.url !== "N/A") {
+                validDomains.add((h.input || "").split(":")[0]);
+              }
+            });
+            const secDataValid = secData.filter(item => validDomains.has(item.Domain));
+            if (secDataValid.length > 0) {
+              buildCertExpiryChart(secDataValid);
+              buildTLSUsageChart(secDataValid);
+            } else {
+              document.getElementById("certExpiryChart").parentElement.innerHTML =
+                "<p>No valid website data available for certificate analysis.</p>";
+              document.getElementById("tlsUsageChart").parentElement.innerHTML =
+                "<p>No valid website data available for TLS usage analysis.</p>";
+            }
+
+            // Build remaining charts
+            buildHeadersChart(httpxData, secMap);
+            buildEmailSecChart(secData);
+            buildCDNChart(httpxData);
+
+            updateChartTheme();
+          } catch (err) {
+            console.error("Error loading data or building report:", err);
+          }
+        }
+        loadData();
+      </script>
+    </body>
+  </html>
 EOF
   info "HTML report generated at: $report_html"
 }
@@ -1652,7 +1784,8 @@ main() {
   run_naabu
   run_httpx
   run_login_detection
-  securitycompliance
+  run_security_compliance
+  run_api_identification
   build_html_report
   show_summary
 }
