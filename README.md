@@ -23,20 +23,19 @@
 
 ## Future Roadmap
 
-- ~~Adding security and compliance-related data (SSL/TLS hygiene, SPF, DMARC, Headers etc)~~ Completed ✅
-- ~~Allow to filter column data.~~ Completed ✅
-- ~~Add more analytics based on new data.~~ Completed ✅
-- ~~Identify login portals.~~ Completed ✅
-- ~~Basic dashboard/analytics if possible.~~ Completed ✅
-- ~~Identifying horizontal and vertical both domains.~~ Completed ✅
-- Enhance prioritisation for target picking. (Scoring based on management ports, login found, customer vs colleague intended apps, security headers not set, ssl/tls usage, etc.)
-- ~~Display all open ports in one of the table columns.~~ Completed ✅
-- Copy comprehensive logic for login detection from frogy-multiple-domains script to frogy.sh script.
+- Completed ✅ ~~Adding security and compliance-related data (SSL/TLS hygiene, SPF, DMARC, Headers etc)~~
+- Completed ✅ ~~Allow to filter column data.~~
+- Completed ✅ ~~Add more analytics based on new data.~~
+- Completed ✅ ~~Identify login portals.~~
+- Completed ✅ ~~Basic dashboard/analytics if possible.~~
+- Completed ✅ ~~Identifying horizontal and vertical both domains.~~
+- Completed ✅ ~~Display all open ports in one of the table columns.~~
+- Completed ✅ ~~Pagination to access information faster without choking or lagging on the home page.~~
+- Completed ✅ ~~Change font color in darkmode.~~
 - Identifying customer-intended vs colleague-intended applications.
 - Identified abandoned and unwanted applications.
 - Identify traditional endpoints vs. API endpoints.
-- Pagination to access information faster without choking or lagging on the home page.
-- Change font color in darkmode.
+- Enhance prioritisation for target picking. (Scoring based on management ports, login found, customer vs colleague intended apps, security headers not set, ssl/tls usage, etc.)
 
 ## Installation
 
