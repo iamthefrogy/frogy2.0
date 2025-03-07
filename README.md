@@ -32,9 +32,9 @@
 - Completed ✅ ~~Display all open ports in one of the table columns.~~
 - Completed ✅ ~~Pagination to access information faster without choking or lagging on the home page.~~
 - Completed ✅ ~~Change font color in darkmode.~~
+- Completed ✅ ~~Identify traditional endpoints vs. API endpoints.~~
 - Identifying customer-intended vs colleague-intended applications.
 - Identified abandoned and unwanted applications.
-- Identify traditional endpoints vs. API endpoints.
 - Enhance prioritisation for target picking. (Scoring based on management ports, login found, customer vs colleague intended apps, security headers not set, ssl/tls usage, etc.)
 
 ## Installation
