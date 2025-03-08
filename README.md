@@ -36,6 +36,7 @@
 - Completed ✅ ~~Identifying customer-intended vs colleague-intended applications.~~
 - Identified abandoned and unwanted applications.
 - Enhance prioritisation for target picking. (Scoring based on management ports, login found, customer vs colleague intended apps, security headers not set, ssl/tls usage, etc.)
+- Provide export option for CSV and PDF if feasible.
 
 ## Installation
 
