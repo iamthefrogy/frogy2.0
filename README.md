@@ -33,7 +33,7 @@
 - Completed ✅ ~~Pagination to access information faster without choking or lagging on the home page.~~
 - Completed ✅ ~~Change font color in darkmode.~~
 - Completed ✅ ~~Identify traditional endpoints vs. API endpoints.~~
-- Identifying customer-intended vs colleague-intended applications.
+- Completed ✅ ~~Identifying customer-intended vs colleague-intended applications.~~
 - Identified abandoned and unwanted applications.
 - Enhance prioritisation for target picking. (Scoring based on management ports, login found, customer vs colleague intended apps, security headers not set, ssl/tls usage, etc.)
 
