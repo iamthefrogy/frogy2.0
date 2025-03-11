@@ -210,7 +210,7 @@ run_httpx() {
 }
 
 ##############################################
-# Login detection (Comprehensive Logic)
+# Login detection
 ##############################################
 run_login_detection() {
   info "Detecting Login panels..."
@@ -388,7 +388,7 @@ run_login_detection() {
 }
 
 ##############################################
-# Security Compliance Detection
+# Security Hygiene Detection
 ##############################################
 run_security_compliance() {
   info "Analyzing security hygiene (it will take some time)..."
@@ -586,6 +586,7 @@ build_html_report() {
   mv "$RUN_DIR/httpx_merged.json" "$RUN_DIR/httpx.json"
   local report_html="$RUN_DIR/report.html"
   cat << 'EOF' > "$report_html"
+  <!DOCTYPE html>
   <html lang="en">
     <head>
       <meta charset="UTF-8" />
@@ -880,7 +881,6 @@ build_html_report() {
           <div class="chart-container">
             <canvas id="serviceChart"></canvas>
           </div>
-          <!-- ADDED: Colleague (Employee Intended) Endpoint Chart -->
           <div class="chart-container">
             <canvas id="colleagueEndpointChart"></canvas>
           </div>
@@ -902,7 +902,9 @@ build_html_report() {
         <table id="report-table">
           <thead>
             <tr>
-              <th>Priority</th>
+              <th id="riskScoreHeader">
+                Risk Score<span id="riskSortToggle" style="cursor:pointer; user-select:none; margin-left:5px;">▼</span>
+              </th>
               <th>Domain</th>
               <th>Purpose</th>
               <th>Resolvers</th>
@@ -937,7 +939,11 @@ build_html_report() {
               <th>Open Ports / Services</th>
             </tr>
             <tr id="filter-row">
-              <th><select id="priority-filter"><option value="">All</option></select></th>
+              <th>
+                <select id="priority-filter">
+                  <option value="">All</option>
+                </select>
+              </th>
               <th><select id="domain-filter"><option value="">All</option></select></th>
               <th><select id="purpose-filter"><option value="">All</option></select></th>
               <th><select id="resolvers-filter"><option value="">All</option></select></th>
@@ -1004,13 +1010,22 @@ build_html_report() {
       </script>
 
       <script>
-        // Declare chart variables (including the new colleague chart)
+        // Chart variables
         let priorityChart, statusCodeChart, loginChart, portChart, techChart;
         let certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart;
 
+        // For table and sorting
         let allTableRows = [];
         let currentPage = 1;
         let rowsPerPage = 20;
+
+        // For risk scoring color gradient
+        let riskScores = {};       // { domain => numericScore }
+        let minRiskScore = Infinity;
+        let maxRiskScore = -Infinity;
+
+        // Global sort order for risk score
+        let riskSortOrder = "desc";
 
         const toggleButton = document.getElementById("themeToggle");
         toggleButton.addEventListener("click", () => {
@@ -1049,44 +1064,117 @@ build_html_report() {
 
         const formatCell = (arr) => (arr && arr.length) ? arr.join("<br>") : "N/A";
 
-        function computePriority(httpRecord, dnsRecord) {
+        /**
+         * Computes a risk score: bigger = more risk
+         */
+        function computePriority({
+          purpose,
+          url,
+          loginFound,
+          statusCode,
+          sslVersion,
+          certExpiry,
+          sts,
+          xfo,
+          csp,
+          xss,
+          rp,
+          pp,
+          openPortsCount,
+          techCount
+        }) {
           let score = 0;
 
-          // Basic weighting for status code
-          if (httpRecord.status_code === 200) score += 5;
-          else if ([301,302].includes(httpRecord.status_code)) score += 3;
-          else if (httpRecord.status_code >= 400) score += 1;
-          else score += 1;
-
-          // Content length check
-          if (httpRecord.content_length !== undefined) {
-            if (httpRecord.content_length > 100000) score += 3;
-            else if (httpRecord.content_length > 50000) score += 2;
-            else if (httpRecord.content_length > 10000) score += 1;
+          // Check purpose
+          if (purpose && purpose.toLowerCase().includes("employee")) {
+            score += 1;
           }
 
-          // Any tech discovered
-          if (httpRecord.tech && httpRecord.tech.length > 0) score += 2;
+          // URL
+          if (url && url !== "N/A") {
+            score += 1;
+          }
 
-          // DNS is valid
-          if (dnsRecord && dnsRecord.status_code === "NOERROR") score += 1;
+          // Login
+          if (loginFound === "Yes") {
+            score += 1;
+          }
 
-          if (score >= 10) return "P0";
-          if (score >= 8)  return "P1";
-          if (score >= 6)  return "P2";
-          if (score >= 4)  return "P3";
-          return "P4";
+          // Status 200
+          if (statusCode === 200) {
+            score += 1;
+          }
+
+          // TLS check: only no penalty for TLSv1.2 or TLSv1.3
+          if (sslVersion && sslVersion.toUpperCase().includes("TLS")) {
+            const versionMatch = sslVersion.match(/TLSv(1\.2|1\.3)/i);
+            if (versionMatch) {
+              // version is 1.2 or 1.3 => no penalty
+              const versionNumber = parseFloat(versionMatch[1]);
+              if (versionNumber < 1.2) {
+                score += 1;
+              }
+            } else {
+              // older or unrecognized => +1
+              score += 1;
+            }
+          } else {
+            // not TLS => +1
+            score += 1;
+          }
+
+          // Certificate expiry
+          if (certExpiry && certExpiry !== "N/A") {
+            const expiryDate = new Date(certExpiry);
+            const now = new Date();
+            const diffDays = (expiryDate - now) / (1000 * 60 * 60 * 24);
+            if (!isNaN(diffDays)) {
+              if (diffDays <= 7) {
+                score += 3;
+              } else if (diffDays <= 14) {
+                score += 2;
+              } else if (diffDays <= 30) {
+                score += 1;
+              }
+            }
+          }
+
+          // Missing security headers
+          function isHeaderMissing(header) {
+            return !header || header.trim().toLowerCase() === "false" || header.trim() === "";
+          }
+          if (isHeaderMissing(sts)) { score += 1; }
+          if (isHeaderMissing(xfo)) { score += 1; }
+          if (isHeaderMissing(csp)) { score += 1; }
+          if (isHeaderMissing(xss)) { score += 1; }
+          if (isHeaderMissing(rp))  { score += 1; }
+          if (isHeaderMissing(pp))  { score += 1; }
+
+          // Open ports
+          if (openPortsCount && Number.isFinite(openPortsCount)) {
+            score += openPortsCount;
+          }
+
+          // TECHNOLOGY COUNT --> +1 per technology
+          if (techCount && Number.isFinite(techCount)) {
+            score += techCount;
+          }
+
+          return score;
         }
 
-        function getPriorityColor(priority) {
-          switch (priority) {
-            case "P0": return "#e74c3c";
-            case "P1": return "#e67e22";
-            case "P2": return "#2ecc71";
-            case "P3": return "#3498db";
-            case "P4": return "#85c1e9";
-            default:   return "inherit";
+        // Dynamic color: minRiskScore => green, maxRiskScore => red
+        function getDynamicColor(score, minScore, maxScore) {
+          if (maxScore === minScore) {
+            return "rgb(46, 204, 113)";
           }
+          const fraction = (score - minScore) / (maxScore - minScore);
+          const start = { r: 46,  g: 204, b: 113 };
+          const end   = { r: 231, g: 76,  b: 60  };
+          const r = Math.round(start.r + fraction * (end.r - start.r));
+          const g = Math.round(start.g + fraction * (end.g - start.g));
+          const b = Math.round(start.b + fraction * (end.b - start.b));
+          return `rgb(${r}, ${g}, ${b})`;
         }
 
         function buildScoreboard({ totalSubdomains, liveSubs, totalHttpx, loginFoundCount }) {
@@ -1111,36 +1199,62 @@ build_html_report() {
           `;
         }
 
-        function buildCharts({ statusCount, priorityCount, portCount, techCount }) {
+        // REPLACED THIS FUNCTION'S "Risk Score Distribution" chart with a funnel-like horizontal bar chart
+        function buildCharts({
+          statusCount,
+          priorityCount,
+          portCount,
+          techCount,
+          totalSubdomains,
+          liveSubs,
+          endpointsCount
+        }) {
           const scCanvas = document.getElementById("statusCodeChart");
           const prCanvas = document.getElementById("priorityChart");
           const portCanvas = document.getElementById("portChart");
           const techCanvas = document.getElementById("techChart");
 
+          // ---------- REPLACED RISK CHART BLOCK WITH FUNNEL-LIKE CHART ----------
           if (prCanvas) {
+            // We show 3 bars horizontally:
+            // 1) Total assets (MASTER_SUBS)
+            // 2) Live assets (DNSX_LIVE_COUNT)
+            // 3) Applications (HTTPX_LIVE_COUNT)
+            const funnelLabels = ["Total Assets", "Live Assets", "Applications"];
+            const funnelValues = [totalSubdomains, liveSubs, endpointsCount];
+
+            if (priorityChart) {
+              priorityChart.destroy();
+            }
+
             priorityChart = new Chart(prCanvas, {
               type: "bar",
               data: {
-                labels: ["P0", "P1", "P2", "P3", "P4"],
+                labels: funnelLabels,
                 datasets: [{
-                  label: "Priority Buckets",
-                  data: ["P0", "P1", "P2", "P3", "P4"].map(l => priorityCount[l] || 0),
-                  backgroundColor: ["#e74c3c", "#e67e22", "#2ecc71", "#3498db", "#85c1e9"]
+                  label: "Assets Overview",
+                  data: funnelValues,
+                  backgroundColor: ["#2980b9", "#8e44ad", "#16a085"]
                 }]
               },
               options: {
                 responsive: true,
+                indexAxis: "x", // horizontal bars
                 plugins: {
                   legend: { display: false },
-                  title: { display: true, text: "Asset Attractiveness by Hackers" }
+                  title: { display: true, text: "Assets Overview" }
                 },
                 scales: {
-                  y: { beginAtZero: true }
+                  x: {
+                    beginAtZero: true,
+                    title: { display: true, text: "Count" }
+                  }
                 }
               }
             });
           }
 
+          // Status Code Chart
           if (scCanvas) {
             const sortedKeys = Object.keys(statusCount).sort((a, b) => +a - +b);
             statusCodeChart = new Chart(scCanvas, {
@@ -1166,6 +1280,7 @@ build_html_report() {
             });
           }
 
+          // Port Chart
           if (portCanvas) {
             const sortedPorts = Object.keys(portCount).sort((a, b) => +a - +b);
             portChart = new Chart(portCanvas, {
@@ -1191,6 +1306,7 @@ build_html_report() {
             });
           }
 
+          // Tech Chart
           if (techCanvas) {
             const sortedTech = Object.keys(techCount).sort((a, b) => techCount[b] - techCount[a]);
             const top10 = sortedTech.slice(0, 10);
@@ -1457,9 +1573,8 @@ build_html_report() {
             const port = n.port;
             let service = "Unknown";
 
-            // Just a sample port->service mapping
             const portServiceDB = {
-              "7": "Echo","9":"Discard","13":"Daytime","21":"FTP","22":"SSH","23":"Telnet",
+              "7":"Echo","9":"Discard","13":"Daytime","21":"FTP","22":"SSH","23":"Telnet",
               "25":"SMTP","26":"SMTP","37":"Time","53":"DNS","79":"Finger","80":"HTTP",
               "81":"HTTP","88":"Kerberos","106":"POP3","110":"POP3","111":"RPC","113":"Ident",
               "119":"NNTP","135":"RPC","139":"SMB","143":"IMAP","144":"IMAP","179":"BGP",
@@ -1546,9 +1661,13 @@ build_html_report() {
           });
         }
 
-        // Build the table rows
+        // We store row data here to do second-pass coloring
+        let rowDataStore = [];
+
+        // Build the table rows (first pass: compute risk, track min/max, but do NOT color)
         function buildTableRows(combinedData, secMap, loginMap, apiMap, colleagueMap) {
           allTableRows = [];
+          rowDataStore = [];  // store each row's domain + risk
 
           Object.keys(combinedData).forEach(domain => {
             const { dns, http } = combinedData[domain];
@@ -1573,21 +1692,52 @@ build_html_report() {
             const rpFlag  = (sec["Referrer-Policy"] || "").trim() !== "" ? "True" : "False";
             const ppFlag  = (sec["Permissions-Policy"] || "").trim() !== "" ? "True" : "False";
 
-            // Check open ports
             let openPortsHTML = "";
+            let openPortsCount = 0;
             if (window.naabuMap && window.naabuMap[domain]) {
               openPortsHTML = window.naabuMap[domain].map(p => `${p.port} (${p.service})`).join("<br>");
+              openPortsCount = window.naabuMap[domain].length;
             }
 
             if (http && http.length) {
               http.forEach(h => {
-                const prio = computePriority(h, dns);
+                // Original array
+                const techArr = Array.isArray(h.tech) ? h.tech : [];
+                // 1) SANITIZE each item so Apache HTTP Server isn't split
+                const sanitizedTech = techArr.map(item =>
+                  item
+                    .replace(/\r?\n|\r/g, " ")
+                    .trim()
+                );
+                const techCount = sanitizedTech.length;
+
+                const prioScore = computePriority({
+                  purpose: colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended",
+                  url: h.url,
+                  loginFound: loginMap[h.url] || "No",
+                  statusCode: h.status_code,
+                  sslVersion,
+                  certExpiry,
+                  sts: sec["Strict-Transport-Security"] || "",
+                  xfo: sec["X-Frame-Options"] || "",
+                  csp: sec["Content-Security-Policy"] || "",
+                  xss: sec["X-XSS-Protection"] || "",
+                  rp: sec["Referrer-Policy"] || "",
+                  pp: sec["Permissions-Policy"] || "",
+                  openPortsCount,
+                  techCount
+                });
+
+                if (prioScore < minRiskScore) minRiskScore = prioScore;
+                if (prioScore > maxRiskScore) maxRiskScore = prioScore;
+
+                riskScores[domain] = prioScore;
+
+                rowDataStore.push({ domain, prioScore });
 
                 const row = document.createElement("tr");
                 row.innerHTML = `
-                  <td style="background-color:${getPriorityColor(prio)}; color:#fff;">${prio}</td>
                   <td>${domain}</td>
-                  <!-- Purpose column: employee vs customer -->
                   <td>${colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended"}</td>
                   <td>${formatCell(dnsResolvers)}</td>
                   <td>${formatCell(dnsA)}</td>
@@ -1601,7 +1751,7 @@ build_html_report() {
                   <td>${h.webserver || "N/A"}</td>
                   <td>${loginMap[h.url] || "N/A"}</td>
                   <td>${apiMap[domain] || "No"}</td>
-                  <td>${(h.tech && h.tech.length) ? h.tech.join("<br>") : "N/A"}</td>
+                  <td>${sanitizedTech.length ? sanitizedTech.join("<br>") : "N/A"}</td>
                   <td>${(h.status_code !== undefined) ? h.status_code : "N/A"}</td>
                   <td>${(h.content_length !== undefined) ? h.content_length : "N/A"}</td>
                   <td>${(h.cdn !== undefined) ? h.cdn : "N/A"}</td>
@@ -1623,12 +1773,10 @@ build_html_report() {
                 allTableRows.push(row);
               });
             } else {
-              // No http data
               const row = document.createElement("tr");
               row.innerHTML = `
                 <td>N/A</td>
                 <td>${domain}</td>
-                <!-- Purpose column -->
                 <td>${colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended"}</td>
                 <td>${formatCell(dnsResolvers)}</td>
                 <td>${formatCell(dnsA)}</td>
@@ -1666,13 +1814,40 @@ build_html_report() {
           });
         }
 
+        // Second pass: apply final colors
+        function finalizeColors() {
+          allTableRows.forEach(row => {
+            const cells = row.getElementsByTagName("td");
+            const scoreCell = cells[0];
+            const domainCell = cells[1];
+            const domain = domainCell.innerText.trim();
+
+            if (scoreCell.innerText === "N/A") {
+              return;
+            }
+
+            const entry = rowDataStore.find(r => r.domain === domain);
+            if (!entry) {
+              scoreCell.innerText = "N/A";
+              return;
+            }
+
+            const prioScore = entry.prioScore;
+            scoreCell.innerText = prioScore;
+
+            const color = getDynamicColor(prioScore, minRiskScore, maxRiskScore);
+            scoreCell.style.backgroundColor = color;
+            scoreCell.style.color = "#fff";
+          });
+        }
+
         function getFilteredRows() {
           const query = document.getElementById("searchBox").value.toLowerCase();
 
           const filters = {
             priority:    document.getElementById("priority-filter").value.toLowerCase(),
             domain:      document.getElementById("domain-filter").value.toLowerCase(),
-            purpose:     document.getElementById("purpose-filter").value.toLowerCase(), // new
+            purpose:     document.getElementById("purpose-filter").value.toLowerCase(),
             resolvers:   document.getElementById("resolvers-filter").value.toLowerCase(),
             arecords:    document.getElementById("arecords-filter").value.toLowerCase(),
             dnsstatus:   document.getElementById("dnsstatus-filter").value.toLowerCase(),
@@ -1705,16 +1880,9 @@ build_html_report() {
             portsservices: document.getElementById("ports-services-filter").value.toLowerCase(),
           };
 
-          return allTableRows.filter((row) => {
+          const filtered = allTableRows.filter((row) => {
             const cells = row.getElementsByTagName("td");
-
-            // Column index references (0..32)
-            // priority(0), domain(1), purpose(2), resolvers(3), arecords(4), dnsstatus(5), cdnname(6), cdntype(7),
-            // port(8), url(9), redirect(10), title(11), webserver(12), login(13), apiEndpoint(14), tech(15),
-            // statuscode(16), contentlength(17), cdn(18), spf(19), dkim(20), dmarc(21), dnssec(22), sslversion(23),
-            // certexpiry(24), sslissuer(25), sts(26), xfo(27), csp(28), xss(29), rp(30), pp(31), ports-services(32)
-
-            if (filters.priority   && cells[0].innerText.toLowerCase() !== filters.priority) return false;
+            if (filters.priority && cells[0].innerText.toLowerCase() !== filters.priority) return false;
             if (filters.domain     && cells[1].innerText.toLowerCase() !== filters.domain) return false;
             if (filters.purpose    && cells[2].innerText.toLowerCase() !== filters.purpose) return false;
             if (filters.resolvers  && cells[3].innerText.toLowerCase() !== filters.resolvers) return false;
@@ -1747,12 +1915,17 @@ build_html_report() {
             if (filters.rp         && cells[30].innerText.toLowerCase() !== filters.rp) return false;
             if (filters.pp         && cells[31].innerText.toLowerCase() !== filters.pp) return false;
             if (filters.portsservices && !cells[32].innerText.toLowerCase().includes(filters.portsservices)) return false;
-
-            // Freetext search
             if (query && !row.innerText.toLowerCase().includes(query)) return false;
-
             return true;
           });
+
+          filtered.sort((a, b) => {
+            const scoreA = parseInt(a.cells[0].innerText) || 0;
+            const scoreB = parseInt(b.cells[0].innerText) || 0;
+            return riskSortOrder === "asc" ? scoreA - scoreB : scoreB - scoreA;
+          });
+
+          return filtered;
         }
 
         function renderTable(filteredRows) {
@@ -1760,11 +1933,11 @@ build_html_report() {
           tBody.innerHTML = "";
 
           let startIndex = 0;
-          let endIndex   = filteredRows.length;
+          let endIndex = filteredRows.length;
 
           if (rowsPerPage !== "all" && rowsPerPage !== Infinity) {
             startIndex = (currentPage - 1) * rowsPerPage;
-            endIndex   = startIndex + rowsPerPage;
+            endIndex = startIndex + rowsPerPage;
           }
 
           const rowsToShow = filteredRows.slice(startIndex, endIndex);
@@ -1779,7 +1952,6 @@ build_html_report() {
           if (rowsPerPage === "all" || rowsPerPage === Infinity) return;
 
           const totalPages = Math.ceil(totalRows / rowsPerPage);
-
           const pageInfo = document.createElement("span");
           pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
           paginationDiv.appendChild(pageInfo);
@@ -1821,7 +1993,6 @@ build_html_report() {
           renderTable(getFilteredRows());
         }
 
-        // Populate the column filters
         function populateColumnFilters() {
           const uniqueCols = Array.from({ length: 33 }, () => new Set());
           allTableRows.forEach((row) => {
@@ -1833,11 +2004,19 @@ build_html_report() {
 
           function fillSelectOptions(selectId, values) {
             const select = document.getElementById(selectId);
-            // Remove existing non-empty options
             const existing = select.querySelectorAll("option:not([value=''])");
             existing.forEach((opt) => opt.remove());
 
+            if (selectId === "priority-filter") {
+              values = values.filter(v => !isNaN(v)).sort((a,b) => b - a);
+            } else {
+              values.sort();
+            }
+
             values.forEach((val) => {
+              if (val.toLowerCase() === "asc" || val.toLowerCase() === "desc") {
+                return;
+              }
               const option = document.createElement("option");
               option.value = val;
               option.textContent = val;
@@ -1845,39 +2024,39 @@ build_html_report() {
             });
           }
 
-          fillSelectOptions("priority-filter",   [...uniqueCols[0]].sort());
-          fillSelectOptions("domain-filter",     [...uniqueCols[1]].sort());
-          fillSelectOptions("purpose-filter",    [...uniqueCols[2]].sort());
-          fillSelectOptions("resolvers-filter",  [...uniqueCols[3]].sort());
-          fillSelectOptions("arecords-filter",   [...uniqueCols[4]].sort());
-          fillSelectOptions("dnsstatus-filter",  [...uniqueCols[5]].sort());
-          fillSelectOptions("cdnname-filter",    [...uniqueCols[6]].sort());
-          fillSelectOptions("cdntype-filter",    [...uniqueCols[7]].sort());
-          fillSelectOptions("port-filter",       [...uniqueCols[8]].sort());
-          fillSelectOptions("url-filter",        [...uniqueCols[9]].sort());
-          fillSelectOptions("redirect-filter",   [...uniqueCols[10]].sort());
-          fillSelectOptions("title-filter",      [...uniqueCols[11]].sort());
-          fillSelectOptions("webserver-filter",  [...uniqueCols[12]].sort());
-          fillSelectOptions("login-filter",      [...uniqueCols[13]].sort());
-          fillSelectOptions("api-endpoint-filter", [...uniqueCols[14]].sort());
-          fillSelectOptions("tech-filter",       [...uniqueCols[15]].sort());
-          fillSelectOptions("statuscode-filter", [...uniqueCols[16]].sort());
-          fillSelectOptions("contentlength-filter", [...uniqueCols[17]].sort());
-          fillSelectOptions("cdn-filter",        [...uniqueCols[18]].sort());
-          fillSelectOptions("spf-filter",        [...uniqueCols[19]].sort());
-          fillSelectOptions("dkim-filter",       [...uniqueCols[20]].sort());
-          fillSelectOptions("dmarc-filter",      [...uniqueCols[21]].sort());
-          fillSelectOptions("dnssec-filter",     [...uniqueCols[22]].sort());
-          fillSelectOptions("sslversion-filter", [...uniqueCols[23]].sort());
-          fillSelectOptions("certexpiry-filter", [...uniqueCols[24]].sort());
-          fillSelectOptions("sslissuer-filter",  [...uniqueCols[25]].sort());
-          fillSelectOptions("sts-filter",        [...uniqueCols[26]].sort());
-          fillSelectOptions("xfo-filter",        [...uniqueCols[27]].sort());
-          fillSelectOptions("csp-filter",        [...uniqueCols[28]].sort());
-          fillSelectOptions("xss-filter",        [...uniqueCols[29]].sort());
-          fillSelectOptions("rp-filter",         [...uniqueCols[30]].sort());
-          fillSelectOptions("pp-filter",         [...uniqueCols[31]].sort());
-          fillSelectOptions("ports-services-filter", [...uniqueCols[32]].sort());
+          fillSelectOptions("priority-filter",   [...uniqueCols[0]]);
+          fillSelectOptions("domain-filter",     [...uniqueCols[1]]);
+          fillSelectOptions("purpose-filter",    [...uniqueCols[2]]);
+          fillSelectOptions("resolvers-filter",  [...uniqueCols[3]]);
+          fillSelectOptions("arecords-filter",   [...uniqueCols[4]]);
+          fillSelectOptions("dnsstatus-filter",  [...uniqueCols[5]]);
+          fillSelectOptions("cdnname-filter",    [...uniqueCols[6]]);
+          fillSelectOptions("cdntype-filter",    [...uniqueCols[7]]);
+          fillSelectOptions("port-filter",       [...uniqueCols[8]]);
+          fillSelectOptions("url-filter",        [...uniqueCols[9]]);
+          fillSelectOptions("redirect-filter",   [...uniqueCols[10]]);
+          fillSelectOptions("title-filter",      [...uniqueCols[11]]);
+          fillSelectOptions("webserver-filter",  [...uniqueCols[12]]);
+          fillSelectOptions("login-filter",      [...uniqueCols[13]]);
+          fillSelectOptions("api-endpoint-filter", [...uniqueCols[14]]);
+          fillSelectOptions("tech-filter",       [...uniqueCols[15]]);
+          fillSelectOptions("statuscode-filter", [...uniqueCols[16]]);
+          fillSelectOptions("contentlength-filter", [...uniqueCols[17]]);
+          fillSelectOptions("cdn-filter",        [...uniqueCols[18]]);
+          fillSelectOptions("spf-filter",        [...uniqueCols[19]]);
+          fillSelectOptions("dkim-filter",       [...uniqueCols[20]]);
+          fillSelectOptions("dmarc-filter",      [...uniqueCols[21]]);
+          fillSelectOptions("dnssec-filter",     [...uniqueCols[22]]);
+          fillSelectOptions("sslversion-filter", [...uniqueCols[23]]);
+          fillSelectOptions("certexpiry-filter", [...uniqueCols[24]]);
+          fillSelectOptions("sslissuer-filter",  [...uniqueCols[25]]);
+          fillSelectOptions("sts-filter",        [...uniqueCols[26]]);
+          fillSelectOptions("xfo-filter",        [...uniqueCols[27]]);
+          fillSelectOptions("csp-filter",        [...uniqueCols[28]]);
+          fillSelectOptions("xss-filter",        [...uniqueCols[29]]);
+          fillSelectOptions("rp-filter",         [...uniqueCols[30]]);
+          fillSelectOptions("pp-filter",         [...uniqueCols[31]]);
+          fillSelectOptions("ports-services-filter", [...uniqueCols[32]]);
         }
 
         function attachFilterEvents() {
@@ -1897,9 +2076,14 @@ build_html_report() {
         document.getElementById("searchBox").addEventListener("input", onFilterChange);
         document.getElementById("rowsPerPageSelect").addEventListener("change", updateRowsPerPage);
 
+        document.getElementById("riskSortToggle").addEventListener("click", function() {
+          riskSortOrder = (riskSortOrder === "asc") ? "desc" : "asc";
+          this.textContent = (riskSortOrder === "asc") ? "▲" : "▼";
+          renderTable(getFilteredRows());
+        });
+
         async function loadData() {
           try {
-            // Fetch all required JSON files (including colleague identification)
             const [dnsxRes, naabuRes, httpxRes, loginRes, secRes, apiRes, colleagueRes] = await Promise.all([
               fetch("dnsx.json"),
               fetch("naabu.json"),
@@ -1917,81 +2101,97 @@ build_html_report() {
             const apiData         = await apiRes.json().catch(() => []);
             const colleagueData   = await colleagueRes.json().catch(() => []);
 
-            // loginMap
             const loginMap = {};
             loginData.forEach(item => {
               loginMap[item.url] = item.login_detection.login_found;
             });
 
-            // secMap
             const secMap = {};
             secData.forEach(item => {
               secMap[item.Domain] = item;
             });
 
-            // apiMap
             const apiMap = {};
             apiData.forEach(item => {
               apiMap[item.domain] = item.api_endpoint;
             });
 
-            // colleagueMap
             const colleagueMap = {};
             colleagueData.forEach(item => {
               colleagueMap[item.domain] = item.colleague_endpoint;
             });
 
-            // scoreboard stats
-            const endpointsCount    = httpxData.length;
-            const loginFoundCount   = loginData.filter(item => item.login_detection.login_found === "Yes").length;
-            const liveSubs          = dnsxData.filter(d => d.status_code === "NOERROR").length;
-            const domainSet         = new Set();
+            const endpointsCount = httpxData.length;
+            const loginFoundCount = loginData.filter(item => item.login_detection.login_found === "Yes").length;
+            const liveSubs = dnsxData.filter(d => d.status_code === "NOERROR").length;
+            const domainSet = new Set();
             dnsxData.forEach(d => { if (d.host) domainSet.add(d.host); });
             const totalSubdomains = domainSet.size;
 
             buildLoginPieChart(endpointsCount, loginFoundCount);
             buildScoreboard({ totalSubdomains, liveSubs, totalHttpx: endpointsCount, loginFoundCount });
 
-            // statusCount
             const statusCount = {};
             httpxData.forEach(h => {
               const code = h.status_code || 0;
               statusCount[code] = (statusCount[code] || 0) + 1;
             });
 
-            // priorityCount
-            const priorityCount = { P0: 0, P1: 0, P2: 0, P3: 0, P4: 0 };
-            const dnsMap = {};
-            dnsxData.forEach(d => { dnsMap[d.host] = d; });
+            const priorityCount = {};
+
             httpxData.forEach(h => {
               const domain = (h.input || "").split(":")[0];
-              const dnsRec = dnsMap[domain] || null;
-              const prio = computePriority(h, dnsRec);
-              priorityCount[prio] = (priorityCount[prio] || 0) + 1;
+              const prioScore = computePriority({
+                purpose: colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended",
+                url: h.url,
+                loginFound: loginMap[h.url] || "No",
+                statusCode: h.status_code,
+                sslVersion: secMap[domain] ? secMap[domain]["SSL/TLS Version"] : "N/A",
+                certExpiry: secMap[domain] ? secMap[domain]["Cert Expiry Date"] : "N/A",
+                sts: secMap[domain] ? secMap[domain]["Strict-Transport-Security"] : "",
+                xfo: secMap[domain] ? secMap[domain]["X-Frame-Options"] : "",
+                csp: secMap[domain] ? secMap[domain]["Content-Security-Policy"] : "",
+                xss: secMap[domain] ? secMap[domain]["X-XSS-Protection"] : "",
+                rp: secMap[domain] ? secMap[domain]["Referrer-Policy"] : "",
+                pp: secMap[domain] ? secMap[domain]["Permissions-Policy"] : "",
+                openPortsCount: 0,
+                techCount: (h.tech && h.tech.length) ? h.tech.length : 0
+              });
+              if (!priorityCount[domain] || prioScore > priorityCount[domain]) {
+                priorityCount[domain] = prioScore;
+              }
+              if (prioScore < minRiskScore) minRiskScore = prioScore;
+              if (prioScore > maxRiskScore) maxRiskScore = prioScore;
             });
 
-            // portCount
             const portCount = {};
             naabuData.forEach(n => {
               const p = n.port || "unknown";
               portCount[p] = (portCount[p] || 0) + 1;
             });
 
-            // techCount
             const techCount = {};
             httpxData.forEach(h => {
-              if (h.tech && Array.isArray(h.tech)) {
+              if (Array.isArray(h.tech)) {
                 h.tech.forEach(t => {
                   techCount[t] = (techCount[t] || 0) + 1;
                 });
               }
             });
 
-            buildCharts({ statusCount, priorityCount, portCount, techCount });
+            // <-- PASS totalSubdomains, liveSubs, and endpointsCount to buildCharts for the funnel chart -->
+            buildCharts({
+              statusCount,
+              priorityCount,
+              portCount,
+              techCount,
+              totalSubdomains,
+              liveSubs,
+              endpointsCount
+            });
             buildServiceChart(naabuData);
             buildColleagueChart(colleagueData);
 
-            // Merge DNS + HTTP data
             const combinedData = {};
             dnsxData.forEach(d => {
               combinedData[d.host] = { dns: d, http: [] };
@@ -2002,13 +2202,12 @@ build_html_report() {
               combinedData[domain].http.push(h);
             });
 
-            // Build table
             buildTableRows(combinedData, secMap, loginMap, apiMap, colleagueMap);
+            finalizeColors();
             populateColumnFilters();
             attachFilterEvents();
             renderTable(getFilteredRows());
 
-            // Certificate + TLS usage
             const validDomains = new Set();
             httpxData.forEach(h => {
               if (h.url && h.url !== "N/A") {
@@ -2029,8 +2228,8 @@ build_html_report() {
 
             buildHeadersChart(httpxData, secMap);
             buildEmailSecChart(secData);
-
             buildCDNChart(httpxData);
+
             updateChartTheme();
           } catch (err) {
             console.error("Error loading data or building report:", err);
