@@ -143,7 +143,7 @@ run_crtsh() {
         | cut -d ":" -f2 \
         | xargs \
         | sed 's/,/%2C/g; s/ /+/g' \
-        | egrep -v '(Whois|domains|proxy|PRIVACY|REDACTED|DNStination|Protected|Registration Private)' \
+        | egrep -v '(Whois|whois|WHOIS|domains|DOMAINS|Domains|domain|DOMAIN|Domain|proxy|Proxy|PROXY|PRIVACY|privacy|Privacy|REDACTED|redacted|Redacted|DNStination|WhoisGuard|Protected|protected|PROTECTED|Registration Private|REGISTRATION PRIVATE|registration private)' \
         || true)
       if [[ -n "$registrant" ]]; then
         curl -s "https://crt.sh/?q=$registrant" \
@@ -162,7 +162,7 @@ run_crtsh() {
 }
 
 ##############################################
-# DNSX – Live Domain Check
+# DNSX â€“ Live Domain Check
 ##############################################
 run_dnsx() {
   if [[ "$USE_DNSX" == "true" ]]; then
@@ -177,7 +177,7 @@ run_dnsx() {
 }
 
 ##############################################
-# Naabu – Port Scanning (Custom port list)
+# Naabu â€“ Port Scanning (Custom port list)
 ##############################################
 run_naabu() {
   if [[ "$USE_NAABU" == "true" ]]; then
@@ -194,7 +194,7 @@ run_naabu() {
 }
 
 ##############################################
-# HTTPX – Web Recon
+# HTTPX â€“ Web Recon
 ##############################################
 run_httpx() {
   if [[ "$USE_HTTPX" == "true" ]]; then
@@ -210,7 +210,7 @@ run_httpx() {
 }
 
 ##############################################
-# Login detection
+# Login detection (Comprehensive Logic)
 ##############################################
 run_login_detection() {
   info "Detecting Login panels..."
@@ -268,7 +268,7 @@ run_login_detection() {
       if grep -qi -E '(loginModal|modal[-_]?login|popup[-_]?login)' "$body_file"; then
           reasons+=("Found modal/popup login hint")
       fi
-      if grep -qi -E '(iniciar[[:space:]]+sesión|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
+      if grep -qi -E '(iniciar[[:space:]]+sesiÃ³n|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
           reasons+=("Found multi-language login keyword")
       fi
       if grep -qi -E '(firebase\.auth|Auth0|passport)' "$body_file"; then
@@ -315,7 +315,7 @@ run_login_detection() {
       local curl_err="curl_err.tmp"
       rm -f "$curl_err"
 
-      # 1) First cURL: fetch the URL’s headers/body
+      # 1) First cURL: fetch the URLâ€™s headers/body
       set +e
       curl -s -S -L --max-time "$timeout_duration" \
            -D "$headers_file" \
@@ -388,7 +388,7 @@ run_login_detection() {
 }
 
 ##############################################
-# Security Hygiene Detection
+# Security Compliance Detection
 ##############################################
 run_security_compliance() {
   info "Analyzing security hygiene (it will take some time)..."
@@ -848,6 +848,7 @@ build_html_report() {
         <div class="scoreboard" id="scoreboard"></div>
 
         <div class="charts-grid">
+          <!-- REPLACED chart ID from "priorityChart" to keep it but for the new funnel chart -->
           <div class="chart-container">
             <canvas id="priorityChart"></canvas>
           </div>
@@ -881,6 +882,7 @@ build_html_report() {
           <div class="chart-container">
             <canvas id="serviceChart"></canvas>
           </div>
+          <!-- ADDED: Colleague (Employee Intended) Endpoint Chart -->
           <div class="chart-container">
             <canvas id="colleagueEndpointChart"></canvas>
           </div>
@@ -902,8 +904,9 @@ build_html_report() {
         <table id="report-table">
           <thead>
             <tr>
+              <!-- Arrow is now given a small left margin so itâ€™s clearly to the right of "Risk Score" -->
               <th id="riskScoreHeader">
-                Risk Score<span id="riskSortToggle" style="cursor:pointer; user-select:none; margin-left:5px;">▼</span>
+                Risk Score<span id="riskSortToggle" style="cursor:pointer; user-select:none; margin-left:5px;">â–¼</span>
               </th>
               <th>Domain</th>
               <th>Purpose</th>
@@ -1737,6 +1740,7 @@ build_html_report() {
 
                 const row = document.createElement("tr");
                 row.innerHTML = `
+                  <td><!-- color assigned in second pass --></td>
                   <td>${domain}</td>
                   <td>${colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended"}</td>
                   <td>${formatCell(dnsResolvers)}</td>
@@ -2078,7 +2082,7 @@ build_html_report() {
 
         document.getElementById("riskSortToggle").addEventListener("click", function() {
           riskSortOrder = (riskSortOrder === "asc") ? "desc" : "asc";
-          this.textContent = (riskSortOrder === "asc") ? "▲" : "▼";
+          this.textContent = (riskSortOrder === "asc") ? "â–²" : "â–¼";
           renderTable(getFilteredRows());
         });
 
