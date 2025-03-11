@@ -113,7 +113,8 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Identified abandoned and unwanted applications.
 - Provide export option for CSV and PDF if feasible.
 - Solve screen jerk issue.
-- Map CVEs with technologies.
+- Implement parallel run, time out functionality.
+- Scan SSL/TLS for the url:port pattern and not just domain:443 pattern.
 
 ## Installation
 
