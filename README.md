@@ -28,6 +28,14 @@ In this tool, **risk scoring** is based on the notion of **asset attractiveness*
 <img src="https://chintangurjar.com/images/riskscore.png" alt="graphviz"/>
 
 ---
+## Screenshots
+
+<img src="https://chintangurjar.com/images/frogyasm_s1.png"/>
+<img src="https://chintangurjar.com/images/frogyasm_s2.png"/>
+<img src="https://chintangurjar.com/images/frogyasm_s3.png"/>
+<img src="https://chintangurjar.com/images/frogyasm_s4.png"/>
+
+---
 
 #### 1. Purpose of the Asset
 - **Employee-Intended Assets**  
@@ -110,11 +118,11 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Completed ✅ ~~Identify traditional endpoints vs. API endpoints.~~
 - Completed ✅ ~~Identifying customer-intended vs colleague-intended applications.~~
 - Completed ✅ ~~Enhance prioritisation for target picking. (Scoring based on management ports, login found, customer vs colleague intended apps, security headers not set, ssl/tls usage, etc.)~~
+- Completed ✅ ~~Implement parallel run, time out functionality.~~
+- Completed ✅ ~~Scan SSL/TLS for the url:port pattern and not just domain:443 pattern.-~~
 - Identified abandoned and unwanted applications.
 - Provide export option for CSV and PDF if feasible.
 - Solve screen jerk issue.
-- Implement parallel run, time out functionality.
-- Scan SSL/TLS for the url:port pattern and not just domain:443 pattern.
 
 ## Installation
 
