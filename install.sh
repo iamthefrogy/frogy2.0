@@ -5,11 +5,19 @@ set -euo pipefail
 # OS Detection and Package Installation
 # ---------------------------
 echo "Detecting OS..."
-if [ -f /etc/os-release ]; then
-  . /etc/os-release
-  OS=$ID
+OS_TYPE=$(uname -s)
+if [ "$OS_TYPE" = "Linux" ]; then
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+  else
+    echo "Cannot detect Linux distribution. Exiting."
+    exit 1
+  fi
+elif [ "$OS_TYPE" = "Darwin" ]; then
+  OS="macos"
 else
-  echo "Cannot detect OS type. Exiting."
+  echo "Unsupported OS: $OS_TYPE. Exiting."
   exit 1
 fi
 echo "Detected OS: $OS"
@@ -31,6 +39,16 @@ install_dependencies_redhat() {
   fi
 }
 
+install_dependencies_macos() {
+  echo "Installing dependencies for macOS using Homebrew..."
+  if ! command -v brew &> /dev/null; then
+    echo "Homebrew is not installed. Please install Homebrew from https://brew.sh/ and try again."
+    exit 1
+  fi
+  brew update
+  brew install jq curl unzip gnu-sed python3 libpcap whois bind openssl
+}
+
 case "$OS" in
   ubuntu|debian|kali)
     echo "Using apt-get for installation..."
@@ -39,6 +57,10 @@ case "$OS" in
   rhel|centos|fedora|redhat)
     echo "Using yum/dnf for installation..."
     install_dependencies_redhat
+    ;;
+  macos)
+    echo "Using Homebrew for installation..."
+    install_dependencies_macos
     ;;
   *)
     echo "Unsupported OS: $OS. Exiting."
@@ -61,6 +83,9 @@ if ! command -v go &> /dev/null; then
       else
         sudo yum install -y golang
       fi
+      ;;
+    macos)
+      brew install go
       ;;
     *)
       echo "Unsupported OS for automatic Go installation. Please install Go manually."
