@@ -452,7 +452,7 @@ run_security_compliance() {
         # SSL Certificate Checks (only if HTTPS)
         if [ -n "$host" ]; then
           local ssl_output CERT
-          ssl_output=$(echo | gtimeout 7 openssl s_client -connect "${host}:${port}" -servername "$host" 2>/dev/null || true)
+          ssl_output=$(echo | timeout 7 openssl s_client -connect "${host}:${port}" -servername "$host" 2>/dev/null || true)
           CERT=$(echo "$ssl_output" | sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' || true)
           if [ -n "$CERT" ]; then
             ssl_version=$(echo "$ssl_output" | grep -i "Protocol:" | head -1 | awk -F": " '{print $2}' || true)
