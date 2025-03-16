@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+# Exit immediately if any command fails, unset variables are errors, and fail on pipe errors.
 set -euo pipefail
 
 ##############################################
-# Global counters for summary
+# Global counters for summary metrics
 ##############################################
 CHAOS_COUNT=0
 SUBFINDER_COUNT=0
@@ -13,13 +14,15 @@ HTTPX_LIVE_COUNT=0
 LOGIN_FOUND_COUNT=0
 
 ##############################################
-# Check input argument: primary domains file
+# Validate Input Arguments
 ##############################################
+# The script expects at least one argument: a file containing primary domains.
 if [ "$#" -lt 1 ]; then
   echo -e "\033[91m[-] Usage: $0 <primary_domains_file>\033[0m"
   exit 1
 fi
 
+# Assign the first argument to a variable and check if the file exists.
 PRIMARY_DOMAINS_FILE="$1"
 if [ ! -f "$PRIMARY_DOMAINS_FILE" ]; then
   echo -e "\033[91m[-] File '$PRIMARY_DOMAINS_FILE' not found!\033[0m"
@@ -29,21 +32,23 @@ fi
 ##############################################
 # Create a unique output directory for this run
 ##############################################
+# The run directory is timestamped for uniqueness.
 RUN_DIR="output/run-$(date +%Y%m%d%H%M%S)"
 mkdir -p "$RUN_DIR/raw_output/raw_http_responses"
 mkdir -p "$RUN_DIR/logs"
 
 ##############################################
-# Global file paths
+# Global file paths for temporary subdomain lists
 ##############################################
 ALL_TEMP="$RUN_DIR/all_temp_subdomains.txt"
 MASTER_SUBS="$RUN_DIR/master_subdomains.txt"
-> "$ALL_TEMP"
-> "$MASTER_SUBS"
+> "$ALL_TEMP"      # Empty (or create) the file
+> "$MASTER_SUBS"   # Empty (or create) the file
 
 ##############################################
-# Option toggles for tools (true/false)
+# Option toggles for different reconnaissance tools
 ##############################################
+# Set each tool to "true" or "false" as needed
 USE_CHAOS="false"
 USE_SUBFINDER="true"
 USE_ASSETFINDER="true"
@@ -54,21 +59,27 @@ USE_HTTPX="true"
 ##############################################
 # Logging Functions (with timestamps)
 ##############################################
+# info: print informational messages
 info()    { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [+] $*"; }
+# warning: print warning messages
 warning() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [!] $*"; }
+# error: print error messages
 error()   { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [-] $*"; }
 
 ##############################################
-# Helper: Merge subdomain files
+# Function: merge_and_count
+# Purpose: Merge subdomain results from a given file into a global temporary file
+# and update the corresponding counter based on the source.
 ##############################################
 merge_and_count() {
-  local file="$1"
-  local source_name="$2"
+  local file="$1"         # Input file containing subdomains from one tool
+  local source_name="$2"  # The tool name (e.g., "Chaos", "Subfinder")
   local count=0
   if [[ -s "$file" ]]; then
     count=$(wc -l < "$file")
     cat "$file" >> "$ALL_TEMP"
   fi
+  # Update counters based on the tool used
   case "$source_name" in
     "Chaos")       CHAOS_COUNT=$((CHAOS_COUNT + count)) ;;
     "Subfinder")   SUBFINDER_COUNT=$((SUBFINDER_COUNT + count)) ;;
@@ -78,13 +89,16 @@ merge_and_count() {
 }
 
 ##############################################
-# CHAOS DB
+# Function: run_chaos
+# Purpose: Query the Chaos database (if enabled) and merge its subdomain results.
 ##############################################
 run_chaos() {
   if [[ "$USE_CHAOS" == "true" ]]; then
     info "Running Chaos..."
     local chaos_index="output/$cdir/logs/chaos_index.json"
+    # Download the Chaos index file
     curl -s https://chaos-data.projectdiscovery.io/index.json -o "$chaos_index"
+    # Find the URL for the current directory (cdir variable should be set externally)
     local chaos_url
     chaos_url=$(grep -w "$cdir" "$chaos_index" | grep "URL" | sed 's/"URL": "//;s/",//' | xargs || true)
     if [[ -n "$chaos_url" ]]; then
@@ -102,7 +116,8 @@ run_chaos() {
 }
 
 ##############################################
-# Subfinder
+# Function: run_subfinder
+# Purpose: Run the Subfinder tool on the primary domains and merge the subdomains.
 ##############################################
 run_subfinder() {
   if [[ "$USE_SUBFINDER" == "true" ]]; then
@@ -115,7 +130,8 @@ run_subfinder() {
 }
 
 ##############################################
-# Assetfinder
+# Function: run_assetfinder
+# Purpose: Run Assetfinder for each primary domain and merge the results.
 ##############################################
 run_assetfinder() {
   if [[ "$USE_ASSETFINDER" == "true" ]]; then
@@ -128,7 +144,8 @@ run_assetfinder() {
 }
 
 ##############################################
-# Certificates (crt.sh)
+# Function: run_crtsh
+# Purpose: Query crt.sh for certificate data and extract subdomains.
 ##############################################
 run_crtsh() {
   info "Running crt.sh..."
@@ -136,8 +153,10 @@ run_crtsh() {
   > "$crt_file"
   while read -r domain; do
     {
+      # Temporarily disable exit on error for this block
       set +e
       local registrant
+      # Attempt to extract the registrant organization from whois data
       registrant=$(whois "$domain" 2>/dev/null \
         | grep -i "Registrant Organization" \
         | cut -d ":" -f2 \
@@ -146,11 +165,13 @@ run_crtsh() {
         | egrep -v '(Whois|whois|WHOIS|domains|DOMAINS|Domains|domain|DOMAIN|Domain|proxy|Proxy|PROXY|PRIVACY|privacy|Privacy|REDACTED|redacted|Redacted|DNStination|WhoisGuard|Protected|protected|PROTECTED|Registration Private|REGISTRATION PRIVATE|registration private)' \
         || true)
       if [[ -n "$registrant" ]]; then
+        # Query crt.sh using the registrant information
         curl -s "https://crt.sh/?q=$registrant" \
           | grep -Eo '<TD>[[:alnum:]\.-]+\.[[:alpha:]]{2,}</TD>' \
           | sed -e 's/^<TD>//;s/<\/TD>$//' \
           >> "$crt_file"
       fi
+      # Also query crt.sh using the domain and JSON output
       curl -s "https://crt.sh/?q=$domain&output=json" \
         | jq -r ".[].name_value" 2>/dev/null \
         | sed 's/\*\.//g' \
@@ -162,7 +183,8 @@ run_crtsh() {
 }
 
 ##############################################
-# DNSX Live Domain Check
+# Function: run_dnsx
+# Purpose: Run dnsx tool to check which subdomains are live.
 ##############################################
 run_dnsx() {
   if [[ "$USE_DNSX" == "true" ]]; then
@@ -172,12 +194,14 @@ run_dnsx() {
          -o "$RUN_DIR/dnsx.json" \
          -j \
          >/dev/null 2>&1 || true
+    # Count live domains based on the "NOERROR" status code from dnsx output
     DNSX_LIVE_COUNT=$(jq -r 'select(.status_code=="NOERROR") | .host' "$RUN_DIR/dnsx.json" | sort -u | wc -l)
   fi
 }
 
 ##############################################
-# Naabu  Port Scanning
+# Function: run_naabu
+# Purpose: Run naabu port scanner against discovered subdomains.
 ##############################################
 run_naabu() {
   if [[ "$USE_NAABU" == "true" ]]; then
@@ -188,13 +212,15 @@ run_naabu() {
           -o "$RUN_DIR/naabu.json" \
           -j \
           >/dev/null 2>&1 || true
+    # Process naabu JSON to extract unique host:port pairs
     local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
     jq -r '"\(.host):\(.port)"' "$RUN_DIR/naabu.json" | sort -u > "$final_urls_ports"
   fi
 }
 
 ##############################################
-# HTTPX Web Recon
+# Function: run_httpx
+# Purpose: Run httpx to probe live web endpoints using the ports identified.
 ##############################################
 run_httpx() {
   if [[ "$USE_HTTPX" == "true" ]]; then
@@ -205,19 +231,26 @@ run_httpx() {
           -j \
           -o "$RUN_DIR/httpx.json" \
           >/dev/null 2>&1 || true
+    # Count the number of live websites detected by httpx.
     HTTPX_LIVE_COUNT=$(wc -l < "$RUN_DIR/httpx.json")
   fi
 }
 
 ##############################################
-# Login detection (Comprehensive Logic)
+# Function: run_login_detection
+# Purpose: Detect login interfaces on discovered web endpoints.
+# Detailed Explanation:
+#   1. Reads each URL from the httpx output.
+#   2. Uses curl to fetch headers and body.
+#   3. Applies a series of regex searches (via grep) to detect login elements.
+#   4. Returns a JSON object indicating if login was found and lists the reasons.
 ##############################################
 run_login_detection() {
   info "Detecting Login panels..."
   local input_file="$RUN_DIR/httpx.json"
   local output_file="$RUN_DIR/login.json"
 
-  # If the httpx.json file doesn't exist or jq is not installed, just exit early
+  # Exit if input file or jq is not available.
   if [ ! -f "$input_file" ]; then
     return
   fi
@@ -228,18 +261,19 @@ run_login_detection() {
   local urls
   urls=$(jq -r '.url' "$input_file")
 
-  # Begin JSON array
+  # Start JSON array output for login detection
   echo "[" > "$output_file"
   local first_entry=true
 
-  # Helper function to do the login "detection"
+  # Helper function: detect_login
+  # It examines header and body files for indicators of a login interface.
   detect_login() {
       local headers_file="$1"
       local body_file="$2"
       local final_url="$3"
       local -a reasons=()
 
-      # Examples below: each grep checks something. If it matches, push a reason:
+      # Each grep command below checks for patterns that might indicate a login form.
       if grep -qi -E '<input[^>]*type=["'"'"']password["'"'"']' "$body_file"; then
           reasons+=("Found password field")
       fi
@@ -297,15 +331,16 @@ run_login_detection() {
           login_found="Yes"
       fi
 
+      # Build a JSON array of the reasons using jq.
       local json_details
-      # Dump each "reason" line as a JSON string, wrap in an array
       json_details=$(printf '%s\n' "${reasons[@]:-}" | jq -R . | jq -s .)
 
-      # Return final detection object as JSON
+      # Return a JSON object with the login detection results.
       jq -n --arg login_found "$login_found" --argjson details "$json_details" \
             '{login_found: $login_found, login_details: $details}'
   }
 
+  # Process each URL from the httpx data.
   for url in $urls; do
       local headers_file="final_headers.tmp"
       local body_file="final_body.tmp"
@@ -314,7 +349,7 @@ run_login_detection() {
       local curl_err="curl_err.tmp"
       rm -f "$curl_err"
 
-      # 1) First cURL: fetch the URLâ€™s headers/body
+      # First, fetch headers and body from the URL using curl.
       set +e
       curl -s -S -L \
            -D "$headers_file" \
@@ -324,14 +359,14 @@ run_login_detection() {
       local curl_exit=$?
       set -e
 
-      # If cURL returned error code 35 (SSL connect error), skip
+      # If curl returns error code 35 (SSL connect error), skip this URL.
       if [ $curl_exit -eq 35 ]; then
           info "Skipping $url due to SSL error."
           rm -f "$headers_file" "$body_file" "$curl_err"
           continue
       fi
 
-      # If any other error occurred, log in JSON but mark no login found
+      # If any other error occurred, output JSON with login_found "No" and continue.
       if [ $curl_exit -ne 0 ]; then
           if [ "$first_entry" = true ]; then
               first_entry=false
@@ -347,28 +382,28 @@ run_login_detection() {
 
       rm -f "$curl_err"
 
-      # 2) Second cURL: get the final URL cURL ended up on
+      # Get the final URL after redirections.
       set +e
       local final_url
       final_url=$(curl -s -o /dev/null -w "%{url_effective}" -L "$url")
       local final_curl_exit=$?
       set -e
 
-      # If it failed, or is empty, fallback to the original
+      # If fetching the final URL fails, fallback to the original URL.
       if [ $final_curl_exit -ne 0 ] || [ -z "$final_url" ]; then
           final_url="$url"
       fi
 
-      # Actually do the detection
+      # Run the login detection function on the fetched data.
       local detection_json
       detection_json=$(detect_login "$headers_file" "$body_file" "$final_url")
 
-      # If detection says "Yes", increment count
+      # If login is detected, increment the LOGIN_FOUND_COUNT.
       if echo "$detection_json" | grep -q '"login_found": "Yes"'; then
           LOGIN_FOUND_COUNT=$((LOGIN_FOUND_COUNT + 1))
       fi
 
-      # Write out the JSON for this URL
+      # Append the detection result for this URL to the output JSON file.
       if [ "$first_entry" = true ]; then
           first_entry=false
       else
@@ -380,31 +415,37 @@ run_login_detection() {
       rm -f "$headers_file" "$body_file"
   done
 
+  # Close the JSON array.
   echo "]" >> "$output_file"
 
-  # Clean up any lingering .tmp
+  # Clean up any temporary files.
   rm -f *.tmp
 }
 
 ##############################################
-# Security Compliance Detection
+# Function: run_security_compliance
+# Purpose: Check various security settings (DNS, SSL, headers) for each domain.
+# Detailed Explanation:
+#   - For each domain in MASTER_SUBS, the function retrieves DNS TXT records for SPF,
+#     DKIM, and DMARC, and checks for DNSSEC.
+#   - It then matches live URL records from httpx.json to extract certificate and header information.
+#   - The final output is a JSON record per domain with security compliance details.
 ##############################################
 run_security_compliance() {
   info "Analyzing security hygiene using..."
   local output_file="$RUN_DIR/securitycompliance.json"
 
-  # Ensure that MASTER_SUBS exists (for full domain coverage)
+  # Ensure the MASTER_SUBS and httpx.json files exist.
   if [ ! -f "$MASTER_SUBS" ]; then
     echo "Error: MASTER_SUBS file not found!" >&2
     return 1
   fi
-
-  # Ensure that httpx.json exists (for live URL details)
   if [ ! -f "$RUN_DIR/httpx.json" ]; then
     echo "Error: httpx.json not found!" >&2
     return 1
   fi
 
+  # Create a temporary directory to store intermediate JSON records.
   local temp_dir
   temp_dir=$(mktemp -d)
 
@@ -413,7 +454,7 @@ run_security_compliance() {
     domain=$(echo "$domain" | tr -d '\r' | xargs)
     [ -z "$domain" ] && continue
 
-    # --- Functionality 1: Domain-level DNS checks ---
+    # --- Domain-level DNS Checks ---
     local spf dkim dmarc dnskey dnssec
     spf=$(dig +short TXT "$domain" 2>/dev/null | grep -i "v=spf1" | head -n 1 || true)
     [ -z "$spf" ] && spf="No SPF Record"
@@ -428,18 +469,17 @@ run_security_compliance() {
       dnssec="DNSSEC Enabled"
     fi
 
-    # --- Functionality 2 & 3: Process live URL records from httpx.json ---
-    # Filter httpx.json for records where the "input" field starts with the domain.
+    # --- Process live URL records from httpx.json ---
+    # Filter the httpx.json file for records that start with the domain.
     local matches
     matches=$(jq -c --arg domain "$domain" 'select(.input | startswith($domain))' "$RUN_DIR/httpx.json")
 
     if [ -n "$matches" ]; then
-      # For each matching live URL record...
+      # For each matching live URL record, extract SSL and header details.
       echo "$matches" | while IFS= read -r record; do
         local url ssl_version ssl_issuer cert_expiry sts xfo csp xss rp pp acao
         url=$(echo "$record" | jq -r '.url')
-        # Since URLs are always in the format https://host:port,
-        # extract host and port with a simplified regex.
+        # Extract host and port from the URL
         if [[ "$url" =~ ^https://([^:]+):([0-9]+) ]]; then
           local host port
           host="${BASH_REMATCH[1]}"
@@ -449,7 +489,7 @@ run_security_compliance() {
           port=""
         fi
 
-        # SSL Certificate Checks (only if HTTPS)
+        # If the URL is HTTPS, perform SSL checks.
         if [ -n "$host" ]; then
           local ssl_output CERT
           ssl_output=$(echo | timeout 7 openssl s_client -connect "${host}:${port}" -servername "$host" 2>/dev/null || true)
@@ -472,7 +512,7 @@ run_security_compliance() {
           cert_expiry="N/A"
         fi
 
-        # Security Headers Check using the exact URL from httpx.json:
+        # Fetch HTTP headers to check security settings.
         local HEADERS
         HEADERS=$(curl -s -D - "$url" -o /dev/null || true)
         sts=$(echo "$HEADERS" | grep -i "Strict-Transport-Security:" | cut -d':' -f2- | xargs || true)
@@ -483,7 +523,7 @@ run_security_compliance() {
         pp=$(echo "$HEADERS" | grep -i "Permissions-Policy:" | cut -d':' -f2- | xargs || true)
         acao=$(echo "$HEADERS" | grep -i "Access-Control-Allow-Origin:" | cut -d':' -f2- | xargs || true)
 
-        # --- Build the JSON record for this domain+URL combination ---
+        # Build and output a JSON record with the security compliance details.
         jq -n --arg domain "$domain" --arg url "$url" \
           --arg spf "$spf" --arg dkim "$dkim" --arg dmarc "$dmarc" --arg dnssec "$dnssec" \
           --arg ssl_version "$ssl_version" --arg ssl_issuer "$ssl_issuer" --arg cert_expiry "$cert_expiry" \
@@ -508,7 +548,7 @@ run_security_compliance() {
            }'
       done >> "$temp_dir/records.json"
     else
-      # If no live URL is found in httpx.json for this domain, output one record with defaults.
+      # If no live URL is found, output a record with default values.
       jq -n --arg domain "$domain" --arg url "N/A" \
         --arg spf "$spf" --arg dkim "$dkim" --arg dmarc "$dmarc" --arg dnssec "$dnssec" \
         --arg ssl_version "No SSL/TLS" --arg ssl_issuer "N/A" --arg cert_expiry "N/A" \
@@ -534,7 +574,7 @@ run_security_compliance() {
     fi
   done < "$MASTER_SUBS"
 
-  # Combine all generated JSON records into one JSON array.
+  # Combine all JSON records into one JSON array and output to the security compliance file.
   if [ ! -s "$temp_dir/records.json" ]; then
     echo "[]" > "$output_file"
   else
@@ -543,10 +583,9 @@ run_security_compliance() {
   rm -r "$temp_dir"
 }
 
-
-
 ##############################################
-# Merge line-based JSON -> single-array JSON
+# Function: combine_json
+# Purpose: Merge a line-based JSON file into a single JSON array.
 ##############################################
 combine_json() {
   local infile="$1"
@@ -559,15 +598,17 @@ combine_json() {
 }
 
 ##############################################
-# API Endpoint Identification
+# Function: run_api_identification
+# Purpose: Identify API endpoints based on simple pattern matching in domain names.
 ##############################################
 run_api_identification() {
   info "Identifying API endpoints..."
   local api_file="$RUN_DIR/api_identification.json"
+  # Begin JSON array output
   echo "[" > "$api_file"
   local first_entry=true
   while read -r domain; do
-    # Check if the domain/subdomain contains .api. or -api- or -api.
+    # Check if the domain name contains common API-related strings.
     if echo "$domain" | grep -E -i '(\.api\.|-api-|-api\.)' > /dev/null; then
       api_status="Yes"
     else
@@ -584,22 +625,22 @@ run_api_identification() {
 }
 
 ##############################################
-# Colleague Endpoint Identification
+# Function: run_colleague_identification
+# Purpose: Identify endpoints intended for internal/colleague use based on keywords in domain names.
 ##############################################
 run_colleague_identification() {
   info "Identifying colleague-facing endpoints..."
   local colleague_file="$RUN_DIR/colleague_identification.json"
-  # Define the set of keywords that strongly indicate an internal (employee intended) endpoint.
-  # (Note: We intentionally exclude very short tokens like 'qa' to avoid false positives.)
+  # Define a list of keywords that indicate internal or employee-intended endpoints.
   local tokens=("dev" "development" "test" "testing" "qa" "uat" "stage" "staging" "demo" "sandbox" "lab" "labs" "experimental" "preprod" "pre-production" "pre-prod" "nonprod" "non-production" "non-prod" "perf" "performance" "loadtest" "soaktest" "integration" "integrationtest" "release" "hotfix" "feature" "rc" "beta" "alpha" "internal" "private" "intranet" "corp" "corporate" "employee" "colleague" "partner" "restricted" "secure" "admin" "backoffice" "back-office" "management" "mgmt" "console" "ops" "operations" "dashboard" "sysadmin" "root" "sudo" "superuser" "jenkins" "teamcity" "bamboo" "circleci" "travis" "gitlab" "bitbucket" "gitea" "jira" "confluence" "artifactory" "nexus" "harbor" "grafana" "kibana" "prometheus" "alertmanager" "nagios" "zabbix" "splunk" "posthog" "sentry" "phabricator" "default" "standard" "placeholder" "dummy" "guest" "temp" "example" "portal" "hr" "hrportal" "helpdesk" "support" "servicedesk" "tools" "tooling" "services" "api-internal" "internalapi" "playground" "workshop" "vpn" "local" "localhost" "onprem" "on-prem" "dmz" "bastion" "jumpbox" "cache" "queue" "log" "logs" "monitor" "metrics" "ldap" "ad" "ntp" "smtp-internal" "ftp-internal")
   echo "[" > "$colleague_file"
   local first_entry=true
   while read -r domain; do
-    # Convert the domain to lowercase
+    # Convert domain to lowercase for consistent matching.
     local lc_domain
     lc_domain=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
     local found="No"
-    # Split the domain into tokens using dot, hyphen, and underscore as delimiters
+    # Split the domain into tokens using common delimiters.
     local token
     for token in $(echo "$lc_domain" | tr '.-_ ' ' '); do
       for t in "${tokens[@]}"; do
@@ -620,7 +661,12 @@ run_colleague_identification() {
 }
 
 ##############################################
-# Build HTML Report
+# Function: build_html_report
+# Purpose: Combine the various JSON outputs and generate the final HTML report.
+# Detailed Explanation:
+#   - Combines JSON files from dnsx, naabu, and httpx.
+#   - Moves merged JSON files into place.
+#   - Writes the complete HTML (including embedded JavaScript and CSS) to the report file.
 ##############################################
 build_html_report() {
   info "Building HTML report with analytics..."
@@ -631,7 +677,9 @@ build_html_report() {
   mv "$RUN_DIR/naabu_merged.json" "$RUN_DIR/naabu.json"
   mv "$RUN_DIR/httpx_merged.json" "$RUN_DIR/httpx.json"
   local report_html="$RUN_DIR/report.html"
+  # Use a heredoc to generate the HTML file with embedded CSS and JavaScript.
   cat << 'EOF' > "$report_html"
+
   <!DOCTYPE html>
   <html lang="en">
     <head>
@@ -640,6 +688,7 @@ build_html_report() {
       <!-- Chart.js for charts -->
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
+        /* Root CSS variables for theme colors and font sizes */
         :root {
           /* Light theme colors */
           --light-bg-color: #f9f9f9;
@@ -663,7 +712,7 @@ build_html_report() {
           --dark-toggle-bg: #555;
           --dark-toggle-btn: #ffffff;
 
-          /* Active theme variables */
+          /* Active theme variables (default to light) */
           --bg-color: var(--light-bg-color);
           --text-color: var(--light-text-color);
           --header-bg: var(--light-header-bg);
@@ -674,7 +723,7 @@ build_html_report() {
           --toggle-bg: var(--light-toggle-bg);
           --toggle-btn: var(--light-toggle-btn);
 
-          /* Font sizing */
+          /* Font sizing variables */
           --font-size-sm: 12px;
           --font-size-base: 13px;
           --font-size-md: 14px;
@@ -682,6 +731,7 @@ build_html_report() {
           --heading-font-size: 22px;
         }
 
+        /* Dark theme override */
         body.dark {
           --bg-color: var(--dark-bg-color);
           --text-color: var(--dark-text-color);
@@ -694,6 +744,7 @@ build_html_report() {
           --toggle-btn: var(--dark-toggle-btn);
         }
 
+        /* Basic styles for body and fonts */
         body {
           margin: 0;
           background-color: var(--bg-color);
@@ -703,37 +754,39 @@ build_html_report() {
           line-height: 1.4;
         }
 
-        /* HEADER */
+        /* HEADER styles */
         .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+          position: relative;
           background-color: var(--header-bg);
           color: var(--header-text);
+          text-align: center; /* centers the heading horizontally */
           padding: 12px 20px;
           box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
         .header h1 {
           margin: 0;
-          font-size: var(--heading-font-size);
-          font-weight: 600;
         }
 
+        /* Keep the toggle button on the right */
         .toggle-btn {
+          position: absolute;
+          right: 20px;
+          top: 12px; /* adjust as needed to align vertically */
           background-color: var(--toggle-bg);
           border: none;
           color: var(--toggle-btn);
-          padding: 6px 12px;
           cursor: pointer;
           border-radius: 4px;
-          font-size: var(--font-size-sm);
+          font-size: var(--font-size-m);
           transition: background-color 0.2s, color 0.2s;
         }
+
         .toggle-btn:hover {
           opacity: 0.9;
         }
 
+        /* Top controls for table filters and pagination */
         .table-top-controls {
           display: flex;
           justify-content: space-between;
@@ -741,14 +794,14 @@ build_html_report() {
           margin-bottom: 10px;
         }
 
-        /* MAIN CONTAINER */
+        /* Container for the entire report */
         .container {
           padding: 20px;
           max-width: 1200px;
           margin: 0 auto;
         }
 
-        /* SCOREBOARD */
+        /* Scoreboard styles for summary cards */
         .scoreboard {
           display: flex;
           flex-wrap: wrap;
@@ -774,7 +827,10 @@ build_html_report() {
           color: var(--text-color);
         }
 
-        /* CHARTS GRID */
+        .hint{
+          color: red;
+        }
+        /* Grid layout for charts */
         .charts-grid {
           display: grid;
           gap: 10px;
@@ -795,7 +851,7 @@ build_html_report() {
           height: 100% !important;
         }
 
-        /* SEARCH BOX */
+        /* Search box styling */
         #searchBox {
           margin: 0;
           padding: 6px 10px;
@@ -805,7 +861,7 @@ build_html_report() {
           border-radius: 4px;
         }
 
-        /* TABLE CONTROLS */
+        /* Table controls styling */
         .table-controls {
           margin: 0;
           display: flex;
@@ -825,7 +881,7 @@ build_html_report() {
           color: var(--text-color);
         }
 
-        /* MAIN TABLE */
+        /* Main table styling */
         table {
           width: 100%;
           border-collapse: collapse;
@@ -845,7 +901,7 @@ build_html_report() {
           font-weight: 600;
         }
 
-        /* FILTER DROPDOWN ROW */
+        /* Filter dropdown styling in table header */
         #filter-row select {
           width: 100%;
           font-size: var(--font-size-sm);
@@ -856,7 +912,7 @@ build_html_report() {
           color: var(--text-color);
         }
 
-        /* PAGINATION CONTROLS */
+        /* Pagination controls styling */
         #paginationControls {
           margin-top: 10px;
           display: flex;
@@ -879,20 +935,23 @@ build_html_report() {
           cursor: not-allowed;
         }
 
-        /* Additional header for the last columns */
+        /* Ensuring proper display for the last header column */
         th:nth-child(33) {
           white-space: nowrap;
         }
       </style>
     </head>
     <body>
+      <!-- Header section with title and theme toggle button -->
       <div class="header">
         <h1>External Attack Surface Analysis Report</h1>
         <button id="themeToggle" class="toggle-btn">Change View</button>
       </div>
       <div class="container">
+        <!-- Scoreboard section for summary metrics -->
         <div class="scoreboard" id="scoreboard"></div>
 
+        <!-- Grid of charts -->
         <div class="charts-grid">
           <div class="chart-container">
             <canvas id="priorityChart"></canvas>
@@ -936,11 +995,14 @@ build_html_report() {
           <div class="chart-container">
             <canvas id="cdnTypeChart"></canvas>
           </div>
-
         </div>
 
+        <!-- Controls above the table: search box and rows per page selector -->
         <div class="table-top-controls">
           <input type="text" id="searchBox" placeholder="Filter table (e.g. domain, status code, tech)..." />
+          <div class="hint">
+          <h4>Mouseover to Risk Score to Evaluate Reasons for Scoring</h2>
+          </div>
           <div class="table-controls">
             <label for="rowsPerPageSelect">Rows per page:</label>
             <select id="rowsPerPageSelect">
@@ -952,11 +1014,12 @@ build_html_report() {
           </div>
         </div>
 
+        <!-- Main report table with dynamic filters in header -->
         <table id="report-table">
           <thead>
             <tr>
               <th id="riskScoreHeader">
-                Risk Score<span id="riskSortToggle" style="cursor:pointer; user-select:none; margin-left:5px;">▼</span>
+                Attack Surface Score<span id="riskSortToggle" style="cursor:pointer; user-select:none; margin-left:5px;">▼</span>
               </th>
               <th>Domain</th>
               <th>Purpose</th>
@@ -991,6 +1054,7 @@ build_html_report() {
               <th>Permissions Policy</th>
               <th>Open Ports / Services</th>
             </tr>
+            <!-- Second header row for filter dropdowns per column -->
             <tr id="filter-row">
               <th><select id="priority-filter"><option value="">All</option></select></th>
               <th><select id="domain-filter"><option value="">All</option></select></th>
@@ -1030,15 +1094,17 @@ build_html_report() {
           <tbody id="report-table-body"></tbody>
         </table>
 
+        <!-- Container for pagination controls -->
         <div id="paginationControls"></div>
       </div>
 
       <script>
-        // Plugin to show bar labels
+        // Plugin for displaying labels on bars in charts
         const barLabelPlugin = {
           id: 'barLabelPlugin',
           afterDatasetsDraw(chart, args, options) {
             const { ctx } = chart;
+            // Filter visible bar datasets
             const metaSets = chart.getSortedVisibleDatasetMetas().filter(m => m.type === 'bar');
             metaSets.forEach((meta) => {
               meta.data.forEach((element, index) => {
@@ -1056,32 +1122,34 @@ build_html_report() {
             });
           }
         };
+        // Register the custom plugin with Chart.js.
         Chart.register(barLabelPlugin);
 
+        // Declare global variables for charts, table rows, pagination, and risk scores.
         let priorityChart, domainCountChart, statusCodeChart, loginChart, portChart, techChart, certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart, cdnTypeChart;
-
         let allTableRows = [];
         let currentPage = 1;
         let rowsPerPage = 20;
-
         let riskScores = {};
         let minRiskScore = Infinity;
         let maxRiskScore = -Infinity;
         let riskSortOrder = "desc";
 
+        // Theme toggle button event to switch between light and dark themes.
         const toggleButton = document.getElementById("themeToggle");
         toggleButton.addEventListener("click", () => {
           document.body.classList.toggle("dark");
           updateChartTheme();
         });
 
+        // Function to update chart colors based on current theme.
         function updateChartTheme() {
           const newColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
           Chart.defaults.color = newColor;
           const charts = [
             priorityChart, domainCountChart, statusCodeChart, loginChart,
             portChart, techChart, certExpiryChart, tlsUsageChart,
-            headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart
+            headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart, cdnTypeChart
           ];
           charts.forEach(chart => {
             if (chart) {
@@ -1104,10 +1172,14 @@ build_html_report() {
           });
         }
 
+        // Utility function to format array values for table cells.
         function formatCell(arr) {
           return (arr && arr.length) ? arr.join("<br>") : "N/A";
         }
 
+        // Function: computePriority
+        // Purpose: Calculate a risk score for a given asset based on various parameters.
+        // Also returns an array of debug reasons explaining each part of the score.
         function computePriority({
           purpose,
           url,
@@ -1125,31 +1197,50 @@ build_html_report() {
           techCount
         }) {
           let score = 0;
+          const reasons = [];
+
+          // Check domain purpose: bonus if employee-oriented.
           if (purpose && purpose.toLowerCase().includes("employee")) {
             score += 1;
+            reasons.push("+1 (Potential employee-intended domain found)");
           }
+
+          // Bonus for having a live URL.
           if (url && url !== "N/A") {
             score += 1;
+            reasons.push("+1 (Domain has live application)");
           }
+
+          // Bonus if a login interface is detected.
           if (loginFound === "Yes") {
             score += 1;
+            reasons.push("+1 (Login interface found on application)");
           }
+
+          // Bonus for a 200 HTTP status code.
           if (statusCode === 200) {
             score += 1;
+            reasons.push("+1 (Application has 200 status code)");
           }
-          if (sslVersion && sslVersion.toUpperCase().includes("TLS")) {
-            const versionMatch = sslVersion.match(/TLSv(1\.2|1\.3)/i);
-            if (versionMatch) {
-              const versionNumber = parseFloat(versionMatch[1]);
-              if (versionNumber < 1.2) {
-                score += 1;
-              }
-            } else {
+
+          // Evaluate SSL/TLS version; penalize older versions.
+          if (sslVersion) {
+            const cleanVersion = sslVersion.replace(/\s+/g, '');
+            if (/^TLSv(1\.2|1\.3)$/i.test(cleanVersion)) {
+              reasons.push("+0 (Version of TLS is latest (1.2 or 1.3))");
+            } else if (/^TLSv(1\.0|1\.1)$/i.test(cleanVersion)) {
               score += 1;
+              reasons.push("+1 (TLSv1.0 or TLSv1.1)");
+            } else if (/^SSLv(1\.0|2\.0|3\.0)$/i.test(cleanVersion)) {
+              score += 5;
+              reasons.push("+5 (SSLv1/2/3)");
             }
           } else {
             score += 1;
+            reasons.push("+1 (no sslVersion reported)");
           }
+
+          // Check certificate expiry; score increases if expiry is soon.
           if (certExpiry && certExpiry !== "N/A") {
             const expiryDate = new Date(certExpiry);
             const now = new Date();
@@ -1157,31 +1248,63 @@ build_html_report() {
             if (!isNaN(diffDays)) {
               if (diffDays <= 7) {
                 score += 3;
+                reasons.push("+3 (cert expires in ≤7 days)");
               } else if (diffDays <= 14) {
                 score += 2;
+                reasons.push("+2 (cert expires in ≤14 days)");
               } else if (diffDays <= 30) {
                 score += 1;
+                reasons.push("+1 (cert expires in ≤30 days)");
               }
             }
           }
-          function isHeaderMissing(header) {
-            return !header || header.trim().toLowerCase() === "false" || header.trim() === "";
+
+          // Evaluate presence of critical security headers.
+          function missingHeader(val) {
+            return !val || val.trim() === "" || val.trim().toLowerCase() === "false";
           }
-          if (isHeaderMissing(sts)) { score += 1; }
-          if (isHeaderMissing(xfo)) { score += 1; }
-          if (isHeaderMissing(csp)) { score += 1; }
-          if (isHeaderMissing(xss)) { score += 1; }
-          if (isHeaderMissing(rp))  { score += 1; }
-          if (isHeaderMissing(pp))  { score += 1; }
+          if (missingHeader(sts)) {
+            score += 1;
+            reasons.push("+1 (missing security header - HSTS)");
+          }
+          if (missingHeader(xfo)) {
+            score += 1;
+            reasons.push("+1 (missing security header - X-Frame-Options)");
+          }
+          if (missingHeader(csp)) {
+            score += 1;
+            reasons.push("+1 (missing security header - CSP)");
+          }
+          if (missingHeader(xss)) {
+            score += 1;
+            reasons.push("+1 (missing security header - X-XSS-Protection)");
+          }
+          if (missingHeader(rp)) {
+            score += 1;
+            reasons.push("+1 (missing security header - Referrer-Policy)");
+          }
+          if (missingHeader(pp)) {
+            score += 1;
+            reasons.push("+1 (missing security header - Permissions-Policy)");
+          }
+
+          // Add score based on number of open ports.
           if (openPortsCount && Number.isFinite(openPortsCount)) {
             score += openPortsCount;
+            reasons.push(`+${openPortsCount} (count of unique open ports on this domain)`);
           }
+
+          // Add score based on number of technologies detected.
           if (techCount && Number.isFinite(techCount)) {
             score += techCount;
+            reasons.push(`+${techCount} (count of unique tech stack found for this application)`);
           }
-          return score;
+
+          return { score, debug: reasons };
         }
 
+        // Function: getDynamicColor
+        // Purpose: Calculate a color gradient (from green to red) based on the risk score.
         function getDynamicColor(score, minScore, maxScore) {
           if (maxScore === minScore) {
             return "rgb(46, 204, 113)";
@@ -1195,6 +1318,8 @@ build_html_report() {
           return `rgb(${r}, ${g}, ${b})`;
         }
 
+        // Function: buildScoreboard
+        // Purpose: Update the score cards with summary metrics.
         function buildScoreboard({ totalSubdomains, liveSubs, totalHttpx, loginFoundCount }) {
           const sb = document.getElementById("scoreboard");
           sb.innerHTML = `
@@ -1217,6 +1342,8 @@ build_html_report() {
           `;
         }
 
+        // Function: buildCharts
+        // Purpose: Create multiple charts using Chart.js based on various data sets.
         function buildCharts({
           statusCount,
           priorityCount,
@@ -1226,6 +1353,7 @@ build_html_report() {
           liveSubs,
           endpointsCount
         }) {
+          // Build Assets Overview chart.
           const scCanvas = document.getElementById("statusCodeChart");
           const prCanvas = document.getElementById("priorityChart");
           const portCanvas = document.getElementById("portChart");
@@ -1264,6 +1392,7 @@ build_html_report() {
             });
           }
 
+          // Build HTTP Status Codes chart.
           if (scCanvas) {
             const sortedKeys = Object.keys(statusCount).sort((a, b) => +a - +b);
             statusCodeChart = new Chart(scCanvas, {
@@ -1289,6 +1418,7 @@ build_html_report() {
             });
           }
 
+          // Build Top 10 Open Ports chart.
           if (portCanvas) {
             const sortedPorts = Object.keys(portCount).sort((a, b) => portCount[b] - portCount[a]);
             const top10Ports = sortedPorts.slice(0, 10);
@@ -1315,6 +1445,7 @@ build_html_report() {
             });
           }
 
+          // Build Top 10 Technologies chart.
           if (techCanvas) {
             const sortedTech = Object.keys(techCount).sort((a, b) => techCount[b] - techCount[a]);
             const top10 = sortedTech.slice(0, 10);
@@ -1330,95 +1461,118 @@ build_html_report() {
               },
               options: {
                 responsive: true,
-                indexAxis: "x",
+                indexAxis: "x", // keep it horizontal
                 plugins: {
                   legend: { display: false },
                   title: { display: true, text: "Top 10 Technologies" }
                 },
                 scales: {
-                  x: { beginAtZero: true }
+                  x: { beginAtZero: true,
+                    ticks: {
+                      // Rotate labels by -45 or -60 degrees, for example
+                      maxRotation: 60,
+                      minRotation: 70
+                    }
+                   }
                 }
               }
             });
           }
         }
 
+        // Function: buildCDNTypeChart
+        // Purpose: Create a bar chart to show distribution of CDN types.
         function buildCDNTypeChart(httpxData) {
-    // We'll count how many times each cdn_type appears (ignoring "N/A").
-    const cdnTypeCounts = {};
-
-    httpxData.forEach(record => {
-      let cdnType = record.cdn_type;
-      if (cdnType && cdnType !== "N/A") {
-        cdnType = cdnType.trim();
-        cdnTypeCounts[cdnType] = (cdnTypeCounts[cdnType] || 0) + 1;
-      }
-    });
-
-    const labels = Object.keys(cdnTypeCounts);
-    const data = labels.map(l => cdnTypeCounts[l]);
-
-    const ctx = document.getElementById("cdnTypeChart").getContext("2d");
-    cdnTypeChart = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{
-          label: "CDN Type Distribution",
-          data,
-          backgroundColor: "#27ae60"
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          title: { display: true, text: "CDN Type Usage" },
-          legend: { display: false }
-        },
-        scales: {
-          y: { beginAtZero: true }
-        }
-      }
-    });
-  }
-
-
-        function buildDomainCountChart(httpxData) {
-          const domainCount = {};
-          httpxData.forEach(h => {
-            if (h.url && h.url !== "N/A") {
-              const domain = (h.input || "").split(":")[0];
-              domainCount[domain] = (domainCount[domain] || 0) + 1;
+          const cdnTypeCounts = {};
+          httpxData.forEach(record => {
+            let cdnType = record.cdn_type;
+            if (cdnType && cdnType !== "N/A") {
+              cdnType = cdnType.trim();
+              cdnTypeCounts[cdnType] = (cdnTypeCounts[cdnType] || 0) + 1;
             }
           });
-          const sortedDomains = Object.keys(domainCount).sort((a, b) => domainCount[b] - domainCount[a]);
-          const top10 = sortedDomains.slice(0, 10);
-          const data = top10.map(d => domainCount[d]);
-          const ctx = document.getElementById("domainCountChart").getContext("2d");
-          domainCountChart = new Chart(ctx, {
+          const labels = Object.keys(cdnTypeCounts);
+          const data = labels.map(l => cdnTypeCounts[l]);
+          const ctx = document.getElementById("cdnTypeChart").getContext("2d");
+          cdnTypeChart = new Chart(ctx, {
             type: "bar",
             data: {
-              labels: top10,
+              labels,
               datasets: [{
-                label: "Top 10 Domains (Active URLs)",
+                label: "CDN Type Distribution",
                 data,
-                backgroundColor: "#2980b9"
+                backgroundColor: "#27ae60"
               }]
             },
             options: {
               responsive: true,
-              indexAxis: "y",
               plugins: {
-                legend: { display: false },
-                title: { display: true, text: "Top 10 Domains by Active URLs" }
+                title: { display: true, text: "CDN Type Usage" },
+                legend: { display: false }
               },
               scales: {
-                y: { beginAtZero: true },
+                y: { beginAtZero: true }
               }
             }
           });
         }
 
+        // Function: buildDomainCountChart
+        // Purpose: Create a chart showing the top 10 domains based on active URLs.
+        function buildDomainCountChart(httpxData) {
+        const domainCount = {};
+        httpxData.forEach(h => {
+          if (h.url && h.url !== "N/A") {
+            const domain = (h.input || "").split(":")[0];
+            domainCount[domain] = (domainCount[domain] || 0) + 1;
+          }
+        });
+
+        const sortedDomains = Object.keys(domainCount).sort(
+          (a, b) => domainCount[b] - domainCount[a]
+        );
+        const top10 = sortedDomains.slice(0, 10);
+        const data = top10.map(d => domainCount[d]);
+        const ctx = document.getElementById("domainCountChart").getContext("2d");
+
+        domainCountChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: top10,
+            datasets: [
+              {
+                label: "Top 10 Domains (Active URLs)",
+                data,
+                backgroundColor: "#2980b9"
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            indexAxis: "x",
+            plugins: {
+              legend: { display: false },
+              title: {
+                display: true,
+                text: "Top 10 Domains by Active URLs"
+              }
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                ticks: {
+                  stepSize: 1,     // Ensure integer increments
+                  maxRotation: 100,
+                  minRotation: 70
+                }
+              }
+            }
+          }
+        });
+      }
+
+        // Function: buildLoginBarChart
+        // Purpose: Create a bar chart to show the count of endpoints with and without login interfaces.
         function buildLoginBarChart(endpointsCount, loginFoundCount) {
           const canvas = document.getElementById("loginBarChart");
           if (!canvas) return;
@@ -1441,6 +1595,8 @@ build_html_report() {
           });
         }
 
+        // Function: buildCertExpiryChart
+        // Purpose: Create a chart to show certificate expiry in the next 7, 14, and 30 days.
         function buildCertExpiryChart(secData) {
           let now = new Date();
           let exp7 = 0, exp14 = 0, exp30 = 0;
@@ -1482,6 +1638,8 @@ build_html_report() {
           });
         }
 
+        // Function: buildTLSUsageChart
+        // Purpose: Create a chart showing usage of different SSL/TLS versions.
         function buildTLSUsageChart(secData) {
           const tlsCounts = {};
           secData.forEach(item => {
@@ -1515,46 +1673,94 @@ build_html_report() {
           });
         }
 
-        function buildHeadersChart(httpxData, secMapDomain) {
-          let hstsSet = 0, hstsMissing = 0;
-          let xfoSet = 0, xfoMissing = 0;
-          let cspSet = 0, cspMissing = 0;
-          httpxData.forEach(record => {
-            if (record.status_code === 200) {
-              const domain = (record.input || "").split(":")[0];
-              const sec = secMapDomain[domain] || {};
-              const hsts = (sec["Strict-Transport-Security"] || "").trim();
-              const xfo  = (sec["X-Frame-Options"] || "").trim();
-              const csp  = (sec["Content-Security-Policy"] || "").trim();
-              if (hsts) hstsSet++; else hstsMissing++;
-              if (xfo)  xfoSet++;  else xfoMissing++;
-              if (csp)  cspSet++;  else cspMissing++;
-            }
-          });
-          const ctx = document.getElementById("headersChart").getContext("2d");
-          headersChart = new Chart(ctx, {
-            type: "bar",
-            data: {
-              labels: ["HSTS", "X-Frame Options", "CSP"],
-              datasets: [
-                { label: "Present", data: [hstsSet, xfoSet, cspSet], backgroundColor: "#2ecc71" },
-                { label: "Missing", data: [hstsMissing, xfoMissing, cspMissing], backgroundColor: "#e74c3c" }
-              ]
-            },
-            options: {
-              responsive: true,
-              plugins: {
-                title: { display: true, text: "Security Headers (Status 200)" },
-                tooltip: { mode: "index", intersect: false }
-              },
-              scales: {
-                x: { stacked: true },
-                y: { stacked: true, beginAtZero: true }
-              }
-            }
-          });
-        }
+        // Function: buildHeadersChart
+  // Purpose: Create a chart comparing the presence and absence of all key security headers.
+  // Headers evaluated: Strict-Transport-Security (HSTS), X-Frame-Options, Content-Security-Policy (CSP),
+  // X-XSS-Protection, Referrer-Policy, and Permissions-Policy.
+  function buildHeadersChart(httpxData, secMapUrlParam) {
+    let hstsPresent = 0, hstsMissing = 0;
+    let xfoPresent = 0, xfoMissing = 0;
+    let cspPresent = 0, cspMissing = 0;
+    let xssPresent = 0, xssMissing = 0;
+    let rpPresent = 0, rpMissing = 0;
+    let ppPresent = 0, ppMissing = 0;
 
+    httpxData.forEach(record => {
+      // Get the domain from the input field (split by ":" in case port is appended)
+      const sec = secMapUrlParam[record.url] || {};
+
+
+      // For each header, trim and verify that its value is not empty, "N/A", or "false"
+      const hsts = (sec["Strict-Transport-Security"] || "").trim();
+      if (hsts && hsts.toLowerCase() !== "n/a" && hsts.toLowerCase() !== "false") {
+        hstsPresent++;
+      } else {
+        hstsMissing++;
+      }
+
+      const xfo = (sec["X-Frame-Options"] || "").trim();
+      if (xfo && xfo.toLowerCase() !== "n/a" && xfo.toLowerCase() !== "false") {
+        xfoPresent++;
+      } else {
+        xfoMissing++;
+      }
+
+      const csp = (sec["Content-Security-Policy"] || "").trim();
+      if (csp && csp.toLowerCase() !== "n/a" && csp.toLowerCase() !== "false") {
+        cspPresent++;
+      } else {
+        cspMissing++;
+      }
+
+      const xss = (sec["X-XSS-Protection"] || "").trim();
+      if (xss && xss.toLowerCase() !== "n/a" && xss.toLowerCase() !== "false") {
+        xssPresent++;
+      } else {
+        xssMissing++;
+      }
+
+      const rp = (sec["Referrer-Policy"] || "").trim();
+      if (rp && rp.toLowerCase() !== "n/a" && rp.toLowerCase() !== "false") {
+        rpPresent++;
+      } else {
+        rpMissing++;
+      }
+
+      const pp = (sec["Permissions-Policy"] || "").trim();
+      if (pp && pp.toLowerCase() !== "n/a" && pp.toLowerCase() !== "false") {
+        ppPresent++;
+      } else {
+        ppMissing++;
+      }
+    });
+
+    const ctx = document.getElementById("headersChart").getContext("2d");
+    headersChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: ["HSTS", "X-Frame-Options", "CSP", "X-XSS-Protection", "Referrer-Policy", "Permissions-Policy"],
+        datasets: [
+          { label: "Present", data: [hstsPresent, xfoPresent, cspPresent, xssPresent, rpPresent, ppPresent], backgroundColor: "#2ecc71" },
+          { label: "Missing", data: [hstsMissing, xfoMissing, cspMissing, xssMissing, rpMissing, ppMissing], backgroundColor: "#e74c3c" }
+        ]
+      },
+      options: {
+        responsive: true,
+        indexAxis: "x",
+        plugins: {
+          title: { display: true, text: "Security Headers" },
+          tooltip: { mode: "index", intersect: false }
+        },
+        scales: {
+          x: { stacked: true },
+          y: { stacked: true, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+        // Function: buildEmailSecChart
+        // Purpose: Create a chart showing the presence or absence of email security records.
         function buildEmailSecChart(secData) {
           let spfSet = 0, spfMissing = 0;
           let dkimSet = 0, dkimMissing = 0;
@@ -1591,6 +1797,8 @@ build_html_report() {
           });
         }
 
+        // Function: buildCDNChart
+        // Purpose: Create a chart showing CDN usage statistics.
         function buildCDNChart(httpxData) {
           const cdnCounts = {};
           httpxData.forEach(record => {
@@ -1608,7 +1816,7 @@ build_html_report() {
             data: {
               labels,
               datasets: [{
-                label: "CDN Usage Distribution",
+                label: "CDN Usage",
                 data,
                 backgroundColor: "#3498db"
               }]
@@ -1626,6 +1834,8 @@ build_html_report() {
           });
         }
 
+        // Function: buildServiceChart
+        // Purpose: Create a chart showing the top 10 open services from port scanning.
         function buildServiceChart(naabuData) {
           const naabuMap = {};
           const serviceCount = {};
@@ -1633,6 +1843,7 @@ build_html_report() {
             const domain = n.host;
             const port = n.port;
             let service = "Unknown";
+            // Map well-known ports to their corresponding service names.
             const portServiceDB = {
               "7":"Echo","9":"Discard","13":"Daytime","21":"FTP","22":"SSH","23":"Telnet",
               "25":"SMTP","26":"SMTP","37":"Time","53":"DNS","79":"Finger","80":"HTTP",
@@ -1687,6 +1898,8 @@ build_html_report() {
           });
         }
 
+        // Function: buildColleagueChart
+        // Purpose: Create a chart comparing endpoints intended for employees versus customers.
         function buildColleagueChart(colleagueData) {
           const countEmployee = colleagueData.filter(x => x.colleague_endpoint === "Yes").length;
           const countCustomer = colleagueData.length - countEmployee;
@@ -1714,8 +1927,12 @@ build_html_report() {
           });
         }
 
+        // Global array to store table row elements and additional data.
         let rowDataStore = [];
 
+        // Function: buildTableRows
+        // Purpose: Build table rows using combined data from DNS and HTTP results.
+        // It also calculates risk scores using computePriority() and applies tooltips.
         function buildTableRows(combinedData, secMapDomain, secMapUrl, loginMap, apiMap, colleagueMap) {
           allTableRows = [];
           rowDataStore = [];
@@ -1739,38 +1956,44 @@ build_html_report() {
                 const sslVersion = urlSec["SSL/TLS Version"] || "N/A";
                 const certExpiry = urlSec["Cert Expiry Date"] || "N/A";
                 const sslIssuer  = urlSec["SSL/TLS Issuer"] || "N/A";
-                const stsFlag = (urlSec["Strict-Transport-Security"] || "").trim() !== "" ? "True" : "False";
-                const xfoFlag = (urlSec["X-Frame-Options"] || "").trim() !== "" ? "True" : "False";
-                const cspFlag = (urlSec["Content-Security-Policy"] || "").trim() !== "" ? "True" : "False";
-                const xssFlag = (urlSec["X-XSS-Protection"] || "").trim() !== "" ? "True" : "False";
-                const rpFlag  = (urlSec["Referrer-Policy"] || "").trim() !== "" ? "True" : "False";
-                const ppFlag  = (urlSec["Permissions-Policy"] || "").trim() !== "" ? "True" : "False";
+                const stsFlag = (urlSec["Strict-Transport-Security"] || "").trim();
+                const xfoFlag = (urlSec["X-Frame-Options"] || "").trim();
+                const cspFlag = (urlSec["Content-Security-Policy"] || "").trim();
+                const xssFlag = (urlSec["X-XSS-Protection"] || "").trim();
+                const rpFlag  = (urlSec["Referrer-Policy"] || "").trim();
+                const ppFlag  = (urlSec["Permissions-Policy"] || "").trim();
                 const techArr = Array.isArray(h.tech) ? h.tech : [];
                 const sanitizedTech = techArr.map(item => item.replace(/\r?\n|\r/g, " ").trim());
                 const techCount = sanitizedTech.length;
-                const prioScore = computePriority({
+
+                // Calculate the risk score and get debugging reasons.
+                const { score, debug } = computePriority({
                   purpose: colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended",
                   url: h.url,
                   loginFound: loginMap[h.url] || "No",
                   statusCode: h.status_code,
                   sslVersion,
                   certExpiry,
-                  sts: urlSec["Strict-Transport-Security"] || "",
-                  xfo: urlSec["X-Frame-Options"] || "",
-                  csp: urlSec["Content-Security-Policy"] || "",
-                  xss: urlSec["X-XSS-Protection"] || "",
-                  rp:  urlSec["Referrer-Policy"] || "",
-                  pp:  urlSec["Permissions-Policy"] || "",
+                  sts: stsFlag,
+                  xfo: xfoFlag,
+                  csp: cspFlag,
+                  xss: xssFlag,
+                  rp:  rpFlag,
+                  pp:  ppFlag,
                   openPortsCount,
                   techCount
                 });
-                if (prioScore < minRiskScore) minRiskScore = prioScore;
-                if (prioScore > maxRiskScore) maxRiskScore = prioScore;
-                riskScores[domain] = prioScore;
-                rowDataStore.push({ domain, prioScore });
+
+                // Update global min and max risk scores for dynamic coloring.
+                if (score < minRiskScore) minRiskScore = score;
+                if (score > maxRiskScore) maxRiskScore = score;
+                riskScores[domain] = score;
+                rowDataStore.push({ domain, prioScore: score });
+
+                // Create a new table row and populate its cells.
                 const row = document.createElement("tr");
                 row.innerHTML = `
-                  <td><!-- color assigned in second pass --></td>
+                  <td><!-- risk score cell; we set text + tooltip below --></td>
                   <td>${domain}</td>
                   <td>${colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended"}</td>
                   <td>${formatCell(dnsResolvers)}</td>
@@ -1796,21 +2019,28 @@ build_html_report() {
                   <td>${sslVersion}</td>
                   <td>${certExpiry}</td>
                   <td>${sslIssuer}</td>
-                  <td>${stsFlag}</td>
-                  <td>${xfoFlag}</td>
-                  <td>${cspFlag}</td>
-                  <td>${xssFlag}</td>
-                  <td>${rpFlag}</td>
-                  <td>${ppFlag}</td>
+                  <td>${stsFlag ? "True" : "False"}</td>
+                  <td>${xfoFlag ? "True" : "False"}</td>
+                  <td>${cspFlag ? "True" : "False"}</td>
+                  <td>${xssFlag ? "True" : "False"}</td>
+                  <td>${rpFlag ? "True" : "False"}</td>
+                  <td>${ppFlag ? "True" : "False"}</td>
                   <td>${
                     (window.naabuMap && window.naabuMap[domain])
                     ? window.naabuMap[domain].map(p => `${p.port} (${p.service})`).join("<br>")
                     : "N/A"
                   }</td>
                 `;
+                // Add the new row to the global list.
                 allTableRows.push(row);
+
+                // Set the risk score cell's text and add a tooltip with debug reasons.
+                const scoreCell = row.getElementsByTagName("td")[0];
+                scoreCell.innerText = score;
+                scoreCell.title = debug.join("\n");
               });
             } else {
+              // If there is no HTTP data, create a default row.
               const row = document.createElement("tr");
               row.innerHTML = `
                 <td>N/A</td>
@@ -1852,28 +2082,24 @@ build_html_report() {
           });
         }
 
+        // Function: finalizeColors
+        // Purpose: Apply dynamic background colors to risk score cells based on their value.
         function finalizeColors() {
           allTableRows.forEach(row => {
             const cells = row.getElementsByTagName("td");
             const scoreCell = cells[0];
-            const domainCell = cells[1];
-            const domain = domainCell.innerText.trim();
             if (scoreCell.innerText === "N/A") {
               return;
             }
-            const entry = rowDataStore.find(r => r.domain === domain);
-            if (!entry) {
-              scoreCell.innerText = "N/A";
-              return;
-            }
-            const prioScore = entry.prioScore;
-            scoreCell.innerText = prioScore;
+            const prioScore = parseInt(scoreCell.innerText, 10) || 0;
             const color = getDynamicColor(prioScore, minRiskScore, maxRiskScore);
             scoreCell.style.backgroundColor = color;
             scoreCell.style.color = "#fff";
           });
         }
 
+        // Function: getFilteredRows
+        // Purpose: Filter table rows based on search query and each column's filter dropdown.
         function getFilteredRows() {
           const query = document.getElementById("searchBox").value.toLowerCase();
           const filters = {
@@ -1949,6 +2175,7 @@ build_html_report() {
             if (query && !row.innerText.toLowerCase().includes(query)) return false;
             return true;
           });
+          // Sort rows by risk score (ascending or descending)
           filtered.sort((a, b) => {
             const scoreA = parseInt(a.cells[0].innerText) || 0;
             const scoreB = parseInt(b.cells[0].innerText) || 0;
@@ -1957,6 +2184,8 @@ build_html_report() {
           return filtered;
         }
 
+        // Function: renderTable
+        // Purpose: Render the filtered rows in the table body with pagination.
         function renderTable(filteredRows) {
           const tBody = document.getElementById("report-table-body");
           tBody.innerHTML = "";
@@ -1971,6 +2200,8 @@ build_html_report() {
           renderPaginationControls(filteredRows.length);
         }
 
+        // Function: renderPaginationControls
+        // Purpose: Create and display pagination controls below the table.
         function renderPaginationControls(totalRows) {
           const paginationDiv = document.getElementById("paginationControls");
           paginationDiv.innerHTML = "";
@@ -2003,11 +2234,15 @@ build_html_report() {
           paginationDiv.appendChild(nextBtn);
         }
 
+        // Function: onFilterChange
+        // Purpose: Reset pagination and re-render table rows when a filter changes.
         function onFilterChange() {
           currentPage = 1;
           renderTable(getFilteredRows());
         }
 
+        // Function: updateRowsPerPage
+        // Purpose: Update the global rowsPerPage based on the dropdown and re-render the table.
         function updateRowsPerPage() {
           const select = document.getElementById("rowsPerPageSelect");
           const value = select.value;
@@ -2017,6 +2252,8 @@ build_html_report() {
           renderTable(getFilteredRows());
         }
 
+        // Function: populateColumnFilters
+        // Purpose: Populate filter dropdowns for each table column with unique values.
         function populateColumnFilters() {
           const uniqueCols = Array.from({ length: 33 }, () => new Set());
           allTableRows.forEach((row) => {
@@ -2079,20 +2316,7 @@ build_html_report() {
           fillSelectOptions("ports-services-filter", [...uniqueCols[32]]);
         }
 
-        function attachFilterEvents() {
-          [
-            "priority-filter","domain-filter","purpose-filter","resolvers-filter","arecords-filter","dnsstatus-filter",
-            "cdnname-filter","cdntype-filter","port-filter","url-filter","redirect-filter","title-filter",
-            "webserver-filter","login-filter","api-endpoint-filter","tech-filter","statuscode-filter","contentlength-filter",
-            "cdn-filter","spf-filter","dkim-filter","dmarc-filter","dnssec-filter","sslversion-filter","certexpiry-filter",
-            "sslissuer-filter","sts-filter","xfo-filter","csp-filter","xss-filter","rp-filter","pp-filter",
-            "ports-services-filter"
-          ].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) el.addEventListener("change", onFilterChange);
-          });
-        }
-
+        // Attach event listeners to the search box, rows per page dropdown, and risk sort toggle.
         document.getElementById("searchBox").addEventListener("input", onFilterChange);
         document.getElementById("rowsPerPageSelect").addEventListener("change", updateRowsPerPage);
         document.getElementById("riskSortToggle").addEventListener("click", function() {
@@ -2101,6 +2325,8 @@ build_html_report() {
           renderTable(getFilteredRows());
         });
 
+        // Async function: loadData
+        // Purpose: Load JSON data from various files, build charts, table rows, and render the HTML report.
         async function loadData() {
           try {
             const [dnsxRes, naabuRes, httpxRes, loginRes, secRes, apiRes, colleagueRes] = await Promise.all([
@@ -2120,6 +2346,7 @@ build_html_report() {
             const apiData       = await apiRes.json().catch(() => []);
             const colleagueData = await colleagueRes.json().catch(() => []);
 
+            // Build security maps for domains and URLs.
             const secMapDomain = {};
             const secMapUrl = {};
             secData.forEach(item => {
@@ -2131,21 +2358,25 @@ build_html_report() {
               }
             });
 
+            // Map login detection results.
             const loginMap = {};
             loginData.forEach(item => {
               loginMap[item.url] = item.login_detection.login_found;
             });
 
+            // Map API endpoint identification.
             const apiMap = {};
             apiData.forEach(item => {
               apiMap[item.domain] = item.api_endpoint;
             });
 
+            // Map colleague endpoint identification.
             const colleagueMap = {};
             colleagueData.forEach(item => {
               colleagueMap[item.domain] = item.colleague_endpoint;
             });
 
+            // Calculate summary metrics.
             const endpointsCount = httpxData.length;
             const loginFoundCount = loginData.filter(item => item.login_detection.login_found === "Yes").length;
             const liveSubs = dnsxData.filter(d => d.status_code === "NOERROR").length;
@@ -2153,6 +2384,7 @@ build_html_report() {
             dnsxData.forEach(d => { if (d.host) domainSet.add(d.host); });
             const totalSubdomains = domainSet.size;
 
+            // Build summary scoreboard and charts.
             buildScoreboard({ totalSubdomains, liveSubs, totalHttpx: endpointsCount, loginFoundCount });
             buildLoginBarChart(endpointsCount, loginFoundCount);
 
@@ -2165,7 +2397,7 @@ build_html_report() {
             const priorityCount = {};
             httpxData.forEach(h => {
               const domain = (h.input || "").split(":")[0];
-              const prioScore = computePriority({
+              const { score } = computePriority({
                 purpose: colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended",
                 url: h.url,
                 loginFound: loginMap[h.url] || "No",
@@ -2181,11 +2413,11 @@ build_html_report() {
                 openPortsCount: 0,
                 techCount: (h.tech && h.tech.length) ? h.tech.length : 0
               });
-              if (!priorityCount[domain] || prioScore > priorityCount[domain]) {
-                priorityCount[domain] = prioScore;
+              if (!priorityCount[domain] || score > priorityCount[domain]) {
+                priorityCount[domain] = score;
               }
-              if (prioScore < minRiskScore) minRiskScore = prioScore;
-              if (prioScore > maxRiskScore) maxRiskScore = prioScore;
+              if (score < minRiskScore) minRiskScore = score;
+              if (score > maxRiskScore) maxRiskScore = score;
             });
 
             const portCount = {};
@@ -2216,6 +2448,7 @@ build_html_report() {
             buildServiceChart(naabuData);
             buildColleagueChart(colleagueData);
 
+            // Combine DNS and HTTP data for table rows.
             const combinedData = {};
             dnsxData.forEach(d => {
               combinedData[d.host] = { dns: d, http: [] };
@@ -2226,12 +2459,17 @@ build_html_report() {
               combinedData[domain].http.push(h);
             });
 
+            // Build table rows, apply risk colors, populate filter dropdowns,
+            // add event listeners for filter changes, and render the table.
             buildTableRows(combinedData, secMapDomain, secMapUrl, loginMap, apiMap, colleagueMap);
             finalizeColors();
             populateColumnFilters();
-            attachFilterEvents();
+            document.querySelectorAll('#filter-row select').forEach(select => {
+              select.addEventListener('change', onFilterChange);
+            });
             renderTable(getFilteredRows());
 
+            // For certificate and TLS charts, filter valid domains from httpx.
             const validDomains = new Set();
             httpxData.forEach(h => {
               if (h.url && h.url !== "N/A") {
@@ -2248,7 +2486,7 @@ build_html_report() {
               document.getElementById("tlsUsageChart").parentElement.innerHTML =
                 "<p>No valid website data available for TLS usage analysis.</p>";
             }
-            buildHeadersChart(httpxData, secMapDomain);
+            buildHeadersChart(httpxData, secMapUrl); // pass secMapUrl as the second arg
             buildEmailSecChart(secData);
             buildCDNChart(httpxData);
             buildCDNTypeChart(httpxData);
@@ -2258,6 +2496,7 @@ build_html_report() {
           }
         }
 
+        // Kick off the data loading and report rendering process.
         loadData();
       </script>
     </body>
@@ -2268,7 +2507,8 @@ EOF
 }
 
 ##############################################
-# Show final summary table
+# Function: show_summary
+# Purpose: Display a final summary table of the recon results.
 ##############################################
 show_summary() {
   local combined_pre_dedup=$((CHAOS_COUNT + SUBFINDER_COUNT + ASSETFINDER_COUNT + CRT_COUNT))
@@ -2289,7 +2529,8 @@ show_summary() {
 }
 
 ##############################################
-# Main Execution
+# Main Execution Function
+# Purpose: Sequentially execute all recon functions, build the report, and show summary.
 ##############################################
 main() {
   run_chaos
@@ -2297,6 +2538,7 @@ main() {
   run_assetfinder
   run_crtsh
   info "Merging subdomains..."
+  # Append each primary domain and its www subdomain to ALL_TEMP.
   while read -r domain; do
     echo "$domain" >> "$ALL_TEMP"
     echo "www.$domain" >> "$ALL_TEMP"
@@ -2314,4 +2556,5 @@ main() {
   show_summary
 }
 
+# Start the main process.
 main
