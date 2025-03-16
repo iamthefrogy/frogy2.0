@@ -120,9 +120,10 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Completed ✅ ~~Enhance prioritisation for target picking. (Scoring based on management ports, login found, customer vs colleague intended apps, security headers not set, ssl/tls usage, etc.)~~
 - Completed ✅ ~~Implement parallel run, time out functionality.~~
 - Completed ✅ ~~Scan SSL/TLS for the url:port pattern and not just domain:443 pattern.-~~
-- Identified abandoned and unwanted applications.
-- Provide export option for CSV and PDF if feasible.
+- Create riskdebug.json file which willp provide info on how each asset risk is calculated.
+- Generate CSV output same as HTML table.
 - Solve screen jerk issue.
+- Identified abandoned and unwanted applications.
 
 ## Installation
 
