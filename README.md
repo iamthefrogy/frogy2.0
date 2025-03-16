@@ -121,7 +121,7 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Completed ✅ ~~Implement parallel run, time out functionality.~~
 - Completed ✅ ~~Scan SSL/TLS for the url:port pattern and not just domain:443 pattern.-~~
 - Completed ✅ ~~Using mouseover on the attack surface column's score, you can now know why and how score is calculated-~~
-- Generate CSV output same as HTML table.
+- Completed ✅ ~~Generate CSV output same as HTML table.~~
 - Solve screen jerk issue.
 - Identified abandoned and unwanted applications.
 
