@@ -111,7 +111,6 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Completed ✅ ~~Add more analytics based on new data.~~
 - Completed ✅ ~~Identify login portals.~~
 - Completed ✅ ~~Basic dashboard/analytics if possible.~~
-- Completed ✅ ~~Identifying horizontal and vertical both domains.~~
 - Completed ✅ ~~Display all open ports in one of the table columns.~~
 - Completed ✅ ~~Pagination to access information faster without choking or lagging on the home page.~~
 - Completed ✅ ~~Change font color in darkmode.~~
