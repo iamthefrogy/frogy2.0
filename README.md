@@ -121,6 +121,7 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Completed ✅ ~~Scan SSL/TLS for the url:port pattern and not just domain:443 pattern.-~~
 - Completed ✅ ~~Using mouseover on the attack surface column's score, you can now know why and how score is calculated-~~
 - Completed ✅ ~~Generate CSV output same as HTML table.~~
+- Completed ✅ ~~Self-contained HTML output is generated now. So no need to host a file on web server to access results.~~
 - Solve screen jerk issue.
 - Identified abandoned and unwanted applications.
 
@@ -137,10 +138,6 @@ chmod +x install.sh
 chmod +x frogy.sh
 ./frogy.sh domains.txt
 ```
-
-## Remember
-
-The report.html file can be accessed only if you run a local web server (e.g., python3.13 -m http.server 1111) and then access the html report via URL (e.g., http://localhost:1111/. If you directly open it from your folder, it will show blank content. Reason for that it, when you use a web server, it dynamically fetches all data from all json output stored in that folder.
 
 ## Video Demo
 https://www.youtube.com/watch?v=LHlU4CYNj1M
