@@ -1,0 +1,155 @@
+// Build security maps for domains and URLs.
+              const secMapDomain = {};
+              const secMapUrl = {};
+              secData.forEach(item => {
+                if (item.Domain && !secMapDomain[item.Domain]) {
+                  secMapDomain[item.Domain] = item;
+                }
+                if (item.URL) {
+                  secMapUrl[item.URL] = item;
+                }
+              });
+
+              // Map login detection results.
+              const loginMap = {};
+              loginData.forEach(item => {
+                loginMap[item.url] = item.login_detection.login_found;
+              });
+
+              // Map API endpoint identification.
+              const apiMap = {};
+              apiData.forEach(item => {
+                apiMap[item.domain] = item.api_endpoint;
+              });
+
+              // Map colleague endpoint identification.
+              const colleagueMap = {};
+              colleagueData.forEach(item => {
+                colleagueMap[item.domain] = item.colleague_endpoint;
+              });
+
+              // Calculate summary metrics.
+              const endpointsCount = httpxData.length;
+              const loginFoundCount = loginData.filter(item => item.login_detection.login_found === "Yes").length;
+              const liveSubs = dnsxData.filter(d => d.status_code === "NOERROR").length;
+              const domainSet = new Set();
+              dnsxData.forEach(d => { if (d.host) domainSet.add(d.host); });
+              const totalSubdomains = domainSet.size;
+
+              // Build summary scoreboard and charts.
+              buildScoreboard({ totalSubdomains, liveSubs, totalHttpx: endpointsCount, loginFoundCount });
+              buildLoginBarChart(endpointsCount, loginFoundCount);
+
+              const statusCount = {};
+              httpxData.forEach(h => {
+                const code = h.status_code || 0;
+                statusCount[code] = (statusCount[code] || 0) + 1;
+              });
+
+              const priorityCount = {};
+              httpxData.forEach(h => {
+                const domain = (h.input || "").split(":")[0];
+                const { score } = computePriority({
+                  purpose: colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended",
+                  url: h.url,
+                  loginFound: loginMap[h.url] || "No",
+                  statusCode: h.status_code,
+                  sslVersion: secMapDomain[domain] ? secMapDomain[domain]["SSL/TLS Version"] : "N/A",
+                  certExpiry: secMapDomain[domain] ? secMapDomain[domain]["Cert Expiry Date"] : "N/A",
+                  sts: secMapDomain[domain] ? secMapDomain[domain]["Strict-Transport-Security"] : "",
+                  xfo: secMapDomain[domain] ? secMapDomain[domain]["X-Frame-Options"] : "",
+                  csp: secMapDomain[domain] ? secMapDomain[domain]["Content-Security-Policy"] : "",
+                  xss: secMapDomain[domain] ? secMapDomain[domain]["X-XSS-Protection"] : "",
+                  rp:  secMapDomain[domain] ? secMapDomain[domain]["Referrer-Policy"] : "",
+                  pp:  secMapDomain[domain] ? secMapDomain[domain]["Permissions-Policy"] : "",
+                  openPortsCount: 0,
+                  techCount: (h.tech && h.tech.length) ? h.tech.length : 0
+                });
+                if (!priorityCount[domain] || score > priorityCount[domain]) {
+                  priorityCount[domain] = score;
+                }
+                if (score < minRiskScore) minRiskScore = score;
+                if (score > maxRiskScore) maxRiskScore = score;
+              });
+
+              const portCount = {};
+              naabuData.forEach(n => {
+                const p = n.port || "unknown";
+                portCount[p] = (portCount[p] || 0) + 1;
+              });
+
+              const techCount = {};
+              httpxData.forEach(h => {
+                if (Array.isArray(h.tech)) {
+                  h.tech.forEach(t => {
+                    techCount[t] = (techCount[t] || 0) + 1;
+                  });
+                }
+              });
+
+              buildCharts({
+                statusCount,
+                priorityCount,
+                portCount,
+                techCount,
+                totalSubdomains,
+                liveSubs,
+                endpointsCount
+              });
+              buildDomainCountChart(httpxData);
+              buildServiceChart(naabuData);
+              buildColleagueChart(colleagueData);
+
+              // Combine DNS and HTTP data for table rows.
+              const combinedData = {};
+              dnsxData.forEach(d => {
+                combinedData[d.host] = { dns: d, http: [] };
+              });
+              httpxData.forEach(h => {
+                const domain = (h.input || "").split(":")[0];
+                if (!combinedData[domain]) combinedData[domain] = { dns: null, http: [] };
+                combinedData[domain].http.push(h);
+              });
+
+              // Build table rows, apply risk colors, populate filter dropdowns,
+              // add event listeners for filter changes, and render the table.
+              buildTableRows(combinedData, secMapDomain, secMapUrl, loginMap, apiMap, colleagueMap);
+              finalizeColors();
+              populateColumnFilters();
+              document.querySelectorAll('#filter-row select').forEach(select => {
+                select.addEventListener('change', onFilterChange);
+              });
+              renderTable(getFilteredRows());
+
+              // For certificate and TLS charts, filter valid domains from httpx.
+              const validDomains = new Set();
+              httpxData.forEach(h => {
+                if (h.url && h.url !== "N/A") {
+                  validDomains.add((h.input || "").split(":")[0]);
+                }
+              });
+              const secDataValid = secData.filter(item => validDomains.has(item.Domain));
+              if (secDataValid.length > 0) {
+                buildCertExpiryChart(secDataValid);
+                buildTLSUsageChart(secDataValid);
+              } else {
+                document.getElementById("certExpiryChart").parentElement.innerHTML =
+                  "<p>No valid website data available for certificate analysis.</p>";
+                document.getElementById("tlsUsageChart").parentElement.innerHTML =
+                  "<p>No valid website data available for TLS usage analysis.</p>";
+              }
+              buildHeadersChart(httpxData, secMapUrl); // pass secMapUrl as the second arg
+              buildEmailSecChart(secData);
+              buildCDNChart(httpxData);
+              buildCDNTypeChart(httpxData);
+              updateChartTheme();
+            } catch (err) {
+              console.error("Error loading data or building report:", err);
+            }
+          }
+
+          // Kick off the data loading and report rendering process.
+          loadData();
+        </script>
+      </body>
+    </html>
