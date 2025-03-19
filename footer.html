@@ -138,10 +138,40 @@
                 document.getElementById("tlsUsageChart").parentElement.innerHTML =
                   "<p>No valid website data available for TLS usage analysis.</p>";
               }
+
+              // --- Add Hosting Provider (Nameserver) Summary Code ---
+              // Extract NS records from secData, filter out invalid values,
+              // split by whitespace and trim each record.
+              const allNsRecords = secData
+                .map(item => item["NS Records"]) // get the NS records field
+                .filter(ns => ns && ns !== "No NS records found" && ns !== "N/A") // exclude invalid ones
+                .flatMap(ns => ns.split(/\s+/)) // split by any whitespace (space/newline)
+                .map(ns => ns.trim())
+                .filter(ns => ns); // remove any empty strings
+
+              // Create a frequency count of each NS record.
+              const nsFrequency = allNsRecords.reduce((acc, ns) => {
+                acc[ns] = (acc[ns] || 0) + 1;
+                return acc;
+              }, {});
+
+              // (Optional) If you want to use a top 10 + Other approach:
+              const sortedNs = Object.entries(nsFrequency).sort((a, b) => b[1] - a[1]);
+              const top10 = sortedNs.slice(0, 10);
+              const others = sortedNs.slice(10);
+              const otherCount = others.reduce((sum, [, count]) => sum + count, 0);
+              const nsLabels = top10.map(([ns]) => ns);
+              const nsData = top10.map(([, count]) => count);
+              if (otherCount > 0) {
+                nsLabels.push("Other");
+                nsData.push(otherCount);
+              }
+
+              // Now call your new chart builder function for Hosting Provider Summary
+              buildNSChart(nsLabels, nsData);
               buildHeadersChart(httpxData, secMapUrl); // pass secMapUrl as the second arg
               buildEmailSecChart(secData);
-              buildCDNChart(httpxData);
-              buildCDNTypeChart(httpxData);
+              buildCDNStackedChart(httpxData);
               updateChartTheme();
             } catch (err) {
               console.error("Error loading data or building report:", err);
