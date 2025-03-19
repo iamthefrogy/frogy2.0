@@ -322,10 +322,10 @@
               <canvas id="emailSecChart"></canvas>
             </div>
             <div class="chart-container">
-              <canvas id="cdnChart"></canvas>
+              <canvas id="cdnStackedChart"></canvas>
             </div>
             <div class="chart-container">
-              <canvas id="cdnTypeChart"></canvas>
+              <canvas id="nsChart"></canvas>
             </div>
           </div>
 
@@ -333,6 +333,7 @@
           <div class="table-top-controls">
             <input type="text" id="searchBox" placeholder="Filter table (e.g. domain, status code, tech)..." />
             <div class="hint">
+
             <h4>Mouseover to Risk Score to Evaluate Reasons for Scoring</h2>
             </div>
             <div class="table-controls">
@@ -470,6 +471,8 @@
           let minRiskScore = Infinity;
           let maxRiskScore = -Infinity;
           let riskSortOrder = "desc";
+          let cdnStackedChart;
+
 
           // --- Begin CSV Export Code ---
           // Function to trigger CSV download from a CSV string
@@ -529,7 +532,7 @@
             const charts = [
               priorityChart, domainCountChart, statusCodeChart, loginChart,
               portChart, techChart, certExpiryChart, tlsUsageChart,
-              headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart, cdnTypeChart
+              headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart, cdnTypeChart, cdnStackedChart
             ];
             charts.forEach(chart => {
               if (chart) {
@@ -609,7 +612,7 @@
               if (/^TLSv(1\.2|1\.3)$/i.test(cleanVersion)) {
                 reasons.push("+0 (Version of TLS is latest (1.2 or 1.3))");
               } else if (/^TLSv(1\.0|1\.1)$/i.test(cleanVersion)) {
-                score += 1;
+                score += 2;
                 reasons.push("+1 (TLSv1.0 or TLSv1.1)");
               } else if (/^SSLv(1\.0|2\.0|3\.0)$/i.test(cleanVersion)) {
                 score += 5;
@@ -619,22 +622,24 @@
               score += 1;
               reasons.push("+1 (no sslVersion reported)");
             }
-
-            // Check certificate expiry; score increases if expiry is soon.
+            // Check certificate expiry; add score if the cert is expired or expires soon.
             if (certExpiry && certExpiry !== "N/A") {
               const expiryDate = new Date(certExpiry);
               const now = new Date();
               const diffDays = (expiryDate - now) / (1000 * 60 * 60 * 24);
               if (!isNaN(diffDays)) {
-                if (diffDays <= 7) {
-                  score += 3;
-                  reasons.push("+3 (cert expires in ≤7 days)");
+                if (diffDays < 0) {
+                  score += 20;
+                  reasons.push("+20 (certificate expired)");
+                } else if (diffDays <= 7) {
+                  score += 10;
+                  reasons.push("+10 (cert expires in ≤7 days)");
                 } else if (diffDays <= 14) {
-                  score += 2;
-                  reasons.push("+2 (cert expires in ≤14 days)");
+                  score += 5;
+                  reasons.push("+5 (cert expires in ≤14 days)");
                 } else if (diffDays <= 30) {
-                  score += 1;
-                  reasons.push("+1 (cert expires in ≤30 days)");
+                  score += 2;
+                  reasons.push("+2 (cert expires in ≤30 days)");
                 }
               }
             }
@@ -860,38 +865,50 @@
             }
           }
 
-          // Function: buildCDNTypeChart
-          // Purpose: Create a bar chart to show distribution of CDN types.
-          function buildCDNTypeChart(httpxData) {
-            const cdnTypeCounts = {};
+          // New function: buildCDNStackedChart
+          // Combines CDN Name and CDN Type into one stacked bar chart.
+          function buildCDNStackedChart(httpxData) {
+            const cdnMap = {};
             httpxData.forEach(record => {
-              let cdnType = record.cdn_type;
-              if (cdnType && cdnType !== "N/A") {
-                cdnType = cdnType.trim();
-                cdnTypeCounts[cdnType] = (cdnTypeCounts[cdnType] || 0) + 1;
-              }
+              let cdnName = record.cdn_name && record.cdn_name.trim();
+              let cdnType = record.cdn_type && record.cdn_type.trim();
+              if (!cdnName || cdnName === "N/A") return;
+              if (!cdnType || cdnType === "N/A") { cdnType = "Unknown"; }
+              if (!cdnMap[cdnName]) { cdnMap[cdnName] = {}; }
+              cdnMap[cdnName][cdnType] = (cdnMap[cdnName][cdnType] || 0) + 1;
             });
-            const labels = Object.keys(cdnTypeCounts);
-            const data = labels.map(l => cdnTypeCounts[l]);
-            const ctx = document.getElementById("cdnTypeChart").getContext("2d");
-            cdnTypeChart = new Chart(ctx, {
+            const cdnNames = Object.keys(cdnMap);
+            const cdnTypesSet = new Set();
+            cdnNames.forEach(name => {
+              Object.keys(cdnMap[name]).forEach(type => cdnTypesSet.add(type));
+            });
+            const cdnTypes = Array.from(cdnTypesSet);
+            const palette = [
+              "#3498db","#1abc9c","#9b59b6","#f1c40f",
+              "#e74c3c","#34495e","#95a5a6","#e67e22",
+              "#2ecc71","#8e44ad","#7f8c8d"
+            ];
+            const datasets = cdnTypes.map((type, idx) => ({
+              label: type,
+              data: cdnNames.map(name => cdnMap[name][type] || 0),
+              backgroundColor: palette[idx % palette.length]
+            }));
+            const ctx = document.getElementById("cdnStackedChart").getContext("2d");
+            cdnStackedChart = new Chart(ctx, {
               type: "bar",
               data: {
-                labels,
-                datasets: [{
-                  label: "CDN Type Distribution",
-                  data,
-                  backgroundColor: "#27ae60"
-                }]
+                labels: cdnNames,
+                datasets: datasets
               },
               options: {
                 responsive: true,
                 plugins: {
-                  title: { display: true, text: "CDN Type Usage" },
-                  legend: { display: false }
+                  title: { display: true, text: "CDN Type vs. CDN Name" },
+                  tooltip: { mode: "index", intersect: false }
                 },
                 scales: {
-                  y: { beginAtZero: true }
+                  x: { stacked: true },
+                  y: { stacked: true, beginAtZero: true }
                 }
               }
             });
@@ -979,17 +996,21 @@
           // Purpose: Create a chart to show certificate expiry in the next 7, 14, and 30 days.
           function buildCertExpiryChart(secData) {
             let now = new Date();
-            let exp7 = 0, exp14 = 0, exp30 = 0;
+            let expired = 0, exp7 = 0, exp14 = 0, exp30 = 0;
             secData.forEach(item => {
               const expiryStr = item["Cert Expiry Date"];
               if (expiryStr && expiryStr !== "N/A") {
                 let expiryDate = new Date(expiryStr);
                 if (!isNaN(expiryDate)) {
                   let diffDays = (expiryDate - now) / (1000 * 60 * 60 * 24);
-                  if (diffDays >= 0) {
-                    if (diffDays <= 7) { exp7++; }
-                    else if (diffDays <= 14) { exp14++; }
-                    else if (diffDays <= 30) { exp30++; }
+                  if (diffDays < 0) {
+                    expired++;
+                  } else if (diffDays <= 7) {
+                    exp7++;
+                  } else if (diffDays <= 14) {
+                    exp14++;
+                  } else if (diffDays <= 30) {
+                    exp30++;
                   }
                 }
               }
@@ -998,11 +1019,11 @@
             certExpiryChart = new Chart(ctx, {
               type: "bar",
               data: {
-                labels: ["Next 7 Days", "Next 14 Days", "Next 30 Days"],
+                labels: ["Expired", "Next 7 Days", "Next 14 Days", "Next 30 Days"],
                 datasets: [{
                   label: "Certs Expiring",
-                  data: [exp7, exp14, exp30],
-                  backgroundColor: ["#e74c3c", "#e67e22", "#3498db"]
+                  data: [expired, exp7, exp14, exp30],
+                  backgroundColor: ["#FF0000", "#e74c3c", "#e67e22", "#3498db"]
                 }]
               },
               options: {
@@ -1017,6 +1038,7 @@
               }
             });
           }
+
 
           // Function: buildTLSUsageChart
           // Purpose: Create a chart showing usage of different SSL/TLS versions.
@@ -1177,43 +1199,6 @@
             });
           }
 
-          // Function: buildCDNChart
-          // Purpose: Create a chart showing CDN usage statistics.
-          function buildCDNChart(httpxData) {
-            const cdnCounts = {};
-            httpxData.forEach(record => {
-              let cdn = record.cdn_name;
-              if (cdn && cdn !== "N/A") {
-                cdn = cdn.trim();
-                cdnCounts[cdn] = (cdnCounts[cdn] || 0) + 1;
-              }
-            });
-            const labels = Object.keys(cdnCounts);
-            const data = labels.map(l => cdnCounts[l]);
-            const ctx = document.getElementById("cdnChart").getContext("2d");
-            cdnChart = new Chart(ctx, {
-              type: "bar",
-              data: {
-                labels,
-                datasets: [{
-                  label: "CDN Usage",
-                  data,
-                  backgroundColor: "#3498db"
-                }]
-              },
-              options: {
-                responsive: true,
-                plugins: {
-                  title: { display: true, text: "CDN Usage" },
-                  legend: { display: false }
-                },
-                scales: {
-                  y: { beginAtZero: true }
-                }
-              }
-            });
-          }
-
           // Function: buildServiceChart
           // Purpose: Create a chart showing the top 10 open services from port scanning.
           function buildServiceChart(naabuData) {
@@ -1306,6 +1291,50 @@
               }
             });
           }
+
+          function buildNSChart(labels, data) {
+            // Trim each label
+            const trimmedLabels = labels.map(label => {
+              const parts = label.split(".").filter(part => part.trim().length > 0);
+              return parts.length > 3 ? parts.slice(-3).join(".") : label;
+            });
+
+            // Only show top 5 elements (assumes your labels/data are already in the desired order)
+            const top5Labels = trimmedLabels.slice(0, 5);
+            const top5Data = data.slice(0, 5);
+
+            // Optionally, adjust the backgroundColor array to match the number of items
+            const bgColors = ["#3498db", "#1abc9c", "#9b59b6", "#f1c40f", "#e74c3c"];
+
+            const ctx = document.getElementById("nsChart").getContext("2d");
+            new Chart(ctx, {
+              type: "bar",
+              data: {
+                labels: top5Labels,
+                datasets: [{
+                  label: "Nameserver Summary",
+                  data: top5Data,
+                  backgroundColor: bgColors
+                }]
+              },
+              options: {
+                indexAxis: "y",       // Horizontal bar chart
+                responsive: true,
+                plugins: {
+                  title: {
+                    display: true,
+                    text: "Top 5 Name Servers (Hosting Providers)"
+                  },
+                  tooltip: { enabled: true },
+                  legend: { display: false }
+                },
+                scales: {
+                  x: { beginAtZero: true }
+                }
+              }
+            });
+          }
+
 
           // Global array to store table row elements and additional data.
           let rowDataStore = [];
@@ -1722,7 +1751,6 @@
             this.textContent = (riskSortOrder === "asc") ? "▲" : "▼";
             renderTable(getFilteredRows());
           });
-
           // Async function: loadData
           // Purpose: Load JSON data from various files, build charts, table rows, and render the HTML report.
           async function loadData() {
