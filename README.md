@@ -25,7 +25,7 @@
 
 In this tool, **risk scoring** is based on the notion of **asset attractiveness**—the idea that certain attributes or characteristics make an asset more interesting to attackers. If we see more of these attributes, the overall score goes **up**, indicating a broader “attack surface” that adversaries could leverage. Below is an overview of how each factor contributes to the final **risk score**.
 
-<img src="https://chintangurjar.com/images/riskscore.png" alt="graphviz" height="500px" />
+<img src="https://chintangurjar.com/images/frogyasm_s6.svg" alt="graphviz" height="700px" />
 
 ---
 ## Screenshots
