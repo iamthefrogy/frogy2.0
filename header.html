@@ -356,7 +356,9 @@
                 <th>Domain</th>
                 <th>Purpose</th>
                 <th>Resolvers</th>
-                <th>A records</th>
+                <th>A Records</th>
+                <th>NS Records</th>
+                <th>MX Records</th>
                 <th>DNS Status</th>
                 <th>CDN Name</th>
                 <th>CDN Type</th>
@@ -393,6 +395,8 @@
                 <th><select id="purpose-filter"><option value="">All</option></select></th>
                 <th><select id="resolvers-filter"><option value="">All</option></select></th>
                 <th><select id="arecords-filter"><option value="">All</option></select></th>
+                <th><select id="ns-filter"><option value="">All</option></select></th>
+                <th><select id="mx-filter"><option value="">All</option></select></th>
                 <th><select id="dnsstatus-filter"><option value="">All</option></select></th>
                 <th><select id="cdnname-filter"><option value="">All</option></select></th>
                 <th><select id="cdntype-filter"><option value="">All</option></select></th>
@@ -1322,6 +1326,9 @@
               const dkim   = domainSec["DKIM Record"] || "N/A";
               const dmarc  = domainSec["DMARC Record"] || "N/A";
               const dnssec = domainSec["DNSSEC Status"] || "N/A";
+              const nsRecords = (domainSec["NS Records"] || "N/A").replace(/\n/g, " ");
+              const mxRecords = (domainSec["MX Records"] || "N/A").replace(/\n/g, " ");
+
               let openPortsCount = 0;
               if (window.naabuMap && window.naabuMap[domain]) {
                 openPortsCount = window.naabuMap[domain].length;
@@ -1374,6 +1381,8 @@
                     <td>${colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended"}</td>
                     <td>${formatCell(dnsResolvers)}</td>
                     <td>${formatCell(dnsA)}</td>
+                    <td>${nsRecords}</td>
+                    <td>${mxRecords}</td>
                     <td>${dnsStatus}</td>
                     <td>${h.cdn_name || "N/A"}</td>
                     <td>${h.cdn_type || "N/A"}</td>
@@ -1424,6 +1433,8 @@
                   <td>${colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended"}</td>
                   <td>${formatCell(dnsResolvers)}</td>
                   <td>${formatCell(dnsA)}</td>
+                  <td>${nsRecords}</td>
+                  <td>${mxRecords}</td>
                   <td>${dnsStatus}</td>
                   <td>N/A</td>
                   <td>N/A</td>
@@ -1479,84 +1490,92 @@
           function getFilteredRows() {
             const query = document.getElementById("searchBox").value.toLowerCase();
             const filters = {
-              priority:    document.getElementById("priority-filter").value.toLowerCase(),
-              domain:      document.getElementById("domain-filter").value.toLowerCase(),
-              purpose:     document.getElementById("purpose-filter").value.toLowerCase(),
-              resolvers:   document.getElementById("resolvers-filter").value.toLowerCase(),
-              arecords:    document.getElementById("arecords-filter").value.toLowerCase(),
-              dnsstatus:   document.getElementById("dnsstatus-filter").value.toLowerCase(),
-              cdnname:     document.getElementById("cdnname-filter").value.toLowerCase(),
-              cdntype:     document.getElementById("cdntype-filter").value.toLowerCase(),
-              port:        document.getElementById("port-filter").value.toLowerCase(),
-              url:         document.getElementById("url-filter").value.toLowerCase(),
-              redirect:    document.getElementById("redirect-filter").value.toLowerCase(),
-              title:       document.getElementById("title-filter").value.toLowerCase(),
-              webserver:   document.getElementById("webserver-filter").value.toLowerCase(),
-              login:       document.getElementById("login-filter").value.toLowerCase(),
+              priority: document.getElementById("priority-filter").value.toLowerCase(),
+              domain: document.getElementById("domain-filter").value.toLowerCase(),
+              purpose: document.getElementById("purpose-filter").value.toLowerCase(),
+              resolvers: document.getElementById("resolvers-filter").value.toLowerCase(),
+              arecords: document.getElementById("arecords-filter").value.toLowerCase(),
+              ns: document.getElementById("ns-filter").value.toLowerCase(),
+              mx: document.getElementById("mx-filter").value.toLowerCase(),
+              dnsstatus: document.getElementById("dnsstatus-filter").value.toLowerCase(),
+              cdnname: document.getElementById("cdnname-filter").value.toLowerCase(),
+              cdntype: document.getElementById("cdntype-filter").value.toLowerCase(),
+              port: document.getElementById("port-filter").value.toLowerCase(),
+              url: document.getElementById("url-filter").value.toLowerCase(),
+              location: document.getElementById("redirect-filter").value.toLowerCase(), // assuming you use "redirect-filter" for location
+              title: document.getElementById("title-filter").value.toLowerCase(),
+              webserver: document.getElementById("webserver-filter").value.toLowerCase(),
+              login: document.getElementById("login-filter").value.toLowerCase(),
               apiEndpoint: document.getElementById("api-endpoint-filter").value.toLowerCase(),
-              tech:        document.getElementById("tech-filter").value.toLowerCase(),
-              statuscode:  document.getElementById("statuscode-filter").value.toLowerCase(),
+              tech: document.getElementById("tech-filter").value.toLowerCase(),
+              statuscode: document.getElementById("statuscode-filter").value.toLowerCase(),
               contentlength: document.getElementById("contentlength-filter").value.toLowerCase(),
-              cdn:         document.getElementById("cdn-filter").value.toLowerCase(),
-              spf:         document.getElementById("spf-filter").value.toLowerCase(),
-              dkim:        document.getElementById("dkim-filter").value.toLowerCase(),
-              dmarc:       document.getElementById("dmarc-filter").value.toLowerCase(),
-              dnssec:      document.getElementById("dnssec-filter").value.toLowerCase(),
-              sslversion:  document.getElementById("sslversion-filter").value.toLowerCase(),
-              certexpiry:  document.getElementById("certexpiry-filter").value.toLowerCase(),
-              sslissuer:   document.getElementById("sslissuer-filter").value.toLowerCase(),
-              sts:         document.getElementById("sts-filter").value.toLowerCase(),
-              xfo:         document.getElementById("xfo-filter").value.toLowerCase(),
-              csp:         document.getElementById("csp-filter").value.toLowerCase(),
-              xss:         document.getElementById("xss-filter").value.toLowerCase(),
-              rp:          document.getElementById("rp-filter").value.toLowerCase(),
-              pp:          document.getElementById("pp-filter").value.toLowerCase(),
-              portsservices: document.getElementById("ports-services-filter").value.toLowerCase(),
+              cdn: document.getElementById("cdn-filter").value.toLowerCase(),
+              spf: document.getElementById("spf-filter").value.toLowerCase(),
+              dkim: document.getElementById("dkim-filter").value.toLowerCase(),
+              dmarc: document.getElementById("dmarc-filter").value.toLowerCase(),
+              dnssec: document.getElementById("dnssec-filter").value.toLowerCase(),
+              sslversion: document.getElementById("sslversion-filter").value.toLowerCase(),
+              certexpiry: document.getElementById("certexpiry-filter").value.toLowerCase(),
+              sslissuer: document.getElementById("sslissuer-filter").value.toLowerCase(),
+              sts: document.getElementById("sts-filter").value.toLowerCase(),
+              xfo: document.getElementById("xfo-filter").value.toLowerCase(),
+              csp: document.getElementById("csp-filter").value.toLowerCase(),
+              xss: document.getElementById("xss-filter").value.toLowerCase(),
+              rp: document.getElementById("rp-filter").value.toLowerCase(),
+              pp: document.getElementById("pp-filter").value.toLowerCase(),
+              portsservices: document.getElementById("ports-services-filter").value.toLowerCase()
             };
+
             const filtered = allTableRows.filter((row) => {
               const cells = row.getElementsByTagName("td");
-              if (filters.priority && cells[0].innerText.toLowerCase() !== filters.priority) return false;
-              if (filters.domain     && cells[1].innerText.toLowerCase() !== filters.domain) return false;
-              if (filters.purpose    && cells[2].innerText.toLowerCase() !== filters.purpose) return false;
-              if (filters.resolvers  && cells[3].innerText.toLowerCase() !== filters.resolvers) return false;
-              if (filters.arecords   && cells[4].innerText.toLowerCase() !== filters.arecords) return false;
-              if (filters.dnsstatus  && cells[5].innerText.toLowerCase() !== filters.dnsstatus) return false;
-              if (filters.cdnname    && cells[6].innerText.toLowerCase() !== filters.cdnname) return false;
-              if (filters.cdntype    && cells[7].innerText.toLowerCase() !== filters.cdntype) return false;
-              if (filters.port       && cells[8].innerText.toLowerCase() !== filters.port) return false;
-              if (filters.url        && cells[9].innerText.toLowerCase() !== filters.url) return false;
-              if (filters.redirect   && cells[10].innerText.toLowerCase() !== filters.redirect) return false;
-              if (filters.title      && cells[11].innerText.toLowerCase() !== filters.title) return false;
-              if (filters.webserver  && cells[12].innerText.toLowerCase() !== filters.webserver) return false;
-              if (filters.login      && cells[13].innerText.toLowerCase() !== filters.login) return false;
-              if (filters.apiEndpoint && cells[14].innerText.toLowerCase() !== filters.apiEndpoint) return false;
-              if (filters.tech       && cells[15].innerText.toLowerCase() !== filters.tech) return false;
-              if (filters.statuscode && cells[16].innerText.toLowerCase() !== filters.statuscode) return false;
-              if (filters.contentlength && cells[17].innerText.toLowerCase() !== filters.contentlength) return false;
-              if (filters.cdn        && cells[18].innerText.toLowerCase() !== filters.cdn) return false;
-              if (filters.spf        && cells[19].innerText.toLowerCase() !== filters.spf) return false;
-              if (filters.dkim       && cells[20].innerText.toLowerCase() !== filters.dkim) return false;
-              if (filters.dmarc      && cells[21].innerText.toLowerCase() !== filters.dmarc) return false;
-              if (filters.dnssec     && cells[22].innerText.toLowerCase() !== filters.dnssec) return false;
-              if (filters.sslversion && cells[23].innerText.toLowerCase() !== filters.sslversion) return false;
-              if (filters.certexpiry && cells[24].innerText.toLowerCase() !== filters.certexpiry) return false;
-              if (filters.sslissuer  && cells[25].innerText.toLowerCase() !== filters.sslissuer) return false;
-              if (filters.sts        && cells[26].innerText.toLowerCase() !== filters.sts) return false;
-              if (filters.xfo        && cells[27].innerText.toLowerCase() !== filters.xfo) return false;
-              if (filters.csp        && cells[28].innerText.toLowerCase() !== filters.csp) return false;
-              if (filters.xss        && cells[29].innerText.toLowerCase() !== filters.xss) return false;
-              if (filters.rp         && cells[30].innerText.toLowerCase() !== filters.rp) return false;
-              if (filters.pp         && cells[31].innerText.toLowerCase() !== filters.pp) return false;
-              if (filters.portsservices && !cells[32].innerText.toLowerCase().includes(filters.portsservices)) return false;
+              // Use includes() to allow partial matches
+              if (filters.priority && !cells[0].innerText.toLowerCase().includes(filters.priority)) return false;
+              if (filters.domain && !cells[1].innerText.toLowerCase().includes(filters.domain)) return false;
+              if (filters.purpose && !cells[2].innerText.toLowerCase().includes(filters.purpose)) return false;
+              if (filters.resolvers && !cells[3].innerText.toLowerCase().includes(filters.resolvers)) return false;
+              if (filters.arecords && !cells[4].innerText.toLowerCase().includes(filters.arecords)) return false;
+              if (filters.ns && !cells[5].innerText.toLowerCase().includes(filters.ns)) return false;
+              if (filters.mx && !cells[6].innerText.toLowerCase().includes(filters.mx)) return false;
+              if (filters.dnsstatus && !cells[7].innerText.toLowerCase().includes(filters.dnsstatus)) return false;
+              if (filters.cdnname && !cells[8].innerText.toLowerCase().includes(filters.cdnname)) return false;
+              if (filters.cdntype && !cells[9].innerText.toLowerCase().includes(filters.cdntype)) return false;
+              if (filters.port && !cells[10].innerText.toLowerCase().includes(filters.port)) return false;
+              if (filters.url && !cells[11].innerText.toLowerCase().includes(filters.url)) return false;
+              if (filters.location && !cells[12].innerText.toLowerCase().includes(filters.location)) return false;
+              if (filters.title && !cells[13].innerText.toLowerCase().includes(filters.title)) return false;
+              if (filters.webserver && !cells[14].innerText.toLowerCase().includes(filters.webserver)) return false;
+              if (filters.login && !cells[15].innerText.toLowerCase().includes(filters.login)) return false;
+              if (filters.apiEndpoint && !cells[16].innerText.toLowerCase().includes(filters.apiEndpoint)) return false;
+              if (filters.tech && !cells[17].innerText.toLowerCase().includes(filters.tech)) return false;
+              if (filters.statuscode && !cells[18].innerText.toLowerCase().includes(filters.statuscode)) return false;
+              if (filters.contentlength && !cells[19].innerText.toLowerCase().includes(filters.contentlength)) return false;
+              if (filters.cdn && !cells[20].innerText.toLowerCase().includes(filters.cdn)) return false;
+              if (filters.spf && !cells[21].innerText.toLowerCase().includes(filters.spf)) return false;
+              if (filters.dkim && !cells[22].innerText.toLowerCase().includes(filters.dkim)) return false;
+              if (filters.dmarc && !cells[23].innerText.toLowerCase().includes(filters.dmarc)) return false;
+              if (filters.dnssec && !cells[24].innerText.toLowerCase().includes(filters.dnssec)) return false;
+              if (filters.sslversion && !cells[25].innerText.toLowerCase().includes(filters.sslversion)) return false;
+              if (filters.certexpiry && !cells[26].innerText.toLowerCase().includes(filters.certexpiry)) return false;
+              if (filters.sslissuer && !cells[27].innerText.toLowerCase().includes(filters.sslissuer)) return false;
+              if (filters.sts && !cells[28].innerText.toLowerCase().includes(filters.sts)) return false;
+              if (filters.xfo && !cells[29].innerText.toLowerCase().includes(filters.xfo)) return false;
+              if (filters.csp && !cells[30].innerText.toLowerCase().includes(filters.csp)) return false;
+              if (filters.xss && !cells[31].innerText.toLowerCase().includes(filters.xss)) return false;
+              if (filters.rp && !cells[32].innerText.toLowerCase().includes(filters.rp)) return false;
+              if (filters.pp && !cells[33].innerText.toLowerCase().includes(filters.pp)) return false;
+              if (filters.portsservices && !cells[34].innerText.toLowerCase().includes(filters.portsservices)) return false;
               if (query && !row.innerText.toLowerCase().includes(query)) return false;
               return true;
             });
-            // Sort rows by risk score (ascending or descending)
+
+            // Sort rows by risk score (assumed to be in the first cell)
             filtered.sort((a, b) => {
               const scoreA = parseInt(a.cells[0].innerText) || 0;
               const scoreB = parseInt(b.cells[0].innerText) || 0;
               return riskSortOrder === "asc" ? scoreA - scoreB : scoreB - scoreA;
             });
+
             return filtered;
           }
 
@@ -1631,10 +1650,10 @@
           // Function: populateColumnFilters
           // Purpose: Populate filter dropdowns for each table column with unique values.
           function populateColumnFilters() {
-            const uniqueCols = Array.from({ length: 33 }, () => new Set());
+            const uniqueCols = Array.from({ length: 35 }, () => new Set());
             allTableRows.forEach((row) => {
               const cells = row.getElementsByTagName("td");
-              for (let col = 0; col < 33; col++) {
+              for (let col = 0; col < 35; col++) {
                 uniqueCols[col].add(cells[col].innerText.trim());
               }
             });
@@ -1657,40 +1676,43 @@
                 select.appendChild(option);
               });
             }
-            fillSelectOptions("priority-filter",   [...uniqueCols[0]]);
-            fillSelectOptions("domain-filter",     [...uniqueCols[1]]);
-            fillSelectOptions("purpose-filter",    [...uniqueCols[2]]);
-            fillSelectOptions("resolvers-filter",  [...uniqueCols[3]]);
-            fillSelectOptions("arecords-filter",   [...uniqueCols[4]]);
-            fillSelectOptions("dnsstatus-filter",  [...uniqueCols[5]]);
-            fillSelectOptions("cdnname-filter",    [...uniqueCols[6]]);
-            fillSelectOptions("cdntype-filter",    [...uniqueCols[7]]);
-            fillSelectOptions("port-filter",       [...uniqueCols[8]]);
-            fillSelectOptions("url-filter",        [...uniqueCols[9]]);
-            fillSelectOptions("redirect-filter",   [...uniqueCols[10]]);
-            fillSelectOptions("title-filter",      [...uniqueCols[11]]);
-            fillSelectOptions("webserver-filter",  [...uniqueCols[12]]);
-            fillSelectOptions("login-filter",      [...uniqueCols[13]]);
-            fillSelectOptions("api-endpoint-filter", [...uniqueCols[14]]);
-            fillSelectOptions("tech-filter",       [...uniqueCols[15]]);
-            fillSelectOptions("statuscode-filter", [...uniqueCols[16]]);
-            fillSelectOptions("contentlength-filter", [...uniqueCols[17]]);
-            fillSelectOptions("cdn-filter",        [...uniqueCols[18]]);
-            fillSelectOptions("spf-filter",        [...uniqueCols[19]]);
-            fillSelectOptions("dkim-filter",       [...uniqueCols[20]]);
-            fillSelectOptions("dmarc-filter",      [...uniqueCols[21]]);
-            fillSelectOptions("dnssec-filter",     [...uniqueCols[22]]);
-            fillSelectOptions("sslversion-filter", [...uniqueCols[23]]);
-            fillSelectOptions("certexpiry-filter", [...uniqueCols[24]]);
-            fillSelectOptions("sslissuer-filter",  [...uniqueCols[25]]);
-            fillSelectOptions("sts-filter",        [...uniqueCols[26]]);
-            fillSelectOptions("xfo-filter",        [...uniqueCols[27]]);
-            fillSelectOptions("csp-filter",        [...uniqueCols[28]]);
-            fillSelectOptions("xss-filter",        [...uniqueCols[29]]);
-            fillSelectOptions("rp-filter",         [...uniqueCols[30]]);
-            fillSelectOptions("pp-filter",         [...uniqueCols[31]]);
-            fillSelectOptions("ports-services-filter", [...uniqueCols[32]]);
-          }
+            // Mapping filter dropdowns to uniqueCols array
+      fillSelectOptions("priority-filter",   [...uniqueCols[0]]);
+      fillSelectOptions("domain-filter",     [...uniqueCols[1]]);
+      fillSelectOptions("purpose-filter",    [...uniqueCols[2]]);
+      fillSelectOptions("resolvers-filter",  [...uniqueCols[3]]);
+      fillSelectOptions("arecords-filter",   [...uniqueCols[4]]);
+      fillSelectOptions("ns-filter",         [...uniqueCols[5]]);
+      fillSelectOptions("mx-filter",         [...uniqueCols[6]]);
+      fillSelectOptions("dnsstatus-filter",  [...uniqueCols[7]]);
+      fillSelectOptions("cdnname-filter",    [...uniqueCols[8]]);
+      fillSelectOptions("cdntype-filter",    [...uniqueCols[9]]);
+      fillSelectOptions("port-filter",       [...uniqueCols[10]]);
+      fillSelectOptions("url-filter",        [...uniqueCols[11]]);
+      fillSelectOptions("redirect-filter",   [...uniqueCols[12]]);
+      fillSelectOptions("title-filter",      [...uniqueCols[13]]);
+      fillSelectOptions("webserver-filter",  [...uniqueCols[14]]);
+      fillSelectOptions("login-filter",      [...uniqueCols[15]]);
+      fillSelectOptions("api-endpoint-filter", [...uniqueCols[16]]);
+      fillSelectOptions("tech-filter",       [...uniqueCols[17]]);
+      fillSelectOptions("statuscode-filter", [...uniqueCols[18]]);
+      fillSelectOptions("contentlength-filter", [...uniqueCols[19]]);
+      fillSelectOptions("cdn-filter",        [...uniqueCols[20]]);
+      fillSelectOptions("spf-filter",        [...uniqueCols[21]]);
+      fillSelectOptions("dkim-filter",       [...uniqueCols[22]]);
+      fillSelectOptions("dmarc-filter",      [...uniqueCols[23]]);
+      fillSelectOptions("dnssec-filter",     [...uniqueCols[24]]);
+      fillSelectOptions("sslversion-filter", [...uniqueCols[25]]);
+      fillSelectOptions("certexpiry-filter", [...uniqueCols[26]]);
+      fillSelectOptions("sslissuer-filter",  [...uniqueCols[27]]);
+      fillSelectOptions("sts-filter",        [...uniqueCols[28]]);
+      fillSelectOptions("xfo-filter",        [...uniqueCols[29]]);
+      fillSelectOptions("csp-filter",        [...uniqueCols[30]]);
+      fillSelectOptions("xss-filter",        [...uniqueCols[31]]);
+      fillSelectOptions("rp-filter",         [...uniqueCols[32]]);
+      fillSelectOptions("pp-filter",         [...uniqueCols[33]]);
+      fillSelectOptions("ports-services-filter", [...uniqueCols[34]]);
+    }
 
           // Attach event listeners to the search box, rows per page dropdown, and risk sort toggle.
           document.getElementById("searchBox").addEventListener("input", onFilterChange);
