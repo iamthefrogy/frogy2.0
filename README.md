@@ -122,7 +122,8 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Completed ✅ ~~Using mouseover on the attack surface column's score, you can now know why and how score is calculated-~~
 - Completed ✅ ~~Generate CSV output same as HTML table.~~
 - Completed ✅ ~~Self-contained HTML output is generated now. So no need to host a file on web server to access results.~~
-- To add all DNS records (A, MX, SOA, SRV, CNAME, CAA, etc.)
+- Completed ✅ ~~To add all DNS records (A, MX, SOA, SRV, CNAME, CAA, etc.)~~
+- Completed ✅ ~~Consolidate the two CDN charts into one.~~
 - Solve screen jerk issue.
 - Identified abandoned and unwanted applications.
 
