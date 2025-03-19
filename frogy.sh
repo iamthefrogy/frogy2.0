@@ -208,7 +208,7 @@ run_naabu() {
     info "[6/13] Running naabu..."
     naabu -silent \
           -l "$MASTER_SUBS" \
-          -p "7,9,13,21-23,25-26,37,53,79-81,88,106,110-111,113,119,135,139,143-144,179,199,389,427,443-445,465,513-515,543-544,548,554,587,631,646,873,990,993,995,1025-1029,1110,1433,1720,1723,1755,1900,2000-2001,2049,2121,2717,3000,3128,3306,3389,3986,4899,5000,5009,5051,5060,5101,5190,5357,5432,5631,5666,5800,5900,6000-6001,6646,7070,8000,8008-8009,8080-8081,8443,8888,9100,9999-10000,32768,49152-49157" \
+          -p "80,443" \
           -o "$RUN_DIR/naabu.json" \
           -j \
           >/dev/null 2>&1 || true
@@ -423,13 +423,7 @@ run_login_detection() {
 }
 
 ##############################################
-# Function: run_security_compliance
-# Purpose: Check various security settings (DNS, SSL, headers) for each domain.
-# Detailed Explanation:
-#   - For each domain in MASTER_SUBS, the function retrieves DNS TXT records for SPF,
-#     DKIM, and DMARC, and checks for DNSSEC.
-#   - It then matches live URL records from httpx.json to extract certificate and header information.
-#   - The final output is a JSON record per domain with security compliance details.
+# Security Compliance and Hygine Checks
 ##############################################
 run_security_compliance() {
   info "[9/13] Analyzing security hygiene using..."
@@ -455,19 +449,45 @@ run_security_compliance() {
     [ -z "$domain" ] && continue
 
     # --- Domain-level DNS Checks ---
-    local spf dkim dmarc dnskey dnssec
+    local spf dkim dmarc dnskey dnssec ns txt srv ptr mx soa caa
+
     spf=$(dig +short TXT "$domain" 2>/dev/null | grep -i "v=spf1" | head -n 1 || true)
     [ -z "$spf" ] && spf="No SPF Record"
+
     dkim=$(dig +short TXT "default._domainkey.$domain" 2>/dev/null | grep -i "v=DKIM1" | head -n 1 || true)
     [ -z "$dkim" ] && dkim="No DKIM Record"
+
     dmarc=$(dig +short TXT "_dmarc.$domain" 2>/dev/null | grep -i "v=DMARC1" | head -n 1 || true)
     [ -z "$dmarc" ] && dmarc="No DMARC Record"
+
     dnskey=$(dig +short DNSKEY "$domain" 2>/dev/null || true)
     if [ -z "$dnskey" ]; then
       dnssec="DNSSEC Not Enabled"
     else
       dnssec="DNSSEC Enabled"
     fi
+
+    # Additional DNS records
+    ns=$(dig +short NS "$domain" 2>/dev/null || true)
+    [ -z "$ns" ] && ns="No NS records found"
+
+    txt=$(dig +short TXT "$domain" 2>/dev/null || true)
+    [ -z "$txt" ] && txt="No TXT records found"
+
+    srv=$(dig +short SRV "$domain" 2>/dev/null || true)
+    [ -z "$srv" ] && srv="No SRV records found"
+
+    ptr=$(dig +short PTR "$domain" 2>/dev/null || true)
+    [ -z "$ptr" ] && ptr="No PTR record found"
+
+    mx=$(dig +short MX "$domain" 2>/dev/null || true)
+    [ -z "$mx" ] && mx="No MX records found"
+
+    soa=$(dig +short SOA "$domain" 2>/dev/null || true)
+    [ -z "$soa" ] && soa="No SOA record found"
+
+    caa=$(dig +short CAA "$domain" 2>/dev/null || true)
+    [ -z "$caa" ] && caa="No CAA records found"
 
     # --- Process live URL records from httpx.json ---
     # Filter the httpx.json file for records that start with the domain.
@@ -526,6 +546,7 @@ run_security_compliance() {
         # Build and output a JSON record with the security compliance details.
         jq -n --arg domain "$domain" --arg url "$url" \
           --arg spf "$spf" --arg dkim "$dkim" --arg dmarc "$dmarc" --arg dnssec "$dnssec" \
+          --arg ns "$ns" --arg txt "$txt" --arg srv "$srv" --arg ptr "$ptr" --arg mx "$mx" --arg soa "$soa" --arg caa "$caa" \
           --arg ssl_version "$ssl_version" --arg ssl_issuer "$ssl_issuer" --arg cert_expiry "$cert_expiry" \
           --arg sts "$sts" --arg xfo "$xfo" --arg csp "$csp" --arg xss "$xss" --arg rp "$rp" --arg pp "$pp" --arg acao "$acao" \
           '{
@@ -535,6 +556,13 @@ run_security_compliance() {
              "DKIM Record": $dkim,
              "DMARC Record": $dmarc,
              "DNSSEC Status": $dnssec,
+             "NS Records": $ns,
+             "TXT Records": $txt,
+             "SRV Records": $srv,
+             "PTR Record": $ptr,
+             "MX Records": $mx,
+             "SOA Record": $soa,
+             "CAA Records": $caa,
              "SSL/TLS Version": $ssl_version,
              "SSL/TLS Issuer": $ssl_issuer,
              "Cert Expiry Date": $cert_expiry,
@@ -551,6 +579,7 @@ run_security_compliance() {
       # If no live URL is found, output a record with default values.
       jq -n --arg domain "$domain" --arg url "N/A" \
         --arg spf "$spf" --arg dkim "$dkim" --arg dmarc "$dmarc" --arg dnssec "$dnssec" \
+        --arg ns "$ns" --arg txt "$txt" --arg srv "$srv" --arg ptr "$ptr" --arg mx "$mx" --arg soa "$soa" --arg caa "$caa" \
         --arg ssl_version "No SSL/TLS" --arg ssl_issuer "N/A" --arg cert_expiry "N/A" \
         --arg sts "" --arg xfo "" --arg csp "" --arg xss "" --arg rp "" --arg pp "" --arg acao "" \
         '{
@@ -560,6 +589,13 @@ run_security_compliance() {
            "DKIM Record": $dkim,
            "DMARC Record": $dmarc,
            "DNSSEC Status": $dnssec,
+           "NS Records": $ns,
+           "TXT Records": $txt,
+           "SRV Records": $srv,
+           "PTR Record": $ptr,
+           "MX Records": $mx,
+           "SOA Record": $soa,
+           "CAA Records": $caa,
            "SSL/TLS Version": $ssl_version,
            "SSL/TLS Issuer": $ssl_issuer,
            "Cert Expiry Date": $cert_expiry,
