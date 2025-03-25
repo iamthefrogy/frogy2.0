@@ -477,7 +477,12 @@ run_security_compliance() {
     srv=$(dig +short SRV "$domain" 2>/dev/null || true)
     [ -z "$srv" ] && srv="No SRV records found"
 
-    ptr=$(dig +short PTR "$domain" 2>/dev/null || true)
+    # --- Reverse DNS (PTR) from resolved A record ---
+    local a_record
+    a_record=$(dig +short A "$domain" 2>/dev/null | head -n 1)
+    if [ -n "$a_record" ]; then
+      ptr=$(dig +short -x "$a_record" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)
+    fi
     [ -z "$ptr" ] && ptr="No PTR record found"
 
     mx=$(dig +short MX "$domain" 2>/dev/null || true)
@@ -619,6 +624,9 @@ run_security_compliance() {
   rm -r "$temp_dir"
 }
 
+
+
+
 ##############################################
 # Function: combine_json
 # Purpose: Merge a line-based JSON file into a single JSON array.
@@ -739,7 +747,7 @@ build_html_report() {
   cat footer.html >> report.html
 
   mv report.html $RUN_DIR/
-
+  
   info "[13/13] Report generated at $RUN_DIR/report.html"
 }
 
