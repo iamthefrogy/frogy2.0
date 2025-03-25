@@ -124,7 +124,8 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Completed ✅ ~~Self-contained HTML output is generated now. So no need to host a file on web server to access results.~~
 - Completed ✅ ~~To add all DNS records (A, MX, SOA, SRV, CNAME, CAA, etc.)~~
 - Completed ✅ ~~Consolidate the two CDN charts into one.~~
-- Solve screen jerk issue.
+- Completed ✅ ~~Added PTR record column to the main table.~~
+- Solve the screen jerk issue.
 - Identified abandoned and unwanted applications.
 
 ## Installation
