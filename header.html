@@ -360,6 +360,7 @@
                 <th>A Records</th>
                 <th>NS Records</th>
                 <th>MX Records</th>
+                <th>PTR Records</th>
                 <th>DNS Status</th>
                 <th>CDN Name</th>
                 <th>CDN Type</th>
@@ -398,6 +399,7 @@
                 <th><select id="arecords-filter"><option value="">All</option></select></th>
                 <th><select id="ns-filter"><option value="">All</option></select></th>
                 <th><select id="mx-filter"><option value="">All</option></select></th>
+                <th><select id="ptr-filter"><option value="">All</option></select></th>
                 <th><select id="dnsstatus-filter"><option value="">All</option></select></th>
                 <th><select id="cdnname-filter"><option value="">All</option></select></th>
                 <th><select id="cdntype-filter"><option value="">All</option></select></th>
@@ -1357,6 +1359,8 @@
               const dnssec = domainSec["DNSSEC Status"] || "N/A";
               const nsRecords = (domainSec["NS Records"] || "N/A").replace(/\n/g, " ");
               const mxRecords = (domainSec["MX Records"] || "N/A").replace(/\n/g, " ");
+              const ptrRecords = domainSec["PTR Record"] || "N/A";
+
 
               let openPortsCount = 0;
               if (window.naabuMap && window.naabuMap[domain]) {
@@ -1412,6 +1416,7 @@
                     <td>${formatCell(dnsA)}</td>
                     <td>${nsRecords}</td>
                     <td>${mxRecords}</td>
+                    <td>${ptrRecords}</td>
                     <td>${dnsStatus}</td>
                     <td>${h.cdn_name || "N/A"}</td>
                     <td>${h.cdn_type || "N/A"}</td>
@@ -1464,6 +1469,7 @@
                   <td>${formatCell(dnsA)}</td>
                   <td>${nsRecords}</td>
                   <td>${mxRecords}</td>
+                  <td>${ptrRecords}</td>
                   <td>${dnsStatus}</td>
                   <td>N/A</td>
                   <td>N/A</td>
@@ -1526,6 +1532,7 @@
               arecords: document.getElementById("arecords-filter").value.toLowerCase(),
               ns: document.getElementById("ns-filter").value.toLowerCase(),
               mx: document.getElementById("mx-filter").value.toLowerCase(),
+              ptr: document.getElementById("ptr-filter").value.toLowerCase(),
               dnsstatus: document.getElementById("dnsstatus-filter").value.toLowerCase(),
               cdnname: document.getElementById("cdnname-filter").value.toLowerCase(),
               cdntype: document.getElementById("cdntype-filter").value.toLowerCase(),
@@ -1566,34 +1573,35 @@
               if (filters.arecords && !cells[4].innerText.toLowerCase().includes(filters.arecords)) return false;
               if (filters.ns && !cells[5].innerText.toLowerCase().includes(filters.ns)) return false;
               if (filters.mx && !cells[6].innerText.toLowerCase().includes(filters.mx)) return false;
-              if (filters.dnsstatus && !cells[7].innerText.toLowerCase().includes(filters.dnsstatus)) return false;
-              if (filters.cdnname && !cells[8].innerText.toLowerCase().includes(filters.cdnname)) return false;
-              if (filters.cdntype && !cells[9].innerText.toLowerCase().includes(filters.cdntype)) return false;
-              if (filters.port && !cells[10].innerText.toLowerCase().includes(filters.port)) return false;
-              if (filters.url && !cells[11].innerText.toLowerCase().includes(filters.url)) return false;
-              if (filters.location && !cells[12].innerText.toLowerCase().includes(filters.location)) return false;
-              if (filters.title && !cells[13].innerText.toLowerCase().includes(filters.title)) return false;
-              if (filters.webserver && !cells[14].innerText.toLowerCase().includes(filters.webserver)) return false;
-              if (filters.login && !cells[15].innerText.toLowerCase().includes(filters.login)) return false;
-              if (filters.apiEndpoint && !cells[16].innerText.toLowerCase().includes(filters.apiEndpoint)) return false;
-              if (filters.tech && !cells[17].innerText.toLowerCase().includes(filters.tech)) return false;
-              if (filters.statuscode && !cells[18].innerText.toLowerCase().includes(filters.statuscode)) return false;
-              if (filters.contentlength && !cells[19].innerText.toLowerCase().includes(filters.contentlength)) return false;
-              if (filters.cdn && !cells[20].innerText.toLowerCase().includes(filters.cdn)) return false;
-              if (filters.spf && !cells[21].innerText.toLowerCase().includes(filters.spf)) return false;
-              if (filters.dkim && !cells[22].innerText.toLowerCase().includes(filters.dkim)) return false;
-              if (filters.dmarc && !cells[23].innerText.toLowerCase().includes(filters.dmarc)) return false;
-              if (filters.dnssec && !cells[24].innerText.toLowerCase().includes(filters.dnssec)) return false;
-              if (filters.sslversion && !cells[25].innerText.toLowerCase().includes(filters.sslversion)) return false;
-              if (filters.certexpiry && !cells[26].innerText.toLowerCase().includes(filters.certexpiry)) return false;
-              if (filters.sslissuer && !cells[27].innerText.toLowerCase().includes(filters.sslissuer)) return false;
-              if (filters.sts && !cells[28].innerText.toLowerCase().includes(filters.sts)) return false;
-              if (filters.xfo && !cells[29].innerText.toLowerCase().includes(filters.xfo)) return false;
-              if (filters.csp && !cells[30].innerText.toLowerCase().includes(filters.csp)) return false;
-              if (filters.xss && !cells[31].innerText.toLowerCase().includes(filters.xss)) return false;
-              if (filters.rp && !cells[32].innerText.toLowerCase().includes(filters.rp)) return false;
-              if (filters.pp && !cells[33].innerText.toLowerCase().includes(filters.pp)) return false;
-              if (filters.portsservices && !cells[34].innerText.toLowerCase().includes(filters.portsservices)) return false;
+              if (filters.ptr && !cells[7].innerText.toLowerCase().includes(filters.ptr)) return false;
+              if (filters.dnsstatus && !cells[8].innerText.toLowerCase().includes(filters.dnsstatus)) return false;
+              if (filters.cdnname && !cells[9].innerText.toLowerCase().includes(filters.cdnname)) return false;
+              if (filters.cdntype && !cells[10].innerText.toLowerCase().includes(filters.cdntype)) return false;
+              if (filters.port && !cells[11].innerText.toLowerCase().includes(filters.port)) return false;
+              if (filters.url && !cells[12].innerText.toLowerCase().includes(filters.url)) return false;
+              if (filters.location && !cells[13].innerText.toLowerCase().includes(filters.location)) return false;
+              if (filters.title && !cells[14].innerText.toLowerCase().includes(filters.title)) return false;
+              if (filters.webserver && !cells[15].innerText.toLowerCase().includes(filters.webserver)) return false;
+              if (filters.login && !cells[16].innerText.toLowerCase().includes(filters.login)) return false;
+              if (filters.apiEndpoint && !cells[17].innerText.toLowerCase().includes(filters.apiEndpoint)) return false;
+              if (filters.tech && !cells[18].innerText.toLowerCase().includes(filters.tech)) return false;
+              if (filters.statuscode && !cells[19].innerText.toLowerCase().includes(filters.statuscode)) return false;
+              if (filters.contentlength && !cells[20].innerText.toLowerCase().includes(filters.contentlength)) return false;
+              if (filters.cdn && !cells[21].innerText.toLowerCase().includes(filters.cdn)) return false;
+              if (filters.spf && !cells[22].innerText.toLowerCase().includes(filters.spf)) return false;
+              if (filters.dkim && !cells[23].innerText.toLowerCase().includes(filters.dkim)) return false;
+              if (filters.dmarc && !cells[24].innerText.toLowerCase().includes(filters.dmarc)) return false;
+              if (filters.dnssec && !cells[25].innerText.toLowerCase().includes(filters.dnssec)) return false;
+              if (filters.sslversion && !cells[26].innerText.toLowerCase().includes(filters.sslversion)) return false;
+              if (filters.certexpiry && !cells[27].innerText.toLowerCase().includes(filters.certexpiry)) return false;
+              if (filters.sslissuer && !cells[28].innerText.toLowerCase().includes(filters.sslissuer)) return false;
+              if (filters.sts && !cells[29].innerText.toLowerCase().includes(filters.sts)) return false;
+              if (filters.xfo && !cells[30].innerText.toLowerCase().includes(filters.xfo)) return false;
+              if (filters.csp && !cells[31].innerText.toLowerCase().includes(filters.csp)) return false;
+              if (filters.xss && !cells[32].innerText.toLowerCase().includes(filters.xss)) return false;
+              if (filters.rp && !cells[33].innerText.toLowerCase().includes(filters.rp)) return false;
+              if (filters.pp && !cells[34].innerText.toLowerCase().includes(filters.pp)) return false;
+              if (filters.portsservices && !cells[35].innerText.toLowerCase().includes(filters.portsservices)) return false;
               if (query && !row.innerText.toLowerCase().includes(query)) return false;
               return true;
             });
@@ -1679,11 +1687,13 @@
           // Function: populateColumnFilters
           // Purpose: Populate filter dropdowns for each table column with unique values.
           function populateColumnFilters() {
-            const uniqueCols = Array.from({ length: 35 }, () => new Set());
+            const uniqueCols = Array.from({ length: 36 }, () => new Set());
             allTableRows.forEach((row) => {
               const cells = row.getElementsByTagName("td");
-              for (let col = 0; col < 35; col++) {
-                uniqueCols[col].add(cells[col].innerText.trim());
+              for (let col = 0; col < 36; col++) {
+                if (cells[col]) {
+                  uniqueCols[col].add(cells[col].innerText.trim());
+                }
               }
             });
             function fillSelectOptions(selectId, values) {
@@ -1713,34 +1723,35 @@
       fillSelectOptions("arecords-filter",   [...uniqueCols[4]]);
       fillSelectOptions("ns-filter",         [...uniqueCols[5]]);
       fillSelectOptions("mx-filter",         [...uniqueCols[6]]);
-      fillSelectOptions("dnsstatus-filter",  [...uniqueCols[7]]);
-      fillSelectOptions("cdnname-filter",    [...uniqueCols[8]]);
-      fillSelectOptions("cdntype-filter",    [...uniqueCols[9]]);
-      fillSelectOptions("port-filter",       [...uniqueCols[10]]);
-      fillSelectOptions("url-filter",        [...uniqueCols[11]]);
-      fillSelectOptions("redirect-filter",   [...uniqueCols[12]]);
-      fillSelectOptions("title-filter",      [...uniqueCols[13]]);
-      fillSelectOptions("webserver-filter",  [...uniqueCols[14]]);
-      fillSelectOptions("login-filter",      [...uniqueCols[15]]);
-      fillSelectOptions("api-endpoint-filter", [...uniqueCols[16]]);
-      fillSelectOptions("tech-filter",       [...uniqueCols[17]]);
-      fillSelectOptions("statuscode-filter", [...uniqueCols[18]]);
-      fillSelectOptions("contentlength-filter", [...uniqueCols[19]]);
-      fillSelectOptions("cdn-filter",        [...uniqueCols[20]]);
-      fillSelectOptions("spf-filter",        [...uniqueCols[21]]);
-      fillSelectOptions("dkim-filter",       [...uniqueCols[22]]);
-      fillSelectOptions("dmarc-filter",      [...uniqueCols[23]]);
-      fillSelectOptions("dnssec-filter",     [...uniqueCols[24]]);
-      fillSelectOptions("sslversion-filter", [...uniqueCols[25]]);
-      fillSelectOptions("certexpiry-filter", [...uniqueCols[26]]);
-      fillSelectOptions("sslissuer-filter",  [...uniqueCols[27]]);
-      fillSelectOptions("sts-filter",        [...uniqueCols[28]]);
-      fillSelectOptions("xfo-filter",        [...uniqueCols[29]]);
-      fillSelectOptions("csp-filter",        [...uniqueCols[30]]);
-      fillSelectOptions("xss-filter",        [...uniqueCols[31]]);
-      fillSelectOptions("rp-filter",         [...uniqueCols[32]]);
-      fillSelectOptions("pp-filter",         [...uniqueCols[33]]);
-      fillSelectOptions("ports-services-filter", [...uniqueCols[34]]);
+      fillSelectOptions("ptr-filter",         [...uniqueCols[7]]);
+      fillSelectOptions("dnsstatus-filter",  [...uniqueCols[8]]);
+      fillSelectOptions("cdnname-filter",    [...uniqueCols[9]]);
+      fillSelectOptions("cdntype-filter",    [...uniqueCols[10]]);
+      fillSelectOptions("port-filter",       [...uniqueCols[11]]);
+      fillSelectOptions("url-filter",        [...uniqueCols[12]]);
+      fillSelectOptions("redirect-filter",   [...uniqueCols[13]]);
+      fillSelectOptions("title-filter",      [...uniqueCols[14]]);
+      fillSelectOptions("webserver-filter",  [...uniqueCols[15]]);
+      fillSelectOptions("login-filter",      [...uniqueCols[16]]);
+      fillSelectOptions("api-endpoint-filter", [...uniqueCols[17]]);
+      fillSelectOptions("tech-filter",       [...uniqueCols[18]]);
+      fillSelectOptions("statuscode-filter", [...uniqueCols[19]]);
+      fillSelectOptions("contentlength-filter", [...uniqueCols[20]]);
+      fillSelectOptions("cdn-filter",        [...uniqueCols[21]]);
+      fillSelectOptions("spf-filter",        [...uniqueCols[22]]);
+      fillSelectOptions("dkim-filter",       [...uniqueCols[23]]);
+      fillSelectOptions("dmarc-filter",      [...uniqueCols[24]]);
+      fillSelectOptions("dnssec-filter",     [...uniqueCols[25]]);
+      fillSelectOptions("sslversion-filter", [...uniqueCols[26]]);
+      fillSelectOptions("certexpiry-filter", [...uniqueCols[27]]);
+      fillSelectOptions("sslissuer-filter",  [...uniqueCols[28]]);
+      fillSelectOptions("sts-filter",        [...uniqueCols[29]]);
+      fillSelectOptions("xfo-filter",        [...uniqueCols[30]]);
+      fillSelectOptions("csp-filter",        [...uniqueCols[31]]);
+      fillSelectOptions("xss-filter",        [...uniqueCols[32]]);
+      fillSelectOptions("rp-filter",         [...uniqueCols[33]]);
+      fillSelectOptions("pp-filter",         [...uniqueCols[34]]);
+      fillSelectOptions("ports-services-filter", [...uniqueCols[35]]);
     }
 
           // Attach event listeners to the search box, rows per page dropdown, and risk sort toggle.
