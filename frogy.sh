@@ -303,7 +303,7 @@ run_login_detection() {
       if grep -qi -E '(loginModal|modal[-_]?login|popup[-_]?login)' "$body_file"; then
           reasons+=("Found modal/popup login hint")
       fi
-      if grep -qi -E '(iniciar[[:space:]]+sesiÃ³n|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
+      if grep -qi -E '(iniciar[[:space:]]+sesiÃƒÂ³n|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
           reasons+=("Found multi-language login keyword")
       fi
       if grep -qi -E '(firebase\.auth|Auth0|passport)' "$body_file"; then
