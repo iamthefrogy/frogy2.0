@@ -82,6 +82,15 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
           }
 
+          .table-container {
+            width: 100%;
+            max-height: 500px;  /* or whatever height you want */
+            overflow-x: auto;
+            overflow-y: auto;   /* vertical scroll as needed */
+            margin-top: 10px;   /* optional spacing */
+          }
+
+
           .header h1 {
             margin: 0;
           }
@@ -214,12 +223,31 @@
 
           /* Main table styling */
           table {
+            border-collapse: separate; /* was 'collapse'; change to 'separate' */
+            border-spacing: 0;
             width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
             background-color: var(--table-bg);
             font-size: var(--font-size-sm);
           }
+
+          /* 3) Make ALL rows in THEAD sticky. */
+          table thead tr {
+            position: sticky;
+            z-index: 10; /* ensures header rows appear above body rows when scrolling */
+            background-color: var(--table-header-bg);
+          }
+
+          /* 4) First thead row (column titles) pinned at top: 0. */
+          table thead tr:first-child {
+            top: 0;
+          }
+
+          /* 5) Second thead row (the filter dropdowns) sits right under the first row.
+             Adjust 'top: 30px' to match the actual height of your first header row. */
+          table thead tr:nth-child(2) {
+            top: 68px; /* or 32px, 35px, etc. */
+          }
+
           th, td {
             border: 1px solid var(--table-border);
             padding: 8px;
@@ -348,6 +376,7 @@
           </div>
 
           <!-- Main report table with dynamic filters in header -->
+          <div class="table-container">
           <table id="report-table">
             <thead>
               <tr>
@@ -432,6 +461,7 @@
             </thead>
             <tbody id="report-table-body"></tbody>
           </table>
+        </div>
 
           <!-- Container for pagination controls -->
           <div id="paginationControls"></div>
