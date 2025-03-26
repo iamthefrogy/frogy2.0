@@ -1,28 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---------------------------
-# OS Detection and Package Installation
-# ---------------------------
-echo "Detecting OS..."
-if [ grep -q arch /etc/os-release ]; then
-  OS_TYPE=arch
-elif [ grep -q debian /etc/os-release ]; then
-  OS_TYPE=debian
-elif [ grep -q rhel /etc/os-release ]; then
-  OS_TYPE=rhel
-else
-  echo "Cannot detect OS type. Exiting."
-  exit 1
-fi
-echo "Detected OS: $OS_TYPE"
-
 install_dependencies_debian() {
   echo "Installing common dependencies for Debian-based systems..."
   sudo apt-get update
   sudo apt-get install -y jq curl unzip sed python3 libpcap-dev whois dnsutils openssl golang-go
 }
-
 
 install_dependencies_arch() {
   echo "Installing tool dependencies for Arch-based systems..."
@@ -42,6 +25,58 @@ install_dependencies_redhat() {
     sudo yum install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl golang
   fi
 }
+
+copy_binaries() {
+  echo "Copying installed binaries to /usr/local/bin..."
+  GOBIN=$(go env GOPATH)/bin
+  local tools=("subfinder" "assetfinder" "dnsx" "naabu" "httpx")
+  for tool in "${tools[@]}"; do
+    if [ -f "$GOBIN/$tool" ]; then
+      sudo cp "$GOBIN/$tool" /usr/local/bin/
+      echo "$tool copied to /usr/local/bin"
+    else
+      echo "Warning: $tool not found in $GOBIN"
+    fi
+  done
+}
+
+check_binaries() {
+  echo "Verifying that all tools are installed and available in PATH..."
+  local binaries=("subfinder" "assetfinder" "dnsx" "naabu" "httpx")
+  local missing=0
+  for bin in "${binaries[@]}"; do
+    if ! command -v "$bin" &> /dev/null; then
+      echo "Error: $bin not found in PATH."
+      missing=1
+    else
+      echo "$bin found at $(command -v $bin)"
+    fi
+  done
+
+  if [ $missing -ne 0 ]; then
+    echo "One or more binaries are missing from your PATH."
+    echo "Please ensure that your Go bin directory (typically $(go env GOPATH)/bin) is in your PATH, or the binaries have been copied to /usr/local/bin."
+    exit 1
+  else
+    echo "All binaries are present."
+  fi
+}
+
+# ---------------------------
+# OS Detection and Package Installation
+# ---------------------------
+echo "Detecting OS..."
+if [ grep -q arch /etc/os-release ]; then
+  OS_TYPE=arch
+elif [ grep -q debian /etc/os-release ]; then
+  OS_TYPE=debian
+elif [ grep -q rhel /etc/os-release ]; then
+  OS_TYPE=rhel
+else
+  echo "Cannot detect OS type. Exiting."
+  exit 1
+fi
+echo "Detected OS: $OS_TYPE"
 
 case "$OS_TYPE" in
   debian)
@@ -81,47 +116,11 @@ go install github.com/projectdiscovery/httpx/cmd/httpx@latest
 # ---------------------------
 # Copy binaries to /usr/local/bin if not already in PATH
 # ---------------------------
-copy_binaries() {
-  echo "Copying installed binaries to /usr/local/bin..."
-  GOBIN=$(go env GOPATH)/bin
-  local tools=("subfinder" "assetfinder" "dnsx" "naabu" "httpx")
-  for tool in "${tools[@]}"; do
-    if [ -f "$GOBIN/$tool" ]; then
-      sudo cp "$GOBIN/$tool" /usr/local/bin/
-      echo "$tool copied to /usr/local/bin"
-    else
-      echo "Warning: $tool not found in $GOBIN"
-    fi
-  done
-}
-
 copy_binaries
 
 # ---------------------------
 # Verify binaries are available in PATH
 # ---------------------------
-check_binaries() {
-  echo "Verifying that all tools are installed and available in PATH..."
-  local binaries=("subfinder" "assetfinder" "dnsx" "naabu" "httpx")
-  local missing=0
-  for bin in "${binaries[@]}"; do
-    if ! command -v "$bin" &> /dev/null; then
-      echo "Error: $bin not found in PATH."
-      missing=1
-    else
-      echo "$bin found at $(command -v $bin)"
-    fi
-  done
-
-  if [ $missing -ne 0 ]; then
-    echo "One or more binaries are missing from your PATH."
-    echo "Please ensure that your Go bin directory (typically $(go env GOPATH)/bin) is in your PATH, or the binaries have been copied to /usr/local/bin."
-    exit 1
-  else
-    echo "All binaries are present."
-  fi
-}
-
 check_binaries
 
 echo "Installation complete."
