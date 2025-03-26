@@ -122,12 +122,14 @@ run_chaos() {
 run_subfinder() {
   if [[ "$USE_SUBFINDER" == "true" ]]; then
     info "[1/13] Running Subfinder..."
-    subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent \
-      -o "$RUN_DIR/subfinder.txt" \
-      >/dev/null 2>&1 || true
+    subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent -all -o "$RUN_DIR/subfinder.txt" >/dev/null 2>&1 || true
     merge_and_count "$RUN_DIR/subfinder.txt" "Subfinder"
+
+    subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent -recursive -all -o "$RUN_DIR/subfinder_recursive.txt" >/dev/null 2>&1 || true
+    merge_and_count "$RUN_DIR/subfinder_recursive.txt" "Subfinder"
   fi
 }
+
 
 ##############################################
 # Function: run_assetfinder
@@ -747,7 +749,7 @@ build_html_report() {
   cat footer.html >> report.html
 
   mv report.html $RUN_DIR/
-  
+
   info "[13/13] Report generated at $RUN_DIR/report.html"
 }
 
