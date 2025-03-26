@@ -37,11 +37,11 @@ install_dependencies_redhat() {
 }
 
 case "$OS_TYPE" in
-  ubuntu|debian|kali)
+  debian)
     echo "Using apt-get for installation..."
     install_dependencies_debian
     ;;
-  rhel|centos|fedora|redhat)
+  rhel)
     echo "Using yum/dnf for installation..."
     install_dependencies_redhat
     ;;
