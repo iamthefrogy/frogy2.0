@@ -5,9 +5,12 @@ set -euo pipefail
 # OS Detection and Package Installation
 # ---------------------------
 echo "Detecting OS..."
-if [ -f /etc/os-release ]; then
-  . /etc/os-release
-  OS=$ID
+if [ grep -q arch /etc/os-release ]; then
+  OS_TYPE=arch
+elif [ grep -q debian /etc/os-release ]; then
+  OS_TYPE=debian
+elif [ grep -q rhel /etc/os-release ]; then
+  OS_TYPE=rhel
 else
   echo "Cannot detect OS type. Exiting."
   exit 1
