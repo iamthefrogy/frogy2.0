@@ -303,7 +303,7 @@ run_login_detection() {
       if grep -qi -E '(loginModal|modal[-_]?login|popup[-_]?login)' "$body_file"; then
           reasons+=("Found modal/popup login hint")
       fi
-      if grep -qi -E '(iniciar[[:space:]]+sesiÃƒÂ³n|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
+      if grep -qi -E '(iniciar[[:space:]]+sesiÃ³n|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
           reasons+=("Found multi-language login keyword")
       fi
       if grep -qi -E '(firebase\.auth|Auth0|passport)' "$body_file"; then
@@ -481,6 +481,7 @@ run_security_compliance() {
 
     # --- Reverse DNS (PTR) from resolved A record ---
     local a_record
+    local ptr=""
     a_record=$(dig +short A "$domain" 2>/dev/null | head -n 1)
     if [ -n "$a_record" ]; then
       ptr=$(dig +short -x "$a_record" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)
