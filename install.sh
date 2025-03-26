@@ -15,9 +15,9 @@ else
   echo "Cannot detect OS type. Exiting."
   exit 1
 fi
-echo "Detected OS: $OS"
+echo "Detected OS: $OS_TYPE"
 
-install_dependencies() {
+install_dependencies_debian() {
   echo "Installing common dependencies for Debian/Ubuntu/Kali..."
   sudo apt-get update
   sudo apt-get install -y jq curl unzip sed python3 libpcap-dev whois dnsutils openssl
@@ -26,18 +26,20 @@ install_dependencies() {
 install_dependencies_redhat() {
   echo "Installing common dependencies for RedHat-based systems..."
   if command -v dnf > /dev/null 2>&1; then
+    sudo dnf update
     sudo dnf install -y epel-release
     sudo dnf install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl
   else
+    sudo yum update
     sudo yum install -y epel-release
     sudo yum install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl
   fi
 }
 
-case "$OS" in
+case "$OS_TYPE" in
   ubuntu|debian|kali)
     echo "Using apt-get for installation..."
-    install_dependencies
+    install_dependencies_debian
     ;;
   rhel|centos|fedora|redhat)
     echo "Using yum/dnf for installation..."
@@ -54,7 +56,7 @@ esac
 # ---------------------------
 if ! command -v go &> /dev/null; then
   echo "Go is not installed. Installing Go..."
-  case "$OS" in
+  case "$OS_TYPE" in
     ubuntu|debian|kali)
       sudo apt-get install -y golang-go
       ;;
