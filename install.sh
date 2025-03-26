@@ -18,9 +18,16 @@ fi
 echo "Detected OS: $OS_TYPE"
 
 install_dependencies_debian() {
-  echo "Installing common dependencies for Debian/Ubuntu/Kali..."
+  echo "Installing common dependencies for Debian-based systems..."
   sudo apt-get update
   sudo apt-get install -y jq curl unzip sed python3 libpcap-dev whois dnsutils openssl golang-go
+}
+
+
+install_dependencies_arch() {
+  echo "Installing tool dependencies for Arch-based systems..."
+  sudo pacman -Syu
+  sudo pacman -S --needed jq curl unzip sed python libpcap whois bind openssl
 }
 
 install_dependencies_redhat() {
