@@ -20,7 +20,7 @@ echo "Detected OS: $OS_TYPE"
 install_dependencies_debian() {
   echo "Installing common dependencies for Debian/Ubuntu/Kali..."
   sudo apt-get update
-  sudo apt-get install -y jq curl unzip sed python3 libpcap-dev whois dnsutils openssl
+  sudo apt-get install -y jq curl unzip sed python3 libpcap-dev whois dnsutils openssl golang-go
 }
 
 install_dependencies_redhat() {
@@ -28,11 +28,11 @@ install_dependencies_redhat() {
   if command -v dnf > /dev/null 2>&1; then
     sudo dnf update
     sudo dnf install -y epel-release
-    sudo dnf install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl
+    sudo dnf install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl golang
   else
     sudo yum update
     sudo yum install -y epel-release
-    sudo yum install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl
+    sudo yum install -y jq curl unzip sed python3 libpcap-devel whois bind-utils openssl golang
   fi
 }
 
@@ -50,31 +50,6 @@ case "$OS_TYPE" in
     exit 1
     ;;
 esac
-
-# ---------------------------
-# Check for Go and install if missing
-# ---------------------------
-if ! command -v go &> /dev/null; then
-  echo "Go is not installed. Installing Go..."
-  case "$OS_TYPE" in
-    ubuntu|debian|kali)
-      sudo apt-get install -y golang-go
-      ;;
-    rhel|centos|fedora|redhat)
-      if command -v dnf &> /dev/null; then
-        sudo dnf install -y golang
-      else
-        sudo yum install -y golang
-      fi
-      ;;
-    *)
-      echo "Unsupported OS for automatic Go installation. Please install Go manually."
-      exit 1
-      ;;
-  esac
-else
-  echo "Go is already installed."
-fi
 
 # ---------------------------
 # Install Go-Based Tools
