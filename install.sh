@@ -10,7 +10,7 @@ install_dependencies_debian() {
 install_dependencies_arch() {
   echo "Installing tool dependencies for Arch-based systems..."
   sudo pacman -Syu
-  sudo pacman -S --needed jq curl unzip sed python libpcap whois bind openssl
+  sudo pacman -S --needed jq curl unzip sed python libpcap whois bind dnsutils openssl # Fixed: added dnsutils
 }
 
 install_dependencies_redhat() {
@@ -66,11 +66,11 @@ check_binaries() {
 # OS Detection and Package Installation
 # ---------------------------
 echo "Detecting OS..."
-if [ grep -q arch /etc/os-release ]; then
+if grep -q arch /etc/os-release; then
   OS_TYPE=arch
-elif [ grep -q debian /etc/os-release ]; then
+elif grep -q debian /etc/os-release; then
   OS_TYPE=debian
-elif [ grep -q rhel /etc/os-release ]; then
+elif grep -q rhel /etc/os-release; then
   OS_TYPE=rhel
 else
   echo "Cannot detect OS type. Exiting."
@@ -87,8 +87,12 @@ case "$OS_TYPE" in
     echo "Using yum/dnf for installation..."
     install_dependencies_redhat
     ;;
+  arch) # Fixed: OS_TYPE was missing from the case statement.
+    echo "Using pacman for installation..."
+    install_dependencies_arch
+    ;;
   *)
-    echo "Unsupported OS: $OS. Exiting."
+    echo "Unsupported OS: $OS_TYPE. Exiting." # Fixed: $OS variable replaced with $OS_TYPE
     exit 1
     ;;
 esac
