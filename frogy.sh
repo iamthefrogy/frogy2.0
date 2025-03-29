@@ -124,9 +124,6 @@ run_subfinder() {
     info "[1/13] Running Subfinder..."
     subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent -all -o "$RUN_DIR/subfinder.txt" >/dev/null 2>&1 || true
     merge_and_count "$RUN_DIR/subfinder.txt" "Subfinder"
-
-    subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent -recursive -all -o "$RUN_DIR/subfinder_recursive.txt" >/dev/null 2>&1 || true
-    merge_and_count "$RUN_DIR/subfinder_recursive.txt" "Subfinder"
   fi
 }
 
@@ -210,7 +207,7 @@ run_naabu() {
     info "[6/13] Running naabu..."
     naabu -silent \
           -l "$MASTER_SUBS" \
-          -p "7,9,13,21,22,23,25,26,37,53,66,79,80,81,88,106,110,111,113,119,135,139,143,144,179,199,389,427,443,444,445,457,465,513,514,515,543,544,548,554,587,631,646,873,990,993,995,1025,1026,1027,1028,1029,1080,1100,1110,1241,1352,1433,1434,1521,1720,1723,1755,1900,1944,2000,2001,2049,2121,2301,2717,3000,3128,3306,3389,3986,4000,4001,4002,4100,4899,5000,5009,5051,5060,5101,5190,5357,5432,5631,5666,5800,5801,5802,5900,6000,6001,6346,6347,6646,7001,7002,7070,8000,8008,8009,8080,8081,8443,8888,9100,9999,10000,30821,32768,49152-49157" \
+          -p "7,9,13,21,22,23,25,26,37,53,66,79,80,81,88,106,110,111,113,119,135,139,143,144,179,199,443,457,465,513,514,515,543,544,548,554,587,631,646,7647,8000,8001,8008,8080,8081,8085,8089,8090,873,8880,8888,9000,9080,9100,990,993,995,1024,1025,1026,1027,1028,1029,10443,1080,1100,1110,1241,1352,1433,1434,1521,1720,1723,1755,1900,1944,2000,2001,2049,2121,2301,2717,3000,3128,32768,3306,3389,3986,4000,4001,4002,4100,4567,4899,49152-49157,5000,5001,5009,5051,5060,5101,5190,5357,5432,5631,5666,5800,5801,5802,5900,5985,6000,6001,6346,6347,6646,7001,7002,7070,7170,7777,8800,9999,10000,20000,30821" \
           -o "$RUN_DIR/naabu.json" \
           -j \
           >/dev/null 2>&1 || true
@@ -235,7 +232,42 @@ run_httpx() {
           >/dev/null 2>&1 || true
     # Count the number of live websites detected by httpx.
     HTTPX_LIVE_COUNT=$(wc -l < "$RUN_DIR/httpx.json")
+    httpx -silent \
+          -l "$final_urls_ports" \
+          -screenshot \
+          >/dev/null 2>&1 || true
+    # Count the number of live websites detected by httpx.
+    HTTPX_LIVE_COUNT=$(wc -l < "$RUN_DIR/httpx.json")
   fi
+}
+
+gather_screenshots() {
+  local screenshot_map_file="$RUN_DIR/screenshot_map.json"
+  echo "{" > "$screenshot_map_file"
+  local first=true
+
+  # Loop over each subfolder in $RUN_DIR/screenshot
+  for folder in "$RUN_DIR/screenshot"/*; do
+    [ -d "$folder" ] || continue  # skip if not a directory
+    local base="$(basename "$folder")"  # e.g. "cert.esecurify.com_80"
+    # Find the first .png in that folder (httpx -screenshot usually creates one .png)
+    local pngfile
+    pngfile=$(find "$folder" -maxdepth 1 -type f -iname "*.png" | head -n1)
+    if [ -n "$pngfile" ]; then
+      # Create a relative path for use in HTML (so that report.html can load it)
+      # e.g. "screenshot/cert.esecurify.com_80/screenshot.png"
+      local relpath="screenshot/$base/$(basename "$pngfile")"
+      if [ "$first" = true ]; then
+        first=false
+      else
+        echo "," >> "$screenshot_map_file"
+      fi
+      # Write JSON key-value pair: "cert.esecurify.com_80": "screenshot/cert.esecurify.com_80/..."
+      echo -n "\"$base\": \"$relpath\"" >> "$screenshot_map_file"
+    fi
+  done
+
+  echo "}" >> "$screenshot_map_file"
 }
 
 ##############################################
@@ -679,7 +711,7 @@ run_colleague_identification() {
   info "[11/13] Identifying colleague-facing endpoints..."
   local colleague_file="$RUN_DIR/colleague_identification.json"
   # Define a list of keywords that indicate internal or employee-intended endpoints.
-  local tokens=("dev" "development" "test" "testing" "qa" "uat" "stage" "staging" "demo" "sandbox" "lab" "labs" "experimental" "preprod" "pre-production" "pre-prod" "nonprod" "non-production" "non-prod" "perf" "performance" "loadtest" "soaktest" "integration" "integrationtest" "release" "hotfix" "feature" "rc" "beta" "alpha" "internal" "private" "intranet" "corp" "corporate" "employee" "colleague" "partner" "restricted" "secure" "admin" "backoffice" "back-office" "management" "mgmt" "console" "ops" "operations" "dashboard" "sysadmin" "root" "sudo" "superuser" "jenkins" "teamcity" "bamboo" "circleci" "travis" "gitlab" "bitbucket" "gitea" "jira" "confluence" "artifactory" "nexus" "harbor" "grafana" "kibana" "prometheus" "alertmanager" "nagios" "zabbix" "splunk" "posthog" "sentry" "phabricator" "default" "standard" "placeholder" "dummy" "guest" "temp" "example" "portal" "hr" "hrportal" "helpdesk" "support" "servicedesk" "tools" "tooling" "services" "api-internal" "internalapi" "playground" "workshop" "vpn" "local" "localhost" "onprem" "on-prem" "dmz" "bastion" "jumpbox" "cache" "queue" "log" "logs" "monitor" "metrics" "ldap" "ad" "ntp" "smtp-internal" "ftp-internal")
+  local tokens=("qa01" "www-preprod" "uat9" "uat02" "workspace" "staging4" "api-uat" "ngcp-qa2" "webstg" "aem-stage2" "staging3" "canary" "hd-qa74" "uat05" "stgapps" "sit3" "ngcp-prf" "staging-dcm" "stage-mycosta" "edg-stg" "apidev" "uat-aka" "aem-dev2" "aem-qa2" "api-preprod" "shopecomqa" "uat03" "accounts-e2e" "uat7" "test4" "api-qa" "admin-academy" "staging-api" "prodcms" "wiop-stage" "api-stage" "preprod-www" "qa-api" "www-int" "gleague-dev" "prod-qa" "www-uat" "globalstg" "stg1" "pes-preprod" "matrix-preprod" "qa-us" "stage65-engage" "qaperf" "docs-test" "mcprod" "qa02-www" "www-qa2" "cqa" "portalstage" "wiop-qa" "server4" "sit-www" "test-shop" "api-product" "qa-ie" "www-qa3" "cstage" "testint" "perf-www" "mydesk-uat" "wwwdev" "qa5" "qa31" "api-prod" "uat6" "integ" "ux-stage" "aktest-www" "www-stg" "backoffice" "www-qa1" "uat5" "test3" "prodtest" "qa4" "preprod-corporate" "uat8" "emails" "develop" "www-qa" "www-dev" "dev-api" "uat-preview" "wwwtst" "int-www" "www-staging" "uat-www" "api-test" "server3" "homolog" "secure-api" "akamai-staging" "akamai-pat" "stg2" "stagecms" "confluence" "qa-www" "mcstaging" "stage3" "cdev" "cdev2" "dev-www" "cos-internal" "console" "uat3" "stage65" "dev3" "autoconfig" "pilot" "server2" "dashboard" "preview-test" "intranet" "e2e" "uat4" "uat-pdp" "lockerroom" "idp" "staff" "preview-uat-pdp" "upload" "infra" "api1" "lab" "failover" "extranet" "wip" "api3" "dr" "matrix-uat" "sit2" "testing" "jira" "webqa" "preprod2" "storage" "config" "gitlab" "git" "signin" "api-dev" "backend" "shadow" "api" "mail" "svc" "dev" "stage" "staging" "test" "qa" "uat" "stg" "prod" "bastion" "preprod" "login" "admin" "ingress" "preview" "portal" "vpn" "auth" "int" "traefik" "localhost" "remote" "support" "accounts" "developer" "development" "tools" "sandbox" "tst" "demo" "qa2" "perf" "uat2" "control" "sso" "sit" "acc" "dev1" "dev2" "access" "uat1" "internal" "training" "server1" "purge" "edit" "pre" "client" "qa3" "pro" "identity" "ppe" "integration" "manage" "monitoring" "proxy" "corp" "dev" "development" "test" "testing" "qa" "uat" "stage" "staging" "demo" "sandbox" "lab" "labs" "experimental" "preprod" "pre-production" "pre-prod" "nonprod" "non-production" "non-prod" "perf" "performance" "loadtest" "soaktest" "integration" "integrationtest" "release" "hotfix" "feature" "rc" "beta" "alpha" "internal" "private" "intranet" "corp" "corporate" "employee" "colleague" "partner" "restricted" "secure" "admin" "backoffice" "back-office" "management" "mgmt" "console" "ops" "operations" "dashboard" "sysadmin" "root" "sudo" "superuser" "jenkins" "teamcity" "bamboo" "circleci" "travis" "gitlab" "bitbucket" "gitea" "jira" "confluence" "artifactory" "nexus" "harbor" "grafana" "kibana" "prometheus" "alertmanager" "nagios" "zabbix" "splunk" "posthog" "sentry" "phabricator" "default" "standard" "placeholder" "dummy" "guest" "temp" "example" "portal" "hr" "hrportal" "helpdesk" "support" "servicedesk" "tools" "tooling" "services" "api-internal" "internalapi" "playground" "workshop" "vpn" "local" "localhost" "onprem" "on-prem" "dmz" "bastion" "jumpbox" "cache" "queue" "log" "logs" "monitor" "metrics" "ldap" "ad" "ntp" "smtp-internal" "ftp-internal")
   echo "[" > "$colleague_file"
   local first_entry=true
   while read -r domain; do
@@ -748,6 +780,10 @@ build_html_report() {
   cat $RUN_DIR/colleague_identification.json| tr -d "\n" >> report.html
   echo "" >> report.html
   cat footer.html >> report.html
+  sed -i.bak '/%%SCREENSHOT_MAP%%/{
+    r '"$RUN_DIR/screenshot_map.json"'
+    d
+  }' report.html && rm -f report.html.bak
 
   mv report.html $RUN_DIR/
 
@@ -790,6 +826,9 @@ main() {
   run_dnsx
   run_naabu
   run_httpx
+  mv output/response $RUN_DIR/
+  mv output/screenshot $RUN_DIR/
+  gather_screenshots
   run_login_detection
   run_security_compliance
   run_api_identification
