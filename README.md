@@ -127,6 +127,7 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Completed ✅ ~~Added PTR record column to the main table.~~
 - Completed ✅ ~~Implemented horizontal and vertical scrolling for tables and charts, with the first title row frozen for easier data reference while scrolling.~~
 - Completed ✅ ~~Added screenshot functionality.~~
+- Completed ✅ ~~Added logging functionality. Logs are stored at /logs/logs.log~~
 - Solve the screen jerk issue.
 - Identify abandoned and unwanted applications.
 
