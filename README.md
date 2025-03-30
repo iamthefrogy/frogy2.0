@@ -98,11 +98,30 @@ Each factor above contributes **one or more** points to the final risk score. Fo
 7. +1 for each missing security header  
 8. +1 per open port  
 9. +1 per detected technology  
+10. +1 per each management ports open
+11. +1 per each database ports open
 
 Once all factors are tallied, we get a **numeric risk score**. **Higher** means **more interesting and potentially gives more room for pentesters to test around** to an attacker.
 
 > **Why This Matters**  
 > This approach helps you quickly **prioritize** which assets warrant deeper testing. Subdomains with high counts of open ports, advanced internal usage, missing headers, or login panels are more complex, more privileged, or more likely to be misconfigured—therefore, your security team can focus on those first.
+
+## Installation
+
+Clone the repository and run the installer script to set up all dependencies and tools:
+
+```bash
+chmod +x install.sh
+./install.sh
+```
+## Usage
+```bash
+chmod +x frogy.sh
+./frogy.sh domains.txt
+```
+
+## Video Demo
+https://www.youtube.com/watch?v=LHlU4CYNj1M
 
 ## Future Roadmap
 
@@ -128,22 +147,6 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 - Completed ✅ ~~Implemented horizontal and vertical scrolling for tables and charts, with the first title row frozen for easier data reference while scrolling.~~
 - Completed ✅ ~~Added screenshot functionality.~~
 - Completed ✅ ~~Added logging functionality. Logs are stored at /logs/logs.log~~
+- Completed ✅ ~~Added extra score for the management and database ports exposed.~~
 - Solve the screen jerk issue.
 - Identify abandoned and unwanted applications.
-
-## Installation
-
-Clone the repository and run the installer script to set up all dependencies and tools:
-
-```bash
-chmod +x install.sh
-./install.sh
-```
-## Usage
-```bash
-chmod +x frogy.sh
-./frogy.sh domains.txt
-```
-
-## Video Demo
-https://www.youtube.com/watch?v=LHlU4CYNj1M
