@@ -254,20 +254,18 @@ gather_screenshots() {
   # Loop over each subfolder in $RUN_DIR/screenshot
   for folder in "$RUN_DIR/screenshot"/*; do
     [ -d "$folder" ] || continue  # skip if not a directory
-    local base="$(basename "$folder")"  # e.g. "cert.esecurify.com_80"
+    local base="$(basename "$folder")"
     # Find the first .png in that folder (httpx -screenshot usually creates one .png)
     local pngfile
     pngfile=$(find "$folder" -maxdepth 1 -type f -iname "*.png" | head -n1)
     if [ -n "$pngfile" ]; then
       # Create a relative path for use in HTML (so that report.html can load it)
-      # e.g. "screenshot/cert.esecurify.com_80/screenshot.png"
       local relpath="screenshot/$base/$(basename "$pngfile")"
       if [ "$first" = true ]; then
         first=false
       else
         echo "," >> "$screenshot_map_file"
       fi
-      # Write JSON key-value pair: "cert.esecurify.com_80": "screenshot/cert.esecurify.com_80/..."
       echo -n "\"$base\": \"$relpath\"" >> "$screenshot_map_file"
     fi
   done
