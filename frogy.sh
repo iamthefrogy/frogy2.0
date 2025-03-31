@@ -13,9 +13,9 @@ DNSX_LIVE_COUNT=0
 HTTPX_LIVE_COUNT=0
 LOGIN_FOUND_COUNT=0
 
-#############################################
+##############################################
 # Validate Input Arguments
-#############################################
+##############################################
 # The script expects at least one argument: a file containing primary domains.
 if [ "$#" -lt 1 ]; then
   echo -e "\033[91m[-] Usage: $0 <primary_domains_file>\033[0m"
@@ -37,9 +37,11 @@ RUN_DIR="output/run-$(date +%Y%m%d%H%M%S)"
 mkdir -p "$RUN_DIR/raw_output/raw_http_responses"
 mkdir -p "$RUN_DIR/logs"
 
+# --- Begin logging configuration (store only in logs) ---
 # Redirect STDERR (which xtrace uses) to the log file.
 exec 2> "$RUN_DIR/logs/logs.log"
 set -x
+# --- End logging configuration ---
 
 ##############################################
 # Global file paths for temporary subdomain lists
@@ -71,7 +73,9 @@ warning() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [!] $*"; }
 error()   { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [-] $*"; }
 
 ##############################################
-# Purpose: Merge subdomain results from a given file into a global temporary file and update the corresponding counter based on the source.
+# Function: merge_and_count
+# Purpose: Merge subdomain results from a given file into a global temporary file
+# and update the corresponding counter based on the source.
 ##############################################
 merge_and_count() {
   local file="$1"         # Input file containing subdomains from one tool
@@ -91,6 +95,7 @@ merge_and_count() {
 }
 
 ##############################################
+# Function: run_chaos
 # Purpose: Query the Chaos database (if enabled) and merge its subdomain results.
 ##############################################
 run_chaos() {
@@ -117,6 +122,7 @@ run_chaos() {
 }
 
 ##############################################
+# Function: run_subfinder
 # Purpose: Run the Subfinder tool on the primary domains and merge the subdomains.
 ##############################################
 run_subfinder() {
@@ -128,6 +134,7 @@ run_subfinder() {
 }
 
 ##############################################
+# Function: run_assetfinder
 # Purpose: Run Assetfinder for each primary domain and merge the results.
 ##############################################
 run_assetfinder() {
@@ -141,6 +148,7 @@ run_assetfinder() {
 }
 
 ##############################################
+# Function: run_crtsh
 # Purpose: Query crt.sh for certificate data and extract subdomains.
 ##############################################
 run_crtsh() {
@@ -179,6 +187,7 @@ run_crtsh() {
 }
 
 ##############################################
+# Function: run_dnsx
 # Purpose: Run dnsx tool to check which subdomains are live.
 ##############################################
 run_dnsx() {
@@ -195,6 +204,7 @@ run_dnsx() {
 }
 
 ##############################################
+# Function: run_naabu
 # Purpose: Run naabu port scanner against discovered subdomains.
 ##############################################
 run_naabu() {
@@ -213,6 +223,7 @@ run_naabu() {
 }
 
 ##############################################
+# Function: run_httpx
 # Purpose: Run httpx to probe live web endpoints using the ports identified.
 ##############################################
 run_httpx() {
@@ -235,10 +246,6 @@ run_httpx() {
   fi
 }
 
-##############################################
-# Purpose: Create json output for mapping websites and their relevant screenshots.
-##############################################
-
 gather_screenshots() {
   local screenshot_map_file="$RUN_DIR/screenshot_map.json"
   echo "{" > "$screenshot_map_file"
@@ -248,7 +255,7 @@ gather_screenshots() {
   for folder in "$RUN_DIR/screenshot"/*; do
     [ -d "$folder" ] || continue  # skip if not a directory
     local base="$(basename "$folder")"
-    # Find the first .png in that folder
+    # Find the first .png in that folder (httpx -screenshot usually creates one .png)
     local pngfile
     pngfile=$(find "$folder" -maxdepth 1 -type f -iname "*.png" | head -n1)
     if [ -n "$pngfile" ]; then
@@ -267,6 +274,7 @@ gather_screenshots() {
 }
 
 ##############################################
+# Function: run_login_detection
 # Purpose: Detect login interfaces on discovered web endpoints.
 # Detailed Explanation:
 #   1. Reads each URL from the httpx output.
@@ -451,7 +459,7 @@ run_login_detection() {
 }
 
 ##############################################
-# Security Compliance and Hygiene Checks
+# Security Compliance and Hygine Checks
 ##############################################
 run_security_compliance() {
   info "[9/13] Analyzing security hygiene using..."
@@ -654,6 +662,7 @@ run_security_compliance() {
 }
 
 ##############################################
+# Function: combine_json
 # Purpose: Merge a line-based JSON file into a single JSON array.
 ##############################################
 combine_json() {
@@ -667,6 +676,7 @@ combine_json() {
 }
 
 ##############################################
+# Function: run_api_identification
 # Purpose: Identify API endpoints based on simple pattern matching in domain names.
 ##############################################
 run_api_identification() {
@@ -693,6 +703,7 @@ run_api_identification() {
 }
 
 ##############################################
+# Function: run_colleague_identification
 # Purpose: Identify endpoints intended for internal/colleague use based on keywords in domain names.
 ##############################################
 run_colleague_identification() {
@@ -728,6 +739,7 @@ run_colleague_identification() {
 }
 
 ##############################################
+# Function: build_html_report
 # Purpose: Combine the various JSON outputs and generate the final HTML report.
 # Detailed Explanation:
 #   - Combines JSON files from dnsx, naabu, and httpx.
@@ -779,6 +791,7 @@ build_html_report() {
 
 
 ##############################################
+# Function: show_summary
 # Purpose: Display a final summary table of the recon results.
 ##############################################
 show_summary() {
