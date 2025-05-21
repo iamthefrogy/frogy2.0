@@ -25,7 +25,8 @@
 
 In this tool, **risk scoring** is based on the notion of **asset attractiveness**—the idea that certain attributes or characteristics make an asset more interesting to attackers. If we see more of these attributes, the overall score goes **up**, indicating a broader “attack surface” that adversaries could leverage. Below is an overview of how each factor contributes to the final **risk score**.
 
-<img src="https://github-production-user-asset-6210df.s3.amazonaws.com/8291014/428630715-f1cf48c9-6b4c-472d-ab15-bb6bf4e458e1.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVCODYLSA53PQK4ZA%2F20250331%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250331T131150Z&X-Amz-Expires=300&X-Amz-Signature=c669769176c0b300fc9cd51f3f3dbc340e537a3a446cd86596a1f556b0353a2c&X-Amz-SignedHeaders=host" alt="graphviz" height="700px" />
+<img src="https://chintangurjar.com/images/frogyasm_s6.svg"/>
+
 
 ---
 ## Screenshots
