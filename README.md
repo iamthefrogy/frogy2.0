@@ -107,19 +107,23 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 > **Why This Matters**  
 > This approach helps you quickly **prioritize** which assets warrant deeper testing. Subdomains with high counts of open ports, advanced internal usage, missing headers, or login panels are more complex, more privileged, or more likely to be misconfigured—therefore, your security team can focus on those first.
 
-## Installation
+## Installation & Usage
 
-Clone the repository and run the installer script to set up all dependencies and tools:
-
+- Step 1 - Clone the repository.
+- Step 2 - Create the target file and add all primary domains to it. E.g., target.txt
+- Step 3 - Build docker container.
+  ```bash
+  docker build -t frogy:latest .
+  ```
+- Step 4 - Run docker container.
 ```bash
-chmod +x install.sh
-./install.sh
-```
-## Usage
+  docker run --rm -it -v "$(pwd):/opt/frogy" -w /opt/frogy --entrypoint /bin/bash frogy:latest
+ ```
+- Step 5 - Once, you are inside docker, run this command to start operations: 
 ```bash
-chmod +x frogy.sh
-./frogy.sh domains.txt
-```
+  ./frogy.sh target.txt
+ ```
+<b>Once this is completed, you will find the output within the output/run-2025XXXXXXXX/report.html</b>
 
 ## Video Demo
 https://www.youtube.com/watch?v=LHlU4CYNj1M
@@ -149,5 +153,5 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Completed ✅ ~~Added screenshot functionality.~~
 - Completed ✅ ~~Added logging functionality. Logs are stored at /logs/logs.log~~
 - Completed ✅ ~~Added extra score for the management and database ports exposed.~~
-- Solve the screen jerk issue.
+- Completed ✅ ~~Create Dockerized version.~~
 - Identify abandoned and unwanted applications.
