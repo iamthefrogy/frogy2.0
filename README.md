@@ -118,15 +118,19 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 
 - Step 1 - Clone the repository.
 - Step 2 - Create the target file and add all primary domains to it. E.g., target.txt
-- Step 3 - Build docker container.
+- Step 3 - Give permissions to all files within the frogy2.0 folder.
+  ```bash
+  chmod 777 *
+  ```
+- Step 4 - Build docker container.
   ```bash
   docker build -t frogy:latest .
   ```
-- Step 4 - Run docker container.
+- Step 5 - Run docker container.
 ```bash
   docker run --rm -it -v "$(pwd):/opt/frogy" -w /opt/frogy --entrypoint /bin/bash frogy:latest
  ```
-- Step 5 - Once, you are inside docker, run this command to start operations: 
+- Step 6 - Once, you are inside docker, run this command to start operations: 
 ```bash
   ./frogy.sh target.txt
  ```
