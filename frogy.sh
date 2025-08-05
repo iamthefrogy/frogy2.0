@@ -230,21 +230,31 @@ run_httpx() {
   if [[ "$USE_HTTPX" == "true" ]]; then
     info "[7/13] Running httpx..."
     local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
+
+    # 1) JSON pass → ensures $RUN_DIR/httpx.json exists
     httpx -silent \
           -l "$final_urls_ports" \
           -j \
           -o "$RUN_DIR/httpx.json" \
           >/dev/null 2>&1 || true
-    # Count the number of live websites detected by httpx.
-    HTTPX_LIVE_COUNT=$(wc -l < "$RUN_DIR/httpx.json")
+
+    # Count live endpoints
+    HTTPX_LIVE_COUNT=$(wc -l < "$RUN_DIR/httpx.json" || echo 0)
+
+    # Ensure the default output dirs exist
+    mkdir -p output/screenshot output/response
+
+    # 2) Screenshot + store raw HTTP bodies
+    #    • PNGs → output/screenshot (default)
+    #    • Responses → output/response (must specify)
     httpx -silent \
           -l "$final_urls_ports" \
           -screenshot \
+          -sr output/response \
           >/dev/null 2>&1 || true
-    # Count the number of live websites detected by httpx.
-    HTTPX_LIVE_COUNT=$(wc -l < "$RUN_DIR/httpx.json")
   fi
 }
+
 
 gather_screenshots() {
   local screenshot_map_file="$RUN_DIR/screenshot_map.json"
