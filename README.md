@@ -1,8 +1,12 @@
 # Frogy 2.0
 <p align="center">
   <a href="#features">Features</a> •
-
+  <a href="#installation-and-usage">Installation</a> •
+  <a href="#risk-scoring">Risk Scoring</a> •
+  <a href="#screenshots">Screenshots</a> •
+  <a href="#blackhat-video">Blackhat Video</a>
 </p>
+
 **Frogy 2.0** is an automated external reconnaissance and Attack Surface Management (ASM) toolkit designed to map out an organization's entire internet presence. It identifies assets, IP addresses, web applications, and other metadata across the public internet and then smartly prioritizes them with highest (most attractive) to lowest (least attractive) from an attacker's playground perspective.
 
 <img src="https://chintangurjar.com/images/frogy.png" alt="graphviz"/>
@@ -24,7 +28,7 @@
 - **Professional reporting:**  
   Generate a dynamic, colour-coded HTML report with a modern design and dark/light theme toggle.
 
-## Risk Scoring: Asset Attractiveness Explained
+# Risk Scoring
 
 In this tool, **risk scoring** is based on the notion of **asset attractiveness**—the idea that certain attributes or characteristics make an asset more interesting to attackers. If we see more of these attributes, the overall score goes **up**, indicating a broader “attack surface” that adversaries could leverage. Below is an overview of how each factor contributes to the final **risk score**.
 
@@ -32,7 +36,7 @@ In this tool, **risk scoring** is based on the notion of **asset attractiveness*
 
 
 ---
-## Screenshots
+# Screenshots
 
 <img src="https://chintangurjar.com/images/frogyasm_s1.png"/>
 <img src="https://chintangurjar.com/images/frogyasm_s2.png"/>
@@ -110,7 +114,7 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
 > **Why This Matters**  
 > This approach helps you quickly **prioritize** which assets warrant deeper testing. Subdomains with high counts of open ports, advanced internal usage, missing headers, or login panels are more complex, more privileged, or more likely to be misconfigured—therefore, your security team can focus on those first.
 
-## Installation & Usage
+# Installation and Usage
 
 - Step 1 - Clone the repository.
 - Step 2 - Create the target file and add all primary domains to it. E.g., target.txt
@@ -128,10 +132,10 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
  ```
 <b>Once this is completed, you will find the output within the output/run-2025XXXXXXXX/report.html</b>
 
-## Video Demo
+# BlackHat Video
 https://www.youtube.com/watch?v=LHlU4CYNj1M
 
-## Future Roadmap
+# Future Roadmap
 
 - Completed ✅ ~~Adding security and compliance-related data (SSL/TLS hygiene, SPF, DMARC, Headers etc)~~
 - Completed ✅ ~~Allow to filter column data.~~
