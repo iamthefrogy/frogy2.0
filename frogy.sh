@@ -249,8 +249,7 @@ run_httpx() {
     #    • Responses → output/response (must specify)
     httpx -silent \
           -l "$final_urls_ports" \
-          -screenshot \
-          -sr output/response \
+          -ss \
           >/dev/null 2>&1 || true
   fi
 }
@@ -258,30 +257,35 @@ run_httpx() {
 
 gather_screenshots() {
   local screenshot_map_file="$RUN_DIR/screenshot_map.json"
-  echo "{" > "$screenshot_map_file"
-  local first=true
+  local screenshot_dir="$RUN_DIR/screenshot"
 
-  # Loop over each subfolder in $RUN_DIR/screenshot
-  for folder in "$RUN_DIR/screenshot"/*; do
-    [ -d "$folder" ] || continue  # skip if not a directory
-    local base="$(basename "$folder")"
-    # Find the first .png in that folder (httpx -screenshot usually creates one .png)
-    local pngfile
-    pngfile=$(find "$folder" -maxdepth 1 -type f -iname "*.png" | head -n1)
-    if [ -n "$pngfile" ]; then
-      # Create a relative path for use in HTML (so that report.html can load it)
-      local relpath="screenshot/$base/$(basename "$pngfile")"
-      if [ "$first" = true ]; then
-        first=false
-      else
-        echo "," >> "$screenshot_map_file"
-      fi
-      echo -n "\"$base\": \"$relpath\"" >> "$screenshot_map_file"
-    fi
+  # Start the JSON
+  printf '{\n' > "$screenshot_map_file"
+
+  local sep=""  # we'll insert commas *between* entries
+  for folder in "$screenshot_dir"/*/; do
+    [ -d "$folder" ] || continue        # skip non-dirs
+    local host="$(basename "$folder")"
+
+    # grab the first PNG in that folder
+    local png
+    png=$(find "$folder" -maxdepth 1 -type f -iname '*.png' | head -n1)
+    [ -z "$png" ] && continue           # skip if no screenshot
+
+    # make it relative to $RUN_DIR/
+    local relpath="${png#$RUN_DIR/}"
+
+    # emit “, ” before every entry except the first
+    printf '%s' "$sep" >> "$screenshot_map_file"
+    printf '  "%s": "%s"\n' "$host" "$relpath" >> "$screenshot_map_file"
+
+    sep=","  # next time through, prepend a comma+newline
   done
 
-  echo "}" >> "$screenshot_map_file"
+  # close out JSON
+  printf '}\n' >> "$screenshot_map_file"
 }
+
 
 ##############################################
 # Function: run_login_detection
