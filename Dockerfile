@@ -1,36 +1,41 @@
-FROM ubuntu:latest
+FROM golang:1.24-bookworm AS builder
 
+ENV GOBIN=/out
+RUN mkdir -p "$GOBIN"
+
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+      git ca-certificates build-essential pkg-config libpcap-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+ARG SUBFINDER_VER=v2.8.0
+ARG ASSETFINDER_VER=latest
+ARG DNSX_VER=latest
+ARG NAABU_VER=v2.3.0
+ARG HTTPX_VER=latest
+
+RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@${SUBFINDER_VER} \
+ && go install github.com/tomnomnom/assetfinder@${ASSETFINDER_VER} \
+ && go install github.com/projectdiscovery/dnsx/cmd/dnsx@${DNSX_VER} \
+ && go install github.com/projectdiscovery/naabu/v2/cmd/naabu@${NAABU_VER} \
+ && go install github.com/projectdiscovery/httpx/cmd/httpx@${HTTPX_VER}
+
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV GOPATH=/go
-ENV GOBIN=$GOPATH/bin
-ENV PATH=$GOBIN:/usr/local/go/bin:/usr/local/bin:$PATH
-ENV CGO_ENABLED=1
 
-
-RUN apt-get update -qq \
- && apt-get install -y --no-install-recommends \
-      build-essential pkg-config curl tar jq unzip sed python3 \
-      libpcap-dev whois dnsutils openssl git ca-certificates \
-      golang-go \
- && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+      ca-certificates curl jq sed python3 whois dnsutils openssl \
+      bash libpcap0.8 \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/frogy
-COPY . /opt/frogy
+COPY . .
 
-RUN chmod +x *
+RUN sed -i 's/\r$//' frogy.sh || true \
+ && chmod 0755 frogy.sh
 
-RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
- && go install github.com/tomnomnom/assetfinder@latest \
- && go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest \
- && go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest \
- && go install github.com/projectdiscovery/httpx/cmd/httpx@latest
-
-RUN cp $GOBIN/subfinder   /usr/local/bin/ \
- && cp $GOBIN/assetfinder /usr/local/bin/ \
- && cp $GOBIN/dnsx        /usr/local/bin/ \
- && cp $GOBIN/naabu       /usr/local/bin/ \
- && cp $GOBIN/httpx       /usr/local/bin/
+COPY --from=builder /out/* /usr/local/bin/
+ENV PATH=/usr/local/bin:$PATH
 
 RUN mkdir -p /opt/frogy/output
 
