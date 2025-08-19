@@ -165,4 +165,5 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Completed ✅ ~~Added logging functionality. Logs are stored at /logs/logs.log~~
 - Completed ✅ ~~Added extra score for the management and database ports exposed.~~
 - Completed ✅ ~~Create Dockerized version.~~
+- Completed ✅ ~~Added new subdomain enum capability using GAU (waybackurls).~~
 - Identify abandoned and unwanted applications.
