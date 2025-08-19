@@ -12,12 +12,14 @@ ARG ASSETFINDER_VER=latest
 ARG DNSX_VER=latest
 ARG NAABU_VER=v2.3.0
 ARG HTTPX_VER=latest
+ARG GAU_VER=latest
 
 RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@${SUBFINDER_VER} \
  && go install github.com/tomnomnom/assetfinder@${ASSETFINDER_VER} \
  && go install github.com/projectdiscovery/dnsx/cmd/dnsx@${DNSX_VER} \
  && go install github.com/projectdiscovery/naabu/v2/cmd/naabu@${NAABU_VER} \
- && go install github.com/projectdiscovery/httpx/cmd/httpx@${HTTPX_VER}
+ && go install github.com/projectdiscovery/httpx/cmd/httpx@${HTTPX_VER} \
+ && go install github.com/lc/gau/v2/cmd/gau@${GAU_VER}
 
 FROM ubuntu:24.04
 
