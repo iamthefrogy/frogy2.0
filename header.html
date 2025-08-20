@@ -402,6 +402,7 @@
               <th>Referrer Policy</th>
               <th>Permissions Policy</th>
               <th>Open Ports / Services</th>
+              <th>Crawled Links</th>
             </tr>
             <!-- Second header row for filter dropdowns per column -->
             <tr id="filter-row">
@@ -448,6 +449,7 @@
               <th><select id="rp-filter"><option value="">All</option></select></th>
               <th><select id="pp-filter"><option value="">All</option></select></th>
               <th><select id="ports-services-filter"><option value="">All</option></select></th>
+              <th><select id="crawledlinks-filter"><option value="">All</option></select></th>
             </tr>
           </thead>
           <tbody id="report-table-body"></tbody>
@@ -573,7 +575,7 @@
       // Compute risk score
       function computePriority({
         purpose, url, loginFound, statusCode, sslVersion, certExpiry,
-        sts, xfo, csp, xss, rp, pp, openPortsCount, dbPortsCount, managementPortsCount, techCount
+        sts, xfo, csp, xss, rp, pp, openPortsCount, dbPortsCount, managementPortsCount, techCount, linkCount
       }) {
 
         let score = 0;
@@ -653,6 +655,11 @@
         if (techCount && Number.isFinite(techCount)) {
           score += techCount;
           reasons.push(`+${techCount} (Tech stack count)`);
+        }
+          if (linkCount && Number.isFinite(linkCount) && linkCount > 0) {
+            score += linkCount;
+            reasons.push(`${linkCount} crawled links for this URL`);
+
         }
         return { score, debug: reasons };
       }
@@ -1110,6 +1117,13 @@
                 }
 
               });
+
+              const linksForUrl = (window.linksMap && window.linksMap[h.url]) ? window.linksMap[h.url] : [];
+              const linkCount = linksForUrl.length;
+              const linksCellHTML = linkCount > 0
+                ? `<a href="#" onclick="openLinksModal('${h.url}'); return false;">${linkCount}</a>`
+                : "N/A";
+
               const { score, debug } = computePriority({
                 purpose: colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended",
                 url: h.url,
@@ -1127,7 +1141,8 @@
                 openPortsCount: openPortsCount,
                 dbPortsCount: dbPortsCount,
                 managementPortsCount: managementPortsCount,
-                techCount
+                techCount,
+                linkCount
               });
               if (score < minRiskScore) minRiskScore = score;
               if (score > maxRiskScore) maxRiskScore = score;
@@ -1176,6 +1191,7 @@
                   ? window.naabuMap[domain].map(p => `${p.port} (${p.service})`).join("<br>")
                   : "N/A"
                 }</td>
+                <td>${linksCellHTML}</td>
               `;
               const scoreCell = row.getElementsByTagName("td")[0];
               scoreCell.innerText = score;
@@ -1281,7 +1297,9 @@
           xss: document.getElementById("xss-filter").value.toLowerCase(),
           rp: document.getElementById("rp-filter").value.toLowerCase(),
           pp: document.getElementById("pp-filter").value.toLowerCase(),
-          portsservices: document.getElementById("ports-services-filter").value.toLowerCase()
+          portsservices: document.getElementById("ports-services-filter").value.toLowerCase(),
+          crawledlinks: document.getElementById("crawledlinks-filter").value.toLowerCase()
+
         };
         const filtered = allTableRows.filter(row => {
           const cells = row.getElementsByTagName("td");
@@ -1324,6 +1342,7 @@
           if (filters.rp && !cells[34].innerText.toLowerCase().includes(filters.rp)) return false;
           if (filters.pp && !cells[35].innerText.toLowerCase().includes(filters.pp)) return false;
           if (filters.portsservices && !cells[36].innerText.toLowerCase().includes(filters.portsservices)) return false;
+          if (filters.crawledlinks && !cells[37].innerText.toLowerCase().includes(filters.crawledlinks)) return false;
           if (query && !row.innerText.toLowerCase().includes(query)) return false;
           return true;
         });
@@ -1393,10 +1412,10 @@
       }
 
       function populateColumnFilters() {
-        const uniqueCols = Array.from({ length: 37 }, () => new Set());
+        const uniqueCols = Array.from({ length: 38 }, () => new Set());
         allTableRows.forEach(row => {
           const cells = row.getElementsByTagName("td");
-          for (let col = 0; col < 37; col++) {
+          for (let col = 0; col < 38; col++) {
             if (cells[col]) uniqueCols[col].add(cells[col].innerText.trim());
           }
         });
@@ -1454,6 +1473,7 @@
         fillSelectOptions("rp-filter", [...uniqueCols[34]]);
         fillSelectOptions("pp-filter", [...uniqueCols[35]]);
         fillSelectOptions("ports-services-filter", [...uniqueCols[36]]);
+        fillSelectOptions("crawledlinks-filter", [...uniqueCols[37]]);
       }
 
       document.getElementById("searchBox").addEventListener("input", onFilterChange);
