@@ -132,7 +132,7 @@ run_chaos() {
 ##############################################
 run_subfinder() {
   if [[ "$USE_SUBFINDER" == "true" ]]; then
-    info "[1/14] Running Subfinder..."
+    info "[1/15] Running Subfinder..."
     subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent -all -o "$RUN_DIR/subfinder.txt" >/dev/null 2>&1 || true
     merge_and_count "$RUN_DIR/subfinder.txt" "Subfinder"
   fi
@@ -144,7 +144,7 @@ run_subfinder() {
 ##############################################
 run_assetfinder() {
   if [[ "$USE_ASSETFINDER" == "true" ]]; then
-    info "[2/14] Running Assetfinder..."
+    info "[2/15] Running Assetfinder..."
     while read -r domain; do
       assetfinder --subs-only "$domain" >> "$RUN_DIR/assetfinder.txt" 2>/dev/null || true
     done < "$PRIMARY_DOMAINS_FILE"
@@ -157,7 +157,7 @@ run_assetfinder() {
 # Purpose: Query crt.sh for certificate data and extract subdomains.
 ##############################################
 run_crtsh() {
-  info "[3/14] Running crt.sh..."
+  info "[3/15] Running crt.sh..."
   local crt_file="$RUN_DIR/whois.txt"
   > "$crt_file"
   while read -r domain; do
@@ -197,7 +197,7 @@ run_crtsh() {
 ##############################################
 run_gau() {
   if [[ "$USE_GAU" == "true" ]]; then
-    info "[4/14] Running gau (wayback, subs)…"
+    info "[4/15] Running GAU…"
 
     mkdir -p "$RUN_DIR/raw_output/gau"
     local raw_urls="$RUN_DIR/raw_output/gau/urls.txt"
@@ -235,7 +235,7 @@ run_gau() {
 ##############################################
 run_dnsx() {
   if [[ "$USE_DNSX" == "true" ]]; then
-    info "[6/14] Running dnsx..."
+    info "[6/15] Running dnsx..."
     dnsx -silent \
          -l "$MASTER_SUBS" \
          -o "$RUN_DIR/dnsx.json" \
@@ -252,7 +252,7 @@ run_dnsx() {
 ##############################################
 run_naabu() {
   if [[ "$USE_NAABU" == "true" ]]; then
-    info "[7/14] Running naabu..."
+    info "[7/15] Running naabu..."
     naabu -silent \
           -l "$MASTER_SUBS" \
           -p "7,9,13,21,22,23,25,26,37,53,66,79,80,81,88,106,110,111,113,119,135,139,143,144,179,199,443,457,465,513,514,515,543,544,548,554,587,631,646,7647,8000,8001,8008,8080,8081,8085,8089,8090,873,8880,8888,9000,9080,9100,990,993,995,1024,1025,1026,1027,1028,1029,10443,1080,1100,1110,1241,1352,1433,1434,1521,1720,1723,1755,1900,1944,2000,2001,2049,2121,2301,2717,3000,3128,32768,3306,3389,3986,4000,4001,4002,4100,4567,4899,49152-49157,5000,5001,5009,5051,5060,5101,5190,5357,5432,5631,5666,5800,5801,5802,5900,5985,6000,6001,6346,6347,6646,7001,7002,7070,7170,7777,8800,9999,10000,20000,30821" \
@@ -271,7 +271,7 @@ run_naabu() {
 ##############################################
 run_httpx() {
   if [[ "$USE_HTTPX" == "true" ]]; then
-    info "[8/14] Running httpx..."
+    info "[8/15] Running httpx..."
     local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 
     # 1) JSON pass → ensures $RUN_DIR/httpx.json exists
@@ -296,7 +296,6 @@ run_httpx() {
           >/dev/null 2>&1 || true
   fi
 }
-
 
 gather_screenshots() {
   local screenshot_map_file="$RUN_DIR/screenshot_map.json"
@@ -329,6 +328,47 @@ gather_screenshots() {
   printf '}\n' >> "$screenshot_map_file"
 }
 
+##############################################
+# Function: run_katana
+# Purpose: Crawl live URLs (from httpx.json) and save per-URL links into one JSON file.
+##############################################
+run_katana() {
+  info "[9/15] Crawling links with Katana..."
+  local httpx_file="$RUN_DIR/httpx.json"
+  local output_file="$RUN_DIR/katana_links.json"
+
+  if [ ! -s "$httpx_file" ]; then
+    echo "{}" > "$output_file"
+    return
+  fi
+
+  local seeds="$RUN_DIR/katana_seeds.txt"
+  jq -r '.url' "$httpx_file" | sort -u > "$seeds"
+
+  # JSON object start
+  echo "{" > "$output_file"
+  local first=true
+
+  local depth="${KATANA_DEPTH:-3}"
+  local timeout="${KATANA_TIMEOUT:-60}"
+
+  while IFS= read -r url; do
+    [ -z "$url" ] && continue
+    local tmp="$RUN_DIR/katana_tmp.txt"
+    katana -silent -u "$url" -d "$depth" -ct "$timeout" 2>/dev/null \
+      | sort -u > "$tmp" || true
+
+    local links_json
+    links_json=$(jq -R -s -c 'split("\n") | map(select(length>0))' "$tmp")
+
+    if [ "$first" = true ]; then first=false; else echo "," >> "$output_file"; fi
+    printf '  "%s": %s\n' "$url" "$links_json" >> "$output_file"
+
+    rm -f "$tmp"
+  done < "$seeds"
+
+  echo "}" >> "$output_file"
+}
 
 ##############################################
 # Function: run_login_detection
@@ -340,7 +380,7 @@ gather_screenshots() {
 #   4. Returns a JSON object indicating if login was found and lists the reasons.
 ##############################################
 run_login_detection() {
-  info "[9/14] Detecting Login panels..."
+  info "[10/15] Detecting Login panels..."
   local input_file="$RUN_DIR/httpx.json"
   local output_file="$RUN_DIR/login.json"
 
@@ -519,7 +559,7 @@ run_login_detection() {
 # Security Compliance and Hygine Checks
 ##############################################
 run_security_compliance() {
-  info "[10/14] Analyzing security hygiene using..."
+  info "[11/15] Analyzing security hygiene using..."
   local output_file="$RUN_DIR/securitycompliance.json"
 
   # Ensure the MASTER_SUBS and httpx.json files exist.
@@ -737,7 +777,7 @@ combine_json() {
 # Purpose: Identify API endpoints based on simple pattern matching in domain names.
 ##############################################
 run_api_identification() {
-  info "[11/14] Identifying API endpoints..."
+  info "[12/15] Identifying API endpoints..."
   local api_file="$RUN_DIR/api_identification.json"
   # Begin JSON array output
   echo "[" > "$api_file"
@@ -764,7 +804,7 @@ run_api_identification() {
 # Purpose: Identify endpoints intended for internal/colleague use based on keywords in domain names.
 ##############################################
 run_colleague_identification() {
-  info "[12/14] Identifying colleague-facing endpoints..."
+  info "[13/15] Identifying colleague-facing endpoints..."
   local colleague_file="$RUN_DIR/colleague_identification.json"
   # Define a list of keywords that indicate internal or employee-intended endpoints.
   local tokens=("qa01" "www-preprod" "uat9" "uat02" "workspace" "staging4" "api-uat" "ngcp-qa2" "webstg" "aem-stage2" "staging3" "canary" "hd-qa74" "uat05" "stgapps" "sit3" "ngcp-prf" "staging-dcm" "stage-mycosta" "edg-stg" "apidev" "uat-aka" "aem-dev2" "aem-qa2" "api-preprod" "shopecomqa" "uat03" "accounts-e2e" "uat7" "test4" "api-qa" "admin-academy" "staging-api" "prodcms" "wiop-stage" "api-stage" "preprod-www" "qa-api" "www-int" "gleague-dev" "prod-qa" "www-uat" "globalstg" "stg1" "pes-preprod" "matrix-preprod" "qa-us" "stage65-engage" "qaperf" "docs-test" "mcprod" "qa02-www" "www-qa2" "cqa" "portalstage" "wiop-qa" "server4" "sit-www" "test-shop" "api-product" "qa-ie" "www-qa3" "cstage" "testint" "perf-www" "mydesk-uat" "wwwdev" "qa5" "qa31" "api-prod" "uat6" "integ" "ux-stage" "aktest-www" "www-stg" "backoffice" "www-qa1" "uat5" "test3" "prodtest" "qa4" "preprod-corporate" "uat8" "emails" "develop" "www-qa" "www-dev" "dev-api" "uat-preview" "wwwtst" "int-www" "www-staging" "uat-www" "api-test" "server3" "homolog" "secure-api" "akamai-staging" "akamai-pat" "stg2" "stagecms" "confluence" "qa-www" "mcstaging" "stage3" "cdev" "cdev2" "dev-www" "cos-internal" "console" "uat3" "stage65" "dev3" "autoconfig" "pilot" "server2" "dashboard" "preview-test" "intranet" "e2e" "uat4" "uat-pdp" "lockerroom" "idp" "staff" "preview-uat-pdp" "upload" "infra" "api1" "lab" "failover" "extranet" "wip" "api3" "dr" "matrix-uat" "sit2" "testing" "jira" "webqa" "preprod2" "storage" "config" "gitlab" "git" "signin" "api-dev" "backend" "shadow" "api" "mail" "svc" "dev" "stage" "staging" "test" "qa" "uat" "stg" "prod" "bastion" "preprod" "login" "admin" "ingress" "preview" "portal" "vpn" "auth" "int" "traefik" "localhost" "remote" "support" "accounts" "developer" "development" "tools" "sandbox" "tst" "demo" "qa2" "perf" "uat2" "control" "sso" "sit" "acc" "dev1" "dev2" "access" "uat1" "internal" "training" "server1" "purge" "edit" "pre" "client" "qa3" "pro" "identity" "ppe" "integration" "manage" "monitoring" "proxy" "corp" "dev" "development" "test" "testing" "qa" "uat" "stage" "staging" "demo" "sandbox" "lab" "labs" "experimental" "preprod" "pre-production" "pre-prod" "nonprod" "non-production" "non-prod" "perf" "performance" "loadtest" "soaktest" "integration" "integrationtest" "release" "hotfix" "feature" "rc" "beta" "alpha" "internal" "private" "intranet" "corp" "corporate" "employee" "colleague" "partner" "restricted" "secure" "admin" "backoffice" "back-office" "management" "mgmt" "console" "ops" "operations" "dashboard" "sysadmin" "root" "sudo" "superuser" "jenkins" "teamcity" "bamboo" "circleci" "travis" "gitlab" "bitbucket" "gitea" "jira" "confluence" "artifactory" "nexus" "harbor" "grafana" "kibana" "prometheus" "alertmanager" "nagios" "zabbix" "splunk" "posthog" "sentry" "phabricator" "default" "standard" "placeholder" "dummy" "guest" "temp" "example" "portal" "hr" "hrportal" "helpdesk" "support" "servicedesk" "tools" "tooling" "services" "api-internal" "internalapi" "playground" "workshop" "vpn" "local" "localhost" "onprem" "on-prem" "dmz" "bastion" "jumpbox" "cache" "queue" "log" "logs" "monitor" "metrics" "ldap" "ad" "ntp" "smtp-internal" "ftp-internal")
@@ -804,7 +844,7 @@ run_colleague_identification() {
 #   - Writes the complete HTML (including embedded JavaScript and CSS) to the report file.
 ##############################################
 build_html_report() {
-  info "[13/14] Building HTML report with analytics..."
+  info "[14/15] Building HTML report with analytics..."
   combine_json "$RUN_DIR/dnsx.json"   "$RUN_DIR/dnsx_merged.json"
   combine_json "$RUN_DIR/naabu.json"    "$RUN_DIR/naabu_merged.json"
   combine_json "$RUN_DIR/httpx.json"    "$RUN_DIR/httpx_merged.json"
@@ -835,6 +875,11 @@ build_html_report() {
   echo -n "const colleagueData = " >> report.html
   cat $RUN_DIR/colleague_identification.json| tr -d "\n" >> report.html
   echo "" >> report.html
+  echo -n "const katanaData = " >> report.html
+  cat $RUN_DIR/katana_links.json | tr -d "\n" >> report.html
+  echo "" >> report.html
+
+
   cat footer.html >> report.html
   sed -i.bak '/%%SCREENSHOT_MAP%%/{
     r '"$RUN_DIR/screenshot_map.json"'
@@ -843,7 +888,7 @@ build_html_report() {
 
   mv report.html $RUN_DIR/
 
-  info "[14/14] Report generated at $RUN_DIR/report.html"
+  info "[15/15] Report generated at $RUN_DIR/report.html"
 }
 
 
@@ -872,7 +917,7 @@ main() {
   run_assetfinder
   run_crtsh
   run_gau
-  info "[5/14] Merging subdomains..."
+  info "[5/15] Merging subdomains..."
   # Append each primary domain and its www subdomain to ALL_TEMP.
   while read -r domain; do
     echo "$domain" >> "$ALL_TEMP"
@@ -883,6 +928,7 @@ main() {
   run_dnsx
   run_naabu
   run_httpx
+  run_katana
   mv output/response $RUN_DIR/
   mv output/screenshot $RUN_DIR/
   gather_screenshots
