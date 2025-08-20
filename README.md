@@ -5,7 +5,6 @@
   <a href="#risk-scoring">Risk Scoring</a> •
   <a href="#screenshots">Screenshots</a> •
   <a href="#blackhat-video">Blackhat Video</a>
-</p>
 
 **Frogy 2.0** is an automated external reconnaissance and Attack Surface Management (ASM) toolkit designed to map out an organization's entire internet presence. It identifies assets, IP addresses, web applications, and other metadata across the public internet and then smartly prioritizes them with highest (most attractive) to lowest (least attractive) from an attacker's playground perspective.
 
@@ -32,8 +31,7 @@
 
 In this tool, **risk scoring** is based on the notion of **asset attractiveness**—the idea that certain attributes or characteristics make an asset more interesting to attackers. If we see more of these attributes, the overall score goes **up**, indicating a broader “attack surface” that adversaries could leverage. Below is an overview of how each factor contributes to the final **risk score**.
 
-<img src="https://chintangurjar.com/images/frogyasm_s6.svg"/>
-
+<img src="https://github.com/user-attachments/assets/312e9d15-482e-4676-96fe-5dd5ae2a061d"/>
 
 ---
 # Screenshots
@@ -108,6 +106,7 @@ Each factor above contributes **one or more** points to the final risk score. Fo
 9. +1 per detected technology  
 10. +1 per each management ports open
 11. +1 per each database ports open
+12. +1 per each crawled link per application
 
 Once all factors are tallied, we get a **numeric risk score**. **Higher** means **more interesting and potentially gives more room for pentesters to test around** to an attacker.
 
