@@ -7,19 +7,21 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
       git ca-certificates build-essential pkg-config libpcap-dev \
   && rm -rf /var/lib/apt/lists/*
 
-ARG SUBFINDER_VER=v2.8.0
+ARG SUBFINDER_VER=latest
 ARG ASSETFINDER_VER=latest
 ARG DNSX_VER=latest
-ARG NAABU_VER=v2.3.0
+ARG NAABU_VER=latest
 ARG HTTPX_VER=latest
 ARG GAU_VER=latest
+ARG KATANA_VER=latest
 
 RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@${SUBFINDER_VER} \
  && go install github.com/tomnomnom/assetfinder@${ASSETFINDER_VER} \
  && go install github.com/projectdiscovery/dnsx/cmd/dnsx@${DNSX_VER} \
  && go install github.com/projectdiscovery/naabu/v2/cmd/naabu@${NAABU_VER} \
  && go install github.com/projectdiscovery/httpx/cmd/httpx@${HTTPX_VER} \
- && go install github.com/lc/gau/v2/cmd/gau@${GAU_VER}
+ && go install github.com/lc/gau/v2/cmd/gau@${GAU_VER} \
+ && go install github.com/projectdiscovery/katana/cmd/katana@${KATANA_VER}
 
 FROM ubuntu:24.04
 
