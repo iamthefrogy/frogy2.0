@@ -166,4 +166,4 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Completed ✅ ~~Added extra score for the management and database ports exposed.~~
 - Completed ✅ ~~Create Dockerized version.~~
 - Completed ✅ ~~Added new subdomain enum capability using GAU (waybackurls).~~
-- Identify abandoned and unwanted applications.
+- Completed ✅ ~~Now capable of crawling links per live application and also it adds the score of total crawled links to the main score.~~
