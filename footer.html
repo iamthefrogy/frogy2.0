@@ -26,6 +26,44 @@
           buildScoreboard({ totalSubdomains, liveSubs, totalHttpx: endpointsCount, loginFoundCount });
           buildLoginBarChart(endpointsCount, loginFoundCount);
 
+          // Build per-origin links map so each row shows ONLY its own origin's links
+          (function () {
+            function toOrigin(u) {
+              try { return new URL(u).origin; } catch (e) { return ""; }
+            }
+
+            // 1) Flatten ALL katana links (from every seed) into one array
+            const allLinks = [];
+            if (katanaData && typeof katanaData === "object") {
+              Object.keys(katanaData).forEach(k => {
+                const arr = Array.isArray(katanaData[k]) ? katanaData[k] : [];
+                for (const l of arr) allLinks.push(l);
+              });
+            }
+
+            // 2) Build a map per *origin* (scheme+host+port) → list of links
+            const byOrigin = {};
+            for (const l of allLinks) {
+              const o = toOrigin(l);
+              if (!o) continue;
+              if (!byOrigin[o]) byOrigin[o] = new Set();
+              byOrigin[o].add(l);
+            }
+
+            // 3) For each live URL in httpxData, assign ONLY its origin’s links
+            const linksMap = {};
+            (httpxData || []).forEach(rec => {
+              const o = toOrigin(rec.url);
+              const set = byOrigin[o] || new Set();
+              linksMap[rec.url] = Array.from(set).sort();
+            });
+
+            // 4) Expose globally for the table and modal
+            window.linksMap = linksMap;
+          })();
+
+
+
           const statusCount = {};
           httpxData.forEach(h => {
             const code = h.status_code || 0;
@@ -136,6 +174,25 @@
         document.getElementById('screenshotModalImg').src = "";
       }
     </script>
+
+    <script>
+    function openLinksModal(url) {
+      const list = (window.linksMap && window.linksMap[url]) ? window.linksMap[url] : [];
+      const box = document.getElementById('linksModalBody');
+      if (!list.length) {
+        box.innerHTML = "<p>No links found.</p>";
+      } else {
+        box.innerHTML = "<pre style='white-space: pre-wrap; word-wrap: break-word; max-height:60vh; overflow:auto;'>" +
+                        list.join("\n") + "</pre>";
+      }
+      document.getElementById('linksModal').style.display = 'block';
+    }
+    function closeLinksModal() {
+      document.getElementById('linksModal').style.display = 'none';
+      document.getElementById('linksModalBody').innerHTML = "";
+    }
+  </script>
+
     <!-- Modal HTML -->
     <div id="screenshotModal">
       <div id="screenshotModalContent">
@@ -143,5 +200,15 @@
         <img id="screenshotModalImg" src="" alt="Full Screenshot" />
       </div>
     </div>
+
+    <!-- Links Modal -->
+    <div id="linksModal" style="display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.75);">
+      <div style="position:relative; margin:5% auto; width:80%; max-width:900px; background:#fff; padding:10px; border-radius:4px;">
+        <button style="position:absolute; top:5px; right:10px; background:#444; color:#fff; border:none; border-radius:3px; padding:5px 8px; cursor:pointer;"
+                onclick="closeLinksModal()">Close</button>
+        <div id="linksModalBody"></div>
+      </div>
+    </div>
+
   </body>
 </html>
