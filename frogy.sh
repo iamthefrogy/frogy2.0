@@ -556,7 +556,7 @@ run_login_detection() {
 }
 
 ##############################################
-# Security Compliance and Hygine Checks
+# Security Compliance and Hygiene Checks
 ##############################################
 run_security_compliance() {
   info "[11/15] Analyzing security hygiene using..."
