@@ -166,3 +166,21 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Completed ✅ ~~Create Dockerized version.~~
 - Completed ✅ ~~Added new subdomain enum capability using GAU (waybackurls).~~
 - Completed ✅ ~~Now capable of crawling links per live application and also it adds the score of total crawled links to the main score.~~
+- Completed ✅ ~~Added check_dependencies to verify all required tools are installed (subfinder, assetfinder, dnsx, naabu, httpx, katana, jq, curl, whois, dig, openssl, xargs, unzip, grep, sed, awk). The script now aborts with a clear list of missing tools.~~
+- Completed ✅ ~~Added check_dependencies to verify all required tools are installed (subfinder, assetfinder, dnsx, naabu, httpx, katana, jq, curl, whois, dig, openssl, xargs, unzip, grep, sed, awk). The script now aborts with a clear list of missing tools.~~
+- Completed ✅ ~~New trap on ERR with contextual message (exit code, command, file:line). New script_cleanup hooked to EXIT prints success/failure summary and points to the trace log.~~
+- Completed ✅ ~~Improved CLI validation (usage message, file existence & readability checks).~~
+- Completed ✅ ~~Added (optional) domain-line sanity validation.~~
+- Completed ✅ ~~Verifies run/log directories are writable; keeps xtrace only in logs.log.~~
+- Completed ✅ ~~Assetfinder: switched to parallel execution via xargs -P 10 over input domains.~~
+- Completed ✅ ~~dnsx: added rate limit and thread tuning (-rl 50 -t 25).~~
+- Completed ✅ ~~katana: added concurrency/rate limits and timeouts (-c 5 -rl 30 -timeout 15), still honors KATANA_DEPTH/KATANA_TIMEOUT.~~
+- Completed ✅ ~~httpx: added tuned threads/rate-limit/timeouts (-t 25 -rl 80 -timeout 15).~~
+- Completed ✅ ~~naabu Skips scanning with a clear warning when master_subdomains.txt is empty.~~
+- Completed ✅ ~~httpx now runs a JSON pass first to build httpx.json and live counts, then a second pass for screenshots.~~
+- Completed ✅ ~~Verifies default artifact directories are writable before capture.~~
+- Completed ✅ ~~Introduced BLOCK_DETECTION_THRESHOLD (default 20%). If fewer than the threshold of web targets respond (derived from httpx.json vs naabu live targets), the run halts with guidance to rotate IP/VPN.~~
+- Completed ✅ ~~Login surface detection overhaul - Uses per‑request mktemp files and explicit curl timeouts.~~
+- Completed ✅ ~~Expanded heuristics (password/username fields, form attributes, submit labels, CSRF tokens, meta hints, CAPTCHA, modal hints, multilingual keywords, JS auth libraries, 401/403/407, WWW-Authenticate, session cookies, login redirects, URL patterns & query params).~~
+- Completed ✅ ~~Emits structured JSON and increments LOGIN_FOUND_COUNT when detected.~~
+- Completed ✅ ~~Colourised error output; clearer progress steps (e.g., [n/15]).~~
