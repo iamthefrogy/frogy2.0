@@ -28,7 +28,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
-      ca-certificates curl jq sed python3 whois dnsutils openssl \
+      ca-certificates curl zip unzip jq sed python3 whois dnsutils openssl \
       bash libpcap0.8 \
   && rm -rf /var/lib/apt/lists/*
 
