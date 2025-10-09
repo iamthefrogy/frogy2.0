@@ -172,105 +172,6 @@ merge_and_count() {
 }
 
 ##############################################
-# Function: backfill_httpx_from_responses
-# Purpose: When httpx fails to emit JSON, rebuild minimal entries from stored responses.
-##############################################
-backfill_httpx_from_responses() {
-	local response_root="$1"
-	local output_file="$2"
-
-	if [[ ! -d "$response_root" ]]; then
-		return 1
-	fi
-
-	local tmp_file
-	tmp_file=$(mktemp) || return 1
-	local timestamp
-	timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-	local has_records=false
-
-	while IFS= read -r dir; do
-		[[ -d "$dir" ]] || continue
-		local base host port scheme url input
-		base="$(basename "$dir")"
-		host="${base%_*}"
-		port="${base##*_}"
-
-		# Basic validation on host/port strings.
-		if [[ -z "$host" || -z "$port" || "$host" == "$port" ]]; then
-			continue
-		fi
-		if [[ ! "$port" =~ ^[0-9]+$ ]]; then
-			continue
-		fi
-
-		case "$port" in
-		443 | 8443 | 9443 | 10443 | 10444) scheme="https" ;;
-		*) scheme="http" ;;
-		esac
-
-		url="${scheme}://${host}:${port}"
-		input="${host}:${port}"
-
-		local response_file
-		response_file=$(find "$dir" -type f -name '*.txt' | sort | head -n1)
-		[[ -n "$response_file" ]] || continue
-
-		local status_line status_code server_header content_type_header location_header length_header
-		status_line=$(grep -m1 '^HTTP/' "$response_file" || true)
-		status_code=$(echo "$status_line" | awk '{print $2}' | tr -d '\r')
-		[[ "$status_code" =~ ^[0-9]+$ ]] || status_code=0
-
-		server_header=$(grep -m1 '^Server:' "$response_file" | cut -d':' -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
-		content_type_header=$(grep -m1 -i '^Content-Type:' "$response_file" | cut -d':' -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
-		location_header=$(grep -m1 -i '^Location:' "$response_file" | cut -d':' -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
-		length_header=$(grep -m1 -i '^Content-Length:' "$response_file" | awk -F':' '{print $2}' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
-		[[ "$length_header" =~ ^[0-9]+$ ]] || length_header=0
-
-		local failed_flag="false"
-		if [[ "$status_code" -le 0 ]]; then
-			failed_flag="true"
-		fi
-
-		jq -n -c \
-			--arg ts "$timestamp" \
-			--arg port "$port" \
-			--arg url "$url" \
-			--arg input "$input" \
-			--arg scheme "$scheme" \
-			--arg webserver "${server_header:-}" \
-			--arg content_type "${content_type_header:-}" \
-			--arg location "${location_header:-}" \
-			--argjson status_code "$status_code" \
-			--argjson content_length "$length_header" \
-			--argjson failed "$failed_flag" \
-			'{
-        timestamp: $ts,
-        port: $port,
-        url: $url,
-        input: $input,
-        scheme: $scheme,
-        webserver: $webserver,
-        content_type: $content_type,
-        location: $location,
-        status_code: $status_code,
-        content_length: $content_length,
-        failed: $failed,
-        tech: []
-      }' >>"$tmp_file"
-		has_records=true
-	done < <(find "$response_root" -mindepth 1 -maxdepth 1 -type d | sort)
-
-	if [[ "$has_records" == true && -s "$tmp_file" ]]; then
-		mv "$tmp_file" "$output_file"
-		return 0
-	fi
-
-	rm -f "$tmp_file"
-	return 1
-}
-
-##############################################
 # Function: run_chaos
 # Purpose: Query the Chaos database (if enabled) and merge its subdomain results.
 ##############################################
@@ -475,9 +376,9 @@ run_httpx() {
 		fi
 
 		httpx -silent \
-			-t 10 \
-			-rl 40 \
-			-timeout 30 \
+			-t 5 \
+			-rl 15 \
+			-timeout 15 \
 			-retries 2 \
 			-l "$final_urls_ports" \
 			-j \
@@ -487,12 +388,6 @@ run_httpx() {
 		# Ensure the JSON file exists even if httpx produced nothing.
 		if [[ ! -f "$httpx_json_file" ]]; then
 			>"$httpx_json_file"
-		fi
-
-		if [[ ! -s "$httpx_json_file" ]]; then
-			if backfill_httpx_from_responses "output/response" "$httpx_json_file"; then
-				warning "httpx produced no JSON output; using reconstructed entries derived from stored responses."
-			fi
 		fi
 
 		# Count live endpoints
@@ -511,6 +406,10 @@ run_httpx() {
 		#    • PNGs → output/screenshot (default)
 		#    • Responses → output/response (must specify)
 		httpx -silent \
+	   	-t 5 \
+		  -rl 15 \
+		  -timeout 15 \
+		  -retries 2 \
 			-l "$final_urls_ports" \
 			-ss \
 			>/dev/null 2>&1 || true
@@ -544,6 +443,11 @@ run_httpx() {
 		fi
 	fi
 }
+
+##############################################
+# Function: gather_screenshot
+# Purpose: Gathering screenshots
+##############################################
 
 gather_screenshots() {
 	local screenshot_map_file="$RUN_DIR/screenshot_map.json"
