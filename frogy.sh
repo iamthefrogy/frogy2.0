@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -o errtrace
 
 # Enhanced error trap for context on failures
 log_err() {
@@ -10,6 +11,8 @@ log_err() {
 trap log_err ERR
 
 # This function will be called automatically whenever the script exits.
+SCRIPT_START_TIME=$(date +%s)
+
 script_cleanup() {
 	local exit_code=$?
 	if [ $exit_code -ne 0 ]; then
@@ -18,6 +21,17 @@ script_cleanup() {
 		error "Check the detailed trace log for more context: $RUN_DIR/logs/logs.log"
 	else
 		info "Script finished successfully."
+		local end_time
+		end_time=$(date +%s)
+		local duration=$((end_time - SCRIPT_START_TIME))
+		local hours=$((duration / 3600))
+		local minutes=$(((duration % 3600) / 60))
+		local seconds=$((duration % 60))
+		if (( hours > 0 )); then
+			info "Total execution time: ${hours}h ${minutes}m ${seconds}s"
+		else
+			info "Total execution time: ${minutes}m ${seconds}s"
+		fi
 	fi
 }
 
@@ -79,10 +93,10 @@ PRIMARY_DOMAINS_FILE="$1"
 if [[ ! -f "$PRIMARY_DOMAINS_FILE" || ! -r "$PRIMARY_DOMAINS_FILE" ]]; then
 	echo -e "\033[91m[-] File '$PRIMARY_DOMAINS_FILE' not found or not readable!\033[0m" >&2
 	exit 1
-	if ! awk '!/^\s*$/ { if ($0 !~ /^[A-Za-z0-9.-]+$/) { exit 1 } }' "$PRIMARY_DOMAINS_FILE"; then
-		error "Input file contains invalid domain lines."
-		exit 1
-	fi
+fi
+if ! awk '!/^\s*$/ { if ($0 !~ /^[A-Za-z0-9.-]+$/) { exit 1 } }' "$PRIMARY_DOMAINS_FILE"; then
+	error "Input file contains invalid domain lines."
+	exit 1
 fi
 
 ##############################################
@@ -158,6 +172,105 @@ merge_and_count() {
 }
 
 ##############################################
+# Function: backfill_httpx_from_responses
+# Purpose: When httpx fails to emit JSON, rebuild minimal entries from stored responses.
+##############################################
+backfill_httpx_from_responses() {
+	local response_root="$1"
+	local output_file="$2"
+
+	if [[ ! -d "$response_root" ]]; then
+		return 1
+	fi
+
+	local tmp_file
+	tmp_file=$(mktemp) || return 1
+	local timestamp
+	timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	local has_records=false
+
+	while IFS= read -r dir; do
+		[[ -d "$dir" ]] || continue
+		local base host port scheme url input
+		base="$(basename "$dir")"
+		host="${base%_*}"
+		port="${base##*_}"
+
+		# Basic validation on host/port strings.
+		if [[ -z "$host" || -z "$port" || "$host" == "$port" ]]; then
+			continue
+		fi
+		if [[ ! "$port" =~ ^[0-9]+$ ]]; then
+			continue
+		fi
+
+		case "$port" in
+		443 | 8443 | 9443 | 10443 | 10444) scheme="https" ;;
+		*) scheme="http" ;;
+		esac
+
+		url="${scheme}://${host}:${port}"
+		input="${host}:${port}"
+
+		local response_file
+		response_file=$(find "$dir" -type f -name '*.txt' | sort | head -n1)
+		[[ -n "$response_file" ]] || continue
+
+		local status_line status_code server_header content_type_header location_header length_header
+		status_line=$(grep -m1 '^HTTP/' "$response_file" || true)
+		status_code=$(echo "$status_line" | awk '{print $2}' | tr -d '\r')
+		[[ "$status_code" =~ ^[0-9]+$ ]] || status_code=0
+
+		server_header=$(grep -m1 '^Server:' "$response_file" | cut -d':' -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+		content_type_header=$(grep -m1 -i '^Content-Type:' "$response_file" | cut -d':' -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+		location_header=$(grep -m1 -i '^Location:' "$response_file" | cut -d':' -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+		length_header=$(grep -m1 -i '^Content-Length:' "$response_file" | awk -F':' '{print $2}' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+		[[ "$length_header" =~ ^[0-9]+$ ]] || length_header=0
+
+		local failed_flag="false"
+		if [[ "$status_code" -le 0 ]]; then
+			failed_flag="true"
+		fi
+
+		jq -n -c \
+			--arg ts "$timestamp" \
+			--arg port "$port" \
+			--arg url "$url" \
+			--arg input "$input" \
+			--arg scheme "$scheme" \
+			--arg webserver "${server_header:-}" \
+			--arg content_type "${content_type_header:-}" \
+			--arg location "${location_header:-}" \
+			--argjson status_code "$status_code" \
+			--argjson content_length "$length_header" \
+			--argjson failed "$failed_flag" \
+			'{
+        timestamp: $ts,
+        port: $port,
+        url: $url,
+        input: $input,
+        scheme: $scheme,
+        webserver: $webserver,
+        content_type: $content_type,
+        location: $location,
+        status_code: $status_code,
+        content_length: $content_length,
+        failed: $failed,
+        tech: []
+      }' >>"$tmp_file"
+		has_records=true
+	done < <(find "$response_root" -mindepth 1 -maxdepth 1 -type d | sort)
+
+	if [[ "$has_records" == true && -s "$tmp_file" ]]; then
+		mv "$tmp_file" "$output_file"
+		return 0
+	fi
+
+	rm -f "$tmp_file"
+	return 1
+}
+
+##############################################
 # Function: run_chaos
 # Purpose: Query the Chaos database (if enabled) and merge its subdomain results.
 ##############################################
@@ -203,7 +316,17 @@ run_subfinder() {
 # Purpose: Run Assetfinder for each primary domain and merge the results.
 ##############################################
 run_assetfinder() {
-	xargs -I {} -P 10 assetfinder --subs-only "{}" <"$PRIMARY_DOMAINS_FILE" >>"$RUN_DIR/assetfinder.txt" 2>/dev/null || true
+	if [[ "$USE_ASSETFINDER" == "true" ]]; then
+		info "[2/15] Running Assetfinder..."
+		local assetfinder_output="$RUN_DIR/assetfinder.txt"
+		>"$assetfinder_output"
+		while IFS= read -r domain || [[ -n "$domain" ]]; do
+			domain=$(echo "$domain" | tr -d '\r' | xargs)
+			[[ -z "$domain" ]] && continue
+			assetfinder --subs-only "$domain" 2>/dev/null || true
+		done <"$PRIMARY_DOMAINS_FILE" | sort -u >>"$assetfinder_output"
+		merge_and_count "$assetfinder_output" "Assetfinder"
+	fi
 }
 
 ##############################################
@@ -297,8 +420,12 @@ run_dnsx() {
 			-o "$RUN_DIR/dnsx.json" \
 			-j \
 			>/dev/null 2>&1 || true
-		# Count live domains based on the "NOERROR" status code from dnsx output
-		DNSX_LIVE_COUNT=$(jq -r 'select(.status_code=="NOERROR") | .host' "$RUN_DIR/dnsx.json" | sort -u | wc -l)
+		if [[ -s "$RUN_DIR/dnsx.json" ]]; then
+			# Count live domains based on the "NOERROR" status code from dnsx output
+			DNSX_LIVE_COUNT=$(jq -r 'select(.status_code=="NOERROR") | .host' "$RUN_DIR/dnsx.json" | sort -u | wc -l)
+		else
+			DNSX_LIVE_COUNT=0
+		fi
 	fi
 }
 
@@ -321,7 +448,11 @@ run_naabu() {
 			>/dev/null 2>&1 || true
 		# Process naabu JSON to extract unique host:port pairs
 		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
-		jq -r '"\(.host):\(.port)"' "$RUN_DIR/naabu.json" | sort -u >"$final_urls_ports"
+		if [[ -s "$RUN_DIR/naabu.json" ]]; then
+			jq -r '"\(.host):\(.port)"' "$RUN_DIR/naabu.json" | sort -u >"$final_urls_ports"
+		else
+			> "$final_urls_ports"
+		fi
 	fi
 }
 
@@ -344,13 +475,25 @@ run_httpx() {
 		fi
 
 		httpx -silent \
-			-t 25 \
-			-rl 80 \
-			-timeout 15 \
+			-t 10 \
+			-rl 40 \
+			-timeout 30 \
+			-retries 2 \
 			-l "$final_urls_ports" \
 			-j \
 			-o "$RUN_DIR/httpx.json" \
 			>/dev/null 2>&1 || true
+
+		# Ensure the JSON file exists even if httpx produced nothing.
+		if [[ ! -f "$httpx_json_file" ]]; then
+			>"$httpx_json_file"
+		fi
+
+		if [[ ! -s "$httpx_json_file" ]]; then
+			if backfill_httpx_from_responses "output/response" "$httpx_json_file"; then
+				warning "httpx produced no JSON output; using reconstructed entries derived from stored responses."
+			fi
+		fi
 
 		# Count live endpoints
 		HTTPX_LIVE_COUNT=$(wc -l <"$RUN_DIR/httpx.json" || echo 0)
@@ -371,6 +514,7 @@ run_httpx() {
 			-l "$final_urls_ports" \
 			-ss \
 			>/dev/null 2>&1 || true
+
 		# --- DYNAMIC BLOCK DETECTION LOGIC ---
 		local naabu_target_count
 		naabu_target_count=$(wc -l <"$final_urls_ports")
@@ -380,24 +524,22 @@ run_httpx() {
 			HTTPX_LIVE_COUNT=0
 		fi
 
+		local success_rate=0
+		if [[ "$naabu_target_count" -gt 0 ]]; then
+			success_rate=$((HTTPX_LIVE_COUNT * 100 / naabu_target_count))
+		fi
+
+		# If the success rate is below the threshold, emit a warning so the operator can decide next steps.
+		if [[ "$BLOCK_DETECTION_THRESHOLD" -gt 0 && "$naabu_target_count" -gt 10 && "$success_rate" -lt "$BLOCK_DETECTION_THRESHOLD" ]]; then
+			warning "httpx success rate ${success_rate}% fell below ${BLOCK_DETECTION_THRESHOLD}%. Results may be incomplete."
+		fi
+
 		# Only run detection if we have a meaningful number of targets and the threshold is enabled.
 		if [[ "$naabu_target_count" -gt 10 && "$BLOCK_DETECTION_THRESHOLD" -gt 0 ]]; then
-			# Use integer arithmetic to calculate the success rate percentage.
-			local success_rate=$((HTTPX_LIVE_COUNT * 100 / naabu_target_count))
-
 			info "Web Scan Success Rate: ${success_rate}% (${HTTPX_LIVE_COUNT} live websites found / ${naabu_target_count} total live targets)"
 
-			if [ "$success_rate" -lt "$BLOCK_DETECTION_THRESHOLD" ]; then
-				echo # Add a blank line for readability
-				error "CRITICAL FAILURE: Web Scan Likely Blocked"
-				error "---------------------------------------------------------"
-				error "REASON: Only ${success_rate}% of potential web targets responded."
-				error "This is below your threshold of ${BLOCK_DETECTION_THRESHOLD}% and indicates an active firewall or WAF."
-				error ""
-				error "ACTION: Change your IP address using a VPN or proxy and re-run the script."
-				error "---------------------------------------------------------"
-				echo
-				exit 1
+			if [[ "$success_rate" -lt "$BLOCK_DETECTION_THRESHOLD" ]]; then
+				warning "Success rate remains below the ${BLOCK_DETECTION_THRESHOLD}% threshold. Results may be incomplete (consider lowering BLOCK_DETECTION_THRESHOLD or changing IP)."
 			fi
 		fi
 	fi
@@ -662,6 +804,11 @@ run_login_detection() {
 run_security_compliance() {
 	info "[11/15] Analyzing security hygiene using..."
 	local output_file="$RUN_DIR/securitycompliance.json"
+	local sec_workers="${SEC_WORKERS:-6}"
+	if (( sec_workers < 1 )); then
+		sec_workers=1
+	fi
+	local dig_opts=("+time=3" "+tries=1")
 
 	# Ensure the MASTER_SUBS and httpx.json files exist.
 	if [ ! -f "$MASTER_SUBS" ]; then
@@ -677,89 +824,96 @@ run_security_compliance() {
 	local temp_dir
 	temp_dir=$(mktemp -d)
 
-	# Process each domain from MASTER_SUBS.
-	while IFS= read -r domain || [ -n "$domain" ]; do
-		domain=$(echo "$domain" | tr -d '\r' | xargs)
-		[ -z "$domain" ] && continue
+	# Split httpx results by domain to avoid repeated jq scans.
+	local httpx_split_dir
+	httpx_split_dir=$(mktemp -d)
+	if [ -s "$RUN_DIR/httpx.json" ]; then
+		while IFS=$'\t' read -r dom record; do
+			[[ -z "$dom" || -z "$record" ]] && continue
+			printf '%s\n' "$record" >>"$httpx_split_dir/${dom}.jsonl"
+		done < <(jq -rc '[(.input | split(":")[0]), tostring] | @tsv' "$RUN_DIR/httpx.json")
+	fi
+
+	process_security_domain() {
+		local domain="$1"
+		local safe_domain="$2"
+		local records_file="$3"
+		local out_dir="$4"
+
+		[ -z "$domain" ] && return
+		local output_file_path="$out_dir/${safe_domain}.jsonl"
+		>"$output_file_path"
 
 		# --- Domain-level DNS Checks ---
 		local spf dkim dmarc dnskey dnssec ns txt srv ptr mx soa caa
 
-		spf=$(dig +short TXT "$domain" 2>/dev/null | grep -i "v=spf1" | head -n 1 || true)
+		spf=$(dig "${dig_opts[@]}" +short TXT "$domain" 2>/dev/null | grep -i "v=spf1" | head -n 1 || true)
 		[ -z "$spf" ] && spf="No SPF Record"
 
-		dkim=$(dig +short TXT "default._domainkey.$domain" 2>/dev/null | grep -i "v=DKIM1" | head -n 1 || true)
+		dkim=$(dig "${dig_opts[@]}" +short TXT "default._domainkey.$domain" 2>/dev/null | grep -i "v=DKIM1" | head -n 1 || true)
 		[ -z "$dkim" ] && dkim="No DKIM Record"
 
-		dmarc=$(dig +short TXT "_dmarc.$domain" 2>/dev/null | grep -i "v=DMARC1" | head -n 1 || true)
+		dmarc=$(dig "${dig_opts[@]}" +short TXT "_dmarc.$domain" 2>/dev/null | grep -i "v=DMARC1" | head -n 1 || true)
 		[ -z "$dmarc" ] && dmarc="No DMARC Record"
 
-		dnskey=$(dig +short DNSKEY "$domain" 2>/dev/null || true)
+		dnskey=$(dig "${dig_opts[@]}" +short DNSKEY "$domain" 2>/dev/null || true)
 		if [ -z "$dnskey" ]; then
 			dnssec="DNSSEC Not Enabled"
 		else
 			dnssec="DNSSEC Enabled"
 		fi
 
-		# Additional DNS records
-		ns=$(dig +short NS "$domain" 2>/dev/null || true)
+		ns=$(dig "${dig_opts[@]}" +short NS "$domain" 2>/dev/null || true)
 		[ -z "$ns" ] && ns="No NS records found"
 
-		txt=$(dig +short TXT "$domain" 2>/dev/null || true)
+		txt=$(dig "${dig_opts[@]}" +short TXT "$domain" 2>/dev/null || true)
 		[ -z "$txt" ] && txt="No TXT records found"
 
-		srv=$(dig +short SRV "$domain" 2>/dev/null || true)
+		srv=$(dig "${dig_opts[@]}" +short SRV "$domain" 2>/dev/null || true)
 		[ -z "$srv" ] && srv="No SRV records found"
 
-		# --- Reverse DNS (PTR) from resolved A record ---
-		local a_record
-		local ptr=""
-		a_record=$(dig +short A "$domain" 2>/dev/null | head -n 1)
+		local a_record ptr=""
+		a_record=$(dig "${dig_opts[@]}" +short A "$domain" 2>/dev/null | head -n 1)
 		if [ -n "$a_record" ]; then
-			ptr=$(dig +short -x "$a_record" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)
+			ptr=$(dig "${dig_opts[@]}" +short -x "$a_record" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)
 		fi
 		[ -z "$ptr" ] && ptr="No PTR record found"
 
-		mx=$(dig +short MX "$domain" 2>/dev/null || true)
+		mx=$(dig "${dig_opts[@]}" +short MX "$domain" 2>/dev/null || true)
 		[ -z "$mx" ] && mx="No MX records found"
 
-		soa=$(dig +short SOA "$domain" 2>/dev/null || true)
+		soa=$(dig "${dig_opts[@]}" +short SOA "$domain" 2>/dev/null || true)
 		[ -z "$soa" ] && soa="No SOA record found"
 
-		caa=$(dig +short CAA "$domain" 2>/dev/null || true)
+		caa=$(dig "${dig_opts[@]}" +short CAA "$domain" 2>/dev/null || true)
 		[ -z "$caa" ] && caa="No CAA records found"
 
-		# --- Process live URL records from httpx.json ---
-		# Filter the httpx.json file for records that start with the domain.
-		local matches
-		matches=$(jq -c --arg domain "$domain" 'select(.input | startswith($domain))' "$RUN_DIR/httpx.json")
-
-		if [ -n "$matches" ]; then
-			# For each matching live URL record, extract SSL and header details.
-			echo "$matches" | while IFS= read -r record; do
-				local url ssl_version ssl_issuer cert_expiry sts xfo csp xss rp pp acao
-				url=$(echo "$record" | jq -r '.url')
-				# Extract host and port from the URL
-				if [[ "$url" =~ ^https://([^:]+):([0-9]+) ]]; then
-					local host port
+		local record_found=false
+		if [[ -f "$records_file" ]]; then
+			while IFS= read -r record_line || [ -n "$record_line" ]; do
+				[[ -z "$record_line" ]] && continue
+				record_found=true
+				local url host port
+				url=$(jq -r '.url' <<<"$record_line")
+				if [[ "$url" =~ ^https://([^:/]+):?([0-9]*) ]]; then
 					host="${BASH_REMATCH[1]}"
-					port="${BASH_REMATCH[2]}"
+					port="${BASH_REMATCH[2]:-443}"
 				else
 					host=""
 					port=""
 				fi
 
-				# If the URL is HTTPS, perform SSL checks.
+				local ssl_version ssl_issuer cert_expiry
 				if [ -n "$host" ]; then
-					local ssl_output CERT
+					local ssl_output cert
 					ssl_output=$(echo | timeout 7 openssl s_client -connect "${host}:${port}" -servername "$host" 2>/dev/null || true)
-					CERT=$(echo "$ssl_output" | sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' || true)
-					if [ -n "$CERT" ]; then
+					cert=$(echo "$ssl_output" | sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' || true)
+					if [ -n "$cert" ]; then
 						ssl_version=$(echo "$ssl_output" | grep -i "Protocol:" | head -1 | awk -F": " '{print $2}' || true)
 						[ -z "$ssl_version" ] && ssl_version="Unknown"
-						ssl_issuer=$(echo "$CERT" | openssl x509 -noout -issuer 2>/dev/null | sed 's/issuer= //' || true)
+						ssl_issuer=$(echo "$cert" | openssl x509 -noout -issuer 2>/dev/null | sed 's/issuer= //' || true)
 						[ -z "$ssl_issuer" ] && ssl_issuer="N/A"
-						cert_expiry=$(echo "$CERT" | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
+						cert_expiry=$(echo "$cert" | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
 						[ -z "$cert_expiry" ] && cert_expiry="N/A"
 					else
 						ssl_version="No SSL/TLS"
@@ -772,89 +926,118 @@ run_security_compliance() {
 					cert_expiry="N/A"
 				fi
 
-				# Fetch HTTP headers to check security settings.
-				local HEADERS
-				HEADERS=$(curl -s -D - "$url" -o /dev/null || true)
-				sts=$(echo "$HEADERS" | grep -i "Strict-Transport-Security:" | cut -d':' -f2- | xargs || true)
-				xfo=$(echo "$HEADERS" | grep -i "X-Frame-Options:" | cut -d':' -f2- | xargs || true)
-				csp=$(echo "$HEADERS" | grep -i "Content-Security-Policy:" | cut -d':' -f2- | xargs || true)
-				xss=$(echo "$HEADERS" | grep -i "X-XSS-Protection:" | cut -d':' -f2- | xargs || true)
-				rp=$(echo "$HEADERS" | grep -i "Referrer-Policy:" | cut -d':' -f2- | xargs || true)
-				pp=$(echo "$HEADERS" | grep -i "Permissions-Policy:" | cut -d':' -f2- | xargs || true)
-				acao=$(echo "$HEADERS" | grep -i "Access-Control-Allow-Origin:" | cut -d':' -f2- | xargs || true)
+				local headers
+				headers=$(curl -s --max-time 15 --connect-timeout 5 -D - "$url" -o /dev/null || true)
+				local sts xfo csp xss rp pp acao
+				sts=$(echo "$headers" | grep -i "Strict-Transport-Security:" | cut -d':' -f2- | xargs || true)
+				xfo=$(echo "$headers" | grep -i "X-Frame-Options:" | cut -d':' -f2- | xargs || true)
+				csp=$(echo "$headers" | grep -i "Content-Security-Policy:" | cut -d':' -f2- | xargs || true)
+				xss=$(echo "$headers" | grep -i "X-XSS-Protection:" | cut -d':' -f2- | xargs || true)
+				rp=$(echo "$headers" | grep -i "Referrer-Policy:" | cut -d':' -f2- | xargs || true)
+				pp=$(echo "$headers" | grep -i "Permissions-Policy:" | cut -d':' -f2- | xargs || true)
+				acao=$(echo "$headers" | grep -i "Access-Control-Allow-Origin:" | cut -d':' -f2- | xargs || true)
 
-				# Build and output a JSON record with the security compliance details.
 				jq -n --arg domain "$domain" --arg url "$url" \
 					--arg spf "$spf" --arg dkim "$dkim" --arg dmarc "$dmarc" --arg dnssec "$dnssec" \
 					--arg ns "$ns" --arg txt "$txt" --arg srv "$srv" --arg ptr "$ptr" --arg mx "$mx" --arg soa "$soa" --arg caa "$caa" \
 					--arg ssl_version "$ssl_version" --arg ssl_issuer "$ssl_issuer" --arg cert_expiry "$cert_expiry" \
 					--arg sts "$sts" --arg xfo "$xfo" --arg csp "$csp" --arg xss "$xss" --arg rp "$rp" --arg pp "$pp" --arg acao "$acao" \
 					'{
-             Domain: $domain,
-             URL: $url,
-             "SPF Record": $spf,
-             "DKIM Record": $dkim,
-             "DMARC Record": $dmarc,
-             "DNSSEC Status": $dnssec,
-             "NS Records": $ns,
-             "TXT Records": $txt,
-             "SRV Records": $srv,
-             "PTR Record": $ptr,
-             "MX Records": $mx,
-             "SOA Record": $soa,
-             "CAA Records": $caa,
-             "SSL/TLS Version": $ssl_version,
-             "SSL/TLS Issuer": $ssl_issuer,
-             "Cert Expiry Date": $cert_expiry,
-             "Strict-Transport-Security": $sts,
-             "X-Frame-Options": $xfo,
-             "Content-Security-Policy": $csp,
-             "X-XSS-Protection": $xss,
-             "Referrer-Policy": $rp,
-             "Permissions-Policy": $pp,
-             "Access-Control-Allow-Origin": $acao
-           }'
-			done >>"$temp_dir/records.json"
-		else
-			# If no live URL is found, output a record with default values.
+            Domain: $domain,
+            URL: $url,
+            "SPF Record": $spf,
+            "DKIM Record": $dkim,
+            "DMARC Record": $dmarc,
+            "DNSSEC Status": $dnssec,
+            "NS Records": $ns,
+            "TXT Records": $txt,
+            "SRV Records": $srv,
+            "PTR Record": $ptr,
+            "MX Records": $mx,
+            "SOA Record": $soa,
+            "CAA Records": $caa,
+            "SSL/TLS Version": $ssl_version,
+            "SSL/TLS Issuer": $ssl_issuer,
+            "Cert Expiry Date": $cert_expiry,
+            "Strict-Transport-Security": $sts,
+            "X-Frame-Options": $xfo,
+            "Content-Security-Policy": $csp,
+            "X-XSS-Protection": $xss,
+            "Referrer-Policy": $rp,
+            "Permissions-Policy": $pp,
+            "Access-Control-Allow-Origin": $acao
+          }' >>"$output_file_path"
+			done <"$records_file"
+		fi
+
+		if [ "$record_found" = false ]; then
 			jq -n --arg domain "$domain" --arg url "N/A" \
 				--arg spf "$spf" --arg dkim "$dkim" --arg dmarc "$dmarc" --arg dnssec "$dnssec" \
 				--arg ns "$ns" --arg txt "$txt" --arg srv "$srv" --arg ptr "$ptr" --arg mx "$mx" --arg soa "$soa" --arg caa "$caa" \
 				--arg ssl_version "No SSL/TLS" --arg ssl_issuer "N/A" --arg cert_expiry "N/A" \
 				--arg sts "" --arg xfo "" --arg csp "" --arg xss "" --arg rp "" --arg pp "" --arg acao "" \
 				'{
-           Domain: $domain,
-           URL: $url,
-           "SPF Record": $spf,
-           "DKIM Record": $dkim,
-           "DMARC Record": $dmarc,
-           "DNSSEC Status": $dnssec,
-           "NS Records": $ns,
-           "TXT Records": $txt,
-           "SRV Records": $srv,
-           "PTR Record": $ptr,
-           "MX Records": $mx,
-           "SOA Record": $soa,
-           "CAA Records": $caa,
-           "SSL/TLS Version": $ssl_version,
-           "SSL/TLS Issuer": $ssl_issuer,
-           "Cert Expiry Date": $cert_expiry,
-           "Strict-Transport-Security": $sts,
-           "X-Frame-Options": $xfo,
-           "Content-Security-Policy": $csp,
-           "X-XSS-Protection": $xss,
-           "Referrer-Policy": $rp,
-           "Permissions-Policy": $pp,
-           "Access-Control-Allow-Origin": $acao
-         }' >>"$temp_dir/records.json"
+          Domain: $domain,
+          URL: $url,
+          "SPF Record": $spf,
+          "DKIM Record": $dkim,
+          "DMARC Record": $dmarc,
+          "DNSSEC Status": $dnssec,
+          "NS Records": $ns,
+          "TXT Records": $txt,
+          "SRV Records": $srv,
+          "PTR Record": $ptr,
+          "MX Records": $mx,
+          "SOA Record": $soa,
+          "CAA Records": $caa,
+          "SSL/TLS Version": $ssl_version,
+          "SSL/TLS Issuer": $ssl_issuer,
+          "Cert Expiry Date": $cert_expiry,
+          "Strict-Transport-Security": $sts,
+          "X-Frame-Options": $xfo,
+          "Content-Security-Policy": $csp,
+          "X-XSS-Protection": $xss,
+          "Referrer-Policy": $rp,
+          "Permissions-Policy": $pp,
+          "Access-Control-Allow-Origin": $acao
+        }' >>"$output_file_path"
 		fi
-	done <"$MASTER_SUBS"
+	}
 
+	local -a domain_order=()
+	while IFS= read -r domain || [ -n "$domain" ]; do
+		domain=$(echo "$domain" | tr -d '\r' | xargs)
+		[ -z "$domain" ] && continue
+		domain_order+=("$domain")
+
+		local safe_domain
+		safe_domain=$(echo "$domain" | sed 's/[^A-Za-z0-9._-]/_/g')
+		local record_file="$httpx_split_dir/${domain}.jsonl"
+
+		process_security_domain "$domain" "$safe_domain" "$record_file" "$temp_dir" &
+		while [ "$(jobs -pr | wc -l | tr -d ' ')" -ge "$sec_workers" ]; do
+			sleep 0.1
+		done
+	done <"$MASTER_SUBS"
+	wait
+
+	local records_file="$temp_dir/records.jsonl"
+	>"$records_file"
+	for domain in "${domain_order[@]}"; do
+		local safe_domain
+		safe_domain=$(echo "$domain" | sed 's/[^A-Za-z0-9._-]/_/g')
+		local part_file="$temp_dir/${safe_domain}.jsonl"
+		[ -f "$part_file" ] && cat "$part_file" >>"$records_file"
+	done
+
+	rm -rf "$httpx_split_dir"
+
+	# Process each domain from MASTER_SUBS.
 	# Combine all JSON records into one JSON array and output to the security compliance file.
-	if [ ! -s "$temp_dir/records.json" ]; then
+	if [ ! -s "$records_file" ]; then
 		echo "[]" >"$output_file"
 	else
-		jq -s '.' "$temp_dir/records.json" >"$output_file"
+		jq -s '.' "$records_file" >"$output_file"
 	fi
 	rm -r "$temp_dir"
 }
@@ -951,6 +1134,7 @@ run_colleague_identification() {
 #   - Moves merged JSON files into place.
 #   - Writes the complete HTML (including embedded JavaScript and CSS) to the report file.
 ##############################################
+
 build_html_report() {
 	info "[14/15] Building HTML report with analytics..."
 	combine_json "$RUN_DIR/dnsx.json" "$RUN_DIR/dnsx_merged.json"
@@ -1036,8 +1220,8 @@ main() {
 	run_naabu
 	run_httpx
 	run_katana
-	mv output/response "$RUN_DIR/"
-	mv output/screenshot "$RUN_DIR/"
+	[[ -d output/response ]] && mv output/response "$RUN_DIR/"
+	[[ -d output/screenshot ]] && mv output/screenshot "$RUN_DIR/"
 	gather_screenshots
 	run_login_detection
 	run_security_compliance
