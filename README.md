@@ -127,7 +127,7 @@ Once all factors are tallied, we get a **numeric risk score**. **Higher** means 
   ```
 - Step 5 - Run docker container.
 ```bash
-  docker run --rm -it -v "$(pwd):/opt/frogy" -w /opt/frogy --entrypoint /bin/bash frogy:latest
+  docker run --rm -it --network host --privileged --cap-add=NET_RAW --cap-add=NET_ADMIN --security-opt seccomp=unconfined --ulimit nofile=1048576:1048576 -v "$(pwd):/opt/frogy" -w /opt/frogy --entrypoint /bin/bash frogy:latest
  ```
 - Step 6 - Once, you are inside docker, run this command to start operations: 
 ```bash
