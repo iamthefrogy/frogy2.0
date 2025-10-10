@@ -1,4 +1,3 @@
-// Build security maps.
           const secMapDomain = {};
           const secMapUrl = {};
           secData.forEach(item => {
@@ -26,13 +25,12 @@
           buildScoreboard({ totalSubdomains, liveSubs, totalHttpx: endpointsCount, loginFoundCount });
           buildLoginBarChart(endpointsCount, loginFoundCount);
 
-          // Build per-origin links map so each row shows ONLY its own origin's links
+          // Build per-origin links map so each row shows ONLY its own origin’s links
           (function () {
             function toOrigin(u) {
               try { return new URL(u).origin; } catch (e) { return ""; }
             }
 
-            // 1) Flatten ALL katana links (from every seed) into one array
             const allLinks = [];
             if (katanaData && typeof katanaData === "object") {
               Object.keys(katanaData).forEach(k => {
@@ -41,7 +39,6 @@
               });
             }
 
-            // 2) Build a map per *origin* (scheme+host+port) → list of links
             const byOrigin = {};
             for (const l of allLinks) {
               const o = toOrigin(l);
@@ -50,7 +47,6 @@
               byOrigin[o].add(l);
             }
 
-            // 3) For each live URL in httpxData, assign ONLY its origin’s links
             const linksMap = {};
             (httpxData || []).forEach(rec => {
               const o = toOrigin(rec.url);
@@ -58,11 +54,8 @@
               linksMap[rec.url] = Array.from(set).sort();
             });
 
-            // 4) Expose globally for the table and modal
             window.linksMap = linksMap;
           })();
-
-
 
           const statusCount = {};
           httpxData.forEach(h => {
@@ -111,7 +104,6 @@
           buildServiceChart(naabuData);
           buildColleagueChart(colleagueData);
 
-          // Combine DNS and HTTP data for table rows.
           const combinedData = {};
           dnsxData.forEach(d => { combinedData[d.host] = { dns: d, http: [] }; });
           httpxData.forEach(h => {
@@ -138,7 +130,7 @@
             document.getElementById("tlsUsageChart").parentElement.innerHTML =
               "<p>No valid website data available for TLS usage analysis.</p>";
           }
-          // Build Nameserver Summary Chart
+
           const allNsRecords = secData
             .map(item => item["NS Records"])
             .filter(ns => ns && ns !== "No NS records found" && ns !== "N/A")
@@ -156,59 +148,78 @@
           buildNSChart(nsLabels, nsData);
           buildHeadersChart(httpxData, secMapUrl);
           buildEmailSecChart(secData);
-          buildCDNStackedChart(httpxData);
-          updateChartTheme();
-        } catch (err) {
-          console.error("Error loading data or building report:", err);
-        }
-      }
-      loadData();
+      buildCDNStackedChart(httpxData);
+    } catch (err) {
+      console.error("Error loading data or building report:", err);
+    }
+  }
+  loadData();
 
-      // Modal functions
+  window.addEventListener("resize", () => {
+    const visibleRows = Array.from(document.querySelectorAll("#report-table-body tr"));
+    window.requestAnimationFrame(() => updateClampStates(visibleRows));
+  });
+
+      const screenshotBackdrop = document.getElementById('screenshotModal');
+      const screenshotImg = document.getElementById('screenshotModalImg');
+      const screenshotClose = document.getElementById('closeModalBtn');
+
       function openModal(imgSrc) {
-        document.getElementById('screenshotModalImg').src = imgSrc;
-        document.getElementById('screenshotModal').style.display = 'block';
+        if (!screenshotBackdrop || !screenshotImg) return;
+        screenshotImg.src = imgSrc;
+        screenshotBackdrop.classList.add('is-visible');
       }
       function closeModal() {
-        document.getElementById('screenshotModal').style.display = 'none';
-        document.getElementById('screenshotModalImg').src = "";
+        if (!screenshotBackdrop || !screenshotImg) return;
+        screenshotBackdrop.classList.remove('is-visible');
+        screenshotImg.src = "";
       }
+      if (screenshotClose) {
+        screenshotClose.addEventListener('click', closeModal);
+      }
+      if (screenshotBackdrop) {
+        screenshotBackdrop.addEventListener('click', (event) => {
+          if (event.target === event.currentTarget) {
+            closeModal();
+          }
+        });
+      }
+
+      function openLinksModal(url) {
+        const list = (window.linksMap && window.linksMap[url]) ? window.linksMap[url] : [];
+        const box = document.getElementById('linksModalBody');
+        if (!box) return;
+        if (!list.length) {
+          box.innerHTML = "<p>No links found.</p>";
+        } else {
+          box.innerHTML = `<pre class="links-list">${list.join("\n")}</pre>`;
+        }
+        const modal = document.getElementById('linksModal');
+        if (modal) {
+          modal.classList.add('is-visible');
+        }
+      }
+      function closeLinksModal() {
+        const modal = document.getElementById('linksModal');
+        const body = document.getElementById('linksModalBody');
+        if (modal) modal.classList.remove('is-visible');
+        if (body) body.innerHTML = "";
+      }
+      const linksBackdrop = document.getElementById('linksModal');
+      if (linksBackdrop) {
+        linksBackdrop.addEventListener('click', (event) => {
+          if (event.target === event.currentTarget) {
+            closeLinksModal();
+          }
+        });
+      }
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeModal();
+          closeLinksModal();
+        }
+      });
     </script>
-
-    <script>
-    function openLinksModal(url) {
-      const list = (window.linksMap && window.linksMap[url]) ? window.linksMap[url] : [];
-      const box = document.getElementById('linksModalBody');
-      if (!list.length) {
-        box.innerHTML = "<p>No links found.</p>";
-      } else {
-        box.innerHTML = "<pre style='white-space: pre-wrap; word-wrap: break-word; max-height:60vh; overflow:auto;'>" +
-                        list.join("\n") + "</pre>";
-      }
-      document.getElementById('linksModal').style.display = 'block';
-    }
-    function closeLinksModal() {
-      document.getElementById('linksModal').style.display = 'none';
-      document.getElementById('linksModalBody').innerHTML = "";
-    }
-  </script>
-
-    <!-- Modal HTML -->
-    <div id="screenshotModal">
-      <div id="screenshotModalContent">
-        <button id="closeModalBtn" onclick="closeModal()">Close</button>
-        <img id="screenshotModalImg" src="" alt="Full Screenshot" />
-      </div>
-    </div>
-
-    <!-- Links Modal -->
-    <div id="linksModal" style="display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.75);">
-      <div style="position:relative; margin:5% auto; width:80%; max-width:900px; background:#fff; padding:10px; border-radius:4px;">
-        <button style="position:absolute; top:5px; right:10px; background:#444; color:#fff; border:none; border-radius:3px; padding:5px 8px; cursor:pointer;"
-                onclick="closeLinksModal()">Close</button>
-        <div id="linksModalBody"></div>
-      </div>
-    </div>
 
   </body>
 </html>
