@@ -1,357 +1,59 @@
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <title>External Attack Surface Analysis</title>
-    <!-- Chart.js for charts -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-      /* Root CSS variables for theme colors and font sizes */
-      :root {
-        /* Light theme colors */
-        --light-bg-color: #f9f9f9;
-        --light-text-color: #333;
-        --light-header-bg: #fff;
-        --light-header-text: #333;
-        --light-table-bg: #fff;
-        --light-table-header-bg: #eee;
-        --light-table-border: #ddd;
-        --light-toggle-bg: #757574;
-        --light-toggle-btn: #fff;
-        /* Dark theme colors */
-        --dark-bg-color: #1f1f1f;
-        --dark-text-color: #f0f0f0;
-        --dark-header-bg: #2a2a2a;
-        --dark-header-text: #ffffff;
-        --dark-table-bg: #2a2a2a;
-        --dark-table-header-bg: #3a3a3a;
-        --dark-table-border: #444;
-        --dark-toggle-bg: #555;
-        --dark-toggle-btn: #ffffff;
-        /* Active theme variables (default to light) */
-        --bg-color: var(--light-bg-color);
-        --text-color: var(--light-text-color);
-        --header-bg: var(--light-header-bg);
-        --header-text: var(--light-header-text);
-        --table-bg: var(--light-table-bg);
-        --table-header-bg: var(--light-table-header-bg);
-        --table-border: var(--light-table-border);
-        --toggle-bg: var(--light-toggle-bg);
-        --toggle-btn: var(--light-toggle-btn);
-        /* Font sizing variables */
-        --font-size-sm: 12px;
-        --font-size-base: 13px;
-        --font-size-md: 14px;
-        --font-size-lg: 16px;
-        --heading-font-size: 22px;
-      }
-      /* Dark theme override */
-      body.dark {
-        --bg-color: var(--dark-bg-color);
-        --text-color: var(--dark-text-color);
-        --header-bg: var(--dark-header-bg);
-        --header-text: var(--dark-header-text);
-        --table-bg: var(--dark-table-bg);
-        --table-header-bg: var(--dark-table-header-bg);
-        --table-border: var(--dark-table-border);
-        --toggle-bg: var(--dark-toggle-bg);
-        --toggle-btn: var(--dark-toggle-btn);
-      }
-      /* Basic styles for body and fonts */
-      body {
-        margin: 0;
-        background-color: var(--bg-color);
-        color: var(--text-color);
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        font-size: var(--font-size-base);
-        line-height: 1.4;
-      }
-      /* HEADER styles */
-      .header {
-        position: relative;
-        background-color: var(--header-bg);
-        color: var(--header-text);
-        text-align: center;
-        padding: 12px 20px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      }
-      .table-container {
-        width: 100%;
-        max-height: 500px;
-        overflow-x: auto;
-        overflow-y: auto;
-        margin-top: 10px;
-      }
-      .header h1 {
-        margin: 0;
-      }
-      .toggle-btn, .csv-btn {
-        position: absolute;
-        background-color: var(--toggle-bg);
-        border: none;
-        color: var(--toggle-btn);
-        cursor: pointer;
-        border-radius: 4px;
-        font-size: var(--font-size-md);
-      }
-      .toggle-btn {
-        right: 20px;
-        top: 12px;
-        transition: background-color 0.2s, color 0.2s;
-      }
-      .csv-btn {
-        right: 20px;
-        top: 35px;
-        transition: background-color 0.5s, color 0.2s;
-      }
-      .toggle-btn:hover {
-        opacity: 0.9;
-      }
-      /* Top controls for table filters and pagination */
-      .table-top-controls {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-      }
-      /* Container for the entire report */
-      .container {
-        padding: 20px;
-        max-width: 1200px;
-        margin: 0 auto;
-      }
-      /* Scoreboard styles for summary cards */
-      .scoreboard {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-bottom: 20px;
-      }
-      .score-card {
-        background-color: var(--table-bg);
-        border: 1px solid var(--table-border);
-        border-radius: 5px;
-        flex: 1 1 200px;
-        padding: 10px;
-        text-align: center;
-      }
-      .score-card h2 {
-        margin: 0;
-        font-size: 1.6em;
-        font-weight: 500;
-      }
-      .score-card p {
-        margin: 5px 0 0;
-        font-size: var(--font-size-sm);
-        color: var(--text-color);
-      }
-      .hint {
-        color: red;
-      }
-      /* Grid layout for charts */
-      .charts-grid {
-        display: grid;
-        gap: 10px;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        margin-bottom: 20px;
-      }
-      .chart-container {
-        position: relative;
-        background-color: var(--table-bg);
-        border: 1px solid var(--table-border);
-        border-radius: 5px;
-        padding: 10px;
-        box-sizing: border-box;
-      }
-      .chart-container canvas {
-        display: block;
-        width: 100% !important;
-        height: 100% !important;
-      }
-      /* Search box styling */
-      #searchBox {
-        margin: 0;
-        padding: 6px 10px;
-        width: 250px;
-        font-size: var(--font-size-sm);
-        border: 1px solid var(--table-border);
-        border-radius: 4px;
-      }
-      /* Table controls styling */
-      .table-controls {
-        margin: 0;
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-      }
-      .table-controls label {
-        margin-right: 6px;
-        font-size: var(--font-size-sm);
-      }
-      .table-controls select {
-        font-size: var(--font-size-sm);
-        padding: 4px 8px;
-        border: 1px solid var(--table-border);
-        border-radius: 4px;
-        background-color: var(--table-bg);
-        color: var(--text-color);
-      }
-      /* Main table styling */
-      table {
-        border-collapse: separate;
-        border-spacing: 0;
-        width: 100%;
-        background-color: var(--table-bg);
-        font-size: var(--font-size-sm);
-      }
-      table thead tr {
-        position: sticky;
-        z-index: 10;
-        background-color: var(--table-header-bg);
-      }
-      table thead tr:first-child {
-        top: 0;
-      }
-      table thead tr:nth-child(2) {
-        top: 61px;
-      }
-      th, td {
-        border: 1px solid var(--table-border);
-        padding: 8px;
-        text-align: left;
-        vertical-align: top;
-        color: inherit;
-      }
-      th {
-        background-color: var(--table-header-bg);
-        font-weight: 600;
-      }
-      /* Filter dropdown styling in table header */
-      #filter-row select {
-        width: 100%;
-        font-size: var(--font-size-sm);
-        padding: 2px 4px;
-        border: 1px solid var(--table-border);
-        border-radius: 3px;
-        background-color: var(--table-bg);
-        color: var(--text-color);
-      }
-      /* Pagination controls styling */
-      #paginationControls {
-        margin-top: 10px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 10px;
-      }
-      #paginationControls button {
-        padding: 6px 12px;
-        cursor: pointer;
-        font-size: var(--font-size-sm);
-        border-radius: 4px;
-        border: 1px solid var(--table-border);
-        background-color: var(--toggle-bg);
-        color: var(--toggle-btn);
-        transition: background-color 0.2s, color 0.2s;
-      }
-      #paginationControls button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      /* Ensure proper display for the last header column */
-      th:nth-child(33) {
-        white-space: nowrap;
-      }
-      /* Thumbnail styling for screenshots */
-      .thumbnail {
-        width: 150px;
-        height: 150px;
-        cursor: pointer;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-      }
-      /* Modal styling */
-      #screenshotModal {
-        display: none;
-        position: fixed;
-        z-index: 9999;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0,0,0,0.75);
-      }
-      #screenshotModalContent {
-        position: relative;
-        margin: 5% auto;
-        width: 80%;
-        max-width: 900px;
-        background-color: #fff;
-        padding: 10px;
-        border-radius: 4px;
-      }
-      #screenshotModalImg {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
-      #closeModalBtn {
-        position: absolute;
-        top: 5px;
-        right: 10px;
-        background: #444;
-        color: #fff;
-        border: none;
-        border-radius: 3px;
-        padding: 5px 8px;
-        cursor: pointer;
-      }
-    </style>
-    <!-- Global screenshot map definition -->
-    <!-- Screenshot map placeholder; the actual data will be inserted by the build_html_report function -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="assets/report.css" />
     <script>
-      // The screenshot map data will be injected below:
       const screenshotMap =
       %%SCREENSHOT_MAP%%
       ;
     </script>
-
-
   </head>
   <body>
-    <!-- Header section with title and theme toggle button -->
-    <div class="header">
-      <h1>External Attack Surface Analysis Report</h1>
-      <button id="themeToggle" class="toggle-btn">DARK THEME</button>
-      <button id="exportCsvButton" class="csv-btn">EXPORT CSV</button>
-    </div>
-    <div class="container">
-      <!-- Scoreboard section for summary metrics -->
-      <div class="scoreboard" id="scoreboard"></div>
-      <!-- Grid of charts -->
-      <div class="charts-grid">
-        <div class="chart-container"><canvas id="priorityChart"></canvas></div>
-        <div class="chart-container"><canvas id="domainCountChart"></canvas></div>
-        <div class="chart-container"><canvas id="colleagueEndpointChart"></canvas></div>
-        <div class="chart-container"><canvas id="loginBarChart"></canvas></div>
-        <div class="chart-container"><canvas id="statusCodeChart"></canvas></div>
-        <div class="chart-container"><canvas id="portChart"></canvas></div>
-        <div class="chart-container"><canvas id="serviceChart"></canvas></div>
-        <div class="chart-container"><canvas id="techChart"></canvas></div>
-        <div class="chart-container"><canvas id="tlsUsageChart"></canvas></div>
-        <div class="chart-container"><canvas id="certExpiryChart"></canvas></div>
-        <div class="chart-container"><canvas id="headersChart"></canvas></div>
-        <div class="chart-container"><canvas id="emailSecChart"></canvas></div>
-        <div class="chart-container"><canvas id="cdnStackedChart"></canvas></div>
-        <div class="chart-container"><canvas id="nsChart"></canvas></div>
-      </div>
-      <!-- Controls above the table: search box and rows per page selector -->
-      <div class="table-top-controls">
-        <input type="text" id="searchBox" placeholder="Filter table (e.g. domain, status code, tech)..." />
-        <div class="hint">
-          <h4>Mouseover to Risk Score to Evaluate Reasons for Scoring</h4>
+    <header class="header">
+      <div class="header__content">
+        <div class="header__titles">
+          <p class="header__eyebrow">Reconnaissance Intelligence Report</p>
+          <h1>External Attack Surface Analysis</h1>
+          <p class="header__subtitle">Consolidated intelligence across discovered assets, live exposure points, and defensive posture.</p>
         </div>
+        <div class="header__actions">
+          <button id="exportCsvButton" class="btn btn--primary">Export CSV</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="scoreboard" id="scoreboard"></section>
+
+      <section class="charts-grid">
+        <div class="chart-container"><h3>Asset Overview</h3><canvas id="priorityChart"></canvas></div>
+        <div class="chart-container"><h3>Domains by Status</h3><canvas id="domainCountChart"></canvas></div>
+        <div class="chart-container"><h3>Internal vs External Footprint</h3><canvas id="colleagueEndpointChart"></canvas></div>
+        <div class="chart-container"><h3>Login Surface</h3><canvas id="loginBarChart"></canvas></div>
+        <div class="chart-container"><h3>HTTP Status Codes</h3><canvas id="statusCodeChart"></canvas></div>
+        <div class="chart-container"><h3>Top Ports</h3><canvas id="portChart"></canvas></div>
+        <div class="chart-container"><h3>Service Exposure</h3><canvas id="serviceChart"></canvas></div>
+        <div class="chart-container"><h3>Technology Stack</h3><canvas id="techChart"></canvas></div>
+        <div class="chart-container"><h3>TLS Adoption</h3><canvas id="tlsUsageChart"></canvas></div>
+        <div class="chart-container"><h3>Certificate Expiry</h3><canvas id="certExpiryChart"></canvas></div>
+        <div class="chart-container"><h3>Security Headers</h3><canvas id="headersChart"></canvas></div>
+        <div class="chart-container"><h3>Email Security</h3><canvas id="emailSecChart"></canvas></div>
+        <div class="chart-container"><h3>CDN Distribution</h3><canvas id="cdnStackedChart"></canvas></div>
+        <div class="chart-container"><h3>Nameserver Footprint</h3><canvas id="nsChart"></canvas></div>
+      </section>
+
+      <section class="table-top-controls">
+        <input type="text" id="searchBox" placeholder="Filter results (domain, status code, technology…)" />
+        <div class="hint">Hover the Attack Surface Score to review the contextual risk factors.</div>
         <div class="table-controls">
-          <label for="rowsPerPageSelect">Rows per page:</label>
+          <label for="rowsPerPageSelect">Rows per page</label>
           <select id="rowsPerPageSelect">
             <option value="20">20</option>
             <option value="50">50</option>
@@ -359,13 +61,13 @@
             <option value="all">ALL</option>
           </select>
         </div>
-      </div>
-      <!-- Main report table with dynamic filters in header -->
+      </section>
+
       <div class="table-container">
         <table id="report-table">
           <thead>
             <tr>
-              <th id="riskScoreHeader">Attack Surface Score<span id="riskSortToggle" style="cursor:pointer; user-select:none; margin-left:5px;">▼</span></th>
+              <th id="riskScoreHeader">Attack Surface Score<span id="riskSortToggle">▼</span></th>
               <th>Domain</th>
               <th>Purpose</th>
               <th>Resolvers</th>
@@ -404,7 +106,6 @@
               <th>Open Ports / Services</th>
               <th>Crawled Links</th>
             </tr>
-            <!-- Second header row for filter dropdowns per column -->
             <tr id="filter-row">
               <th><select id="priority-filter"><option value="">All</option></select></th>
               <th><select id="domain-filter"><option value="">All</option></select></th>
@@ -455,16 +156,22 @@
           <tbody id="report-table-body"></tbody>
         </table>
       </div>
-      <!-- Container for pagination controls -->
       <div id="paginationControls"></div>
-    </div>
-    <!-- Modal HTML -->
-    <div id="screenshotModal">
-      <div id="screenshotModalContent">
-        <button id="closeModalBtn" onclick="closeModal()">Close</button>
-        <img id="screenshotModalImg" src="" alt="Full Screenshot" />
+
+      <div id="screenshotModal">
+        <div id="screenshotModalContent">
+          <button id="closeModalBtn" onclick="closeModal()" aria-label="Close screenshot viewer">&times;</button>
+          <img id="screenshotModalImg" src="" alt="Full Screenshot" />
+        </div>
       </div>
-    </div>
+
+      <div id="linksModal">
+        <div>
+          <button onclick="closeLinksModal()" aria-label="Close links viewer">&times;</button>
+          <div id="linksModalBody"></div>
+        </div>
+      </div>
+    </main>
     <script>
       // Plugin for displaying labels on bars in charts
       const barLabelPlugin = {
@@ -472,13 +179,28 @@
         afterDatasetsDraw(chart, args, options) {
           const { ctx } = chart;
           const metaSets = chart.getSortedVisibleDatasetMetas().filter(m => m.type === 'bar');
+          const tokens = getDesignTokens();
+          const labelColor = getChartTextColor(tokens);
           metaSets.forEach(meta => {
             meta.data.forEach((element, index) => {
-              const value = meta._parsed[index][meta.vScale.axis];
+              const parsed = meta._parsed && meta._parsed[index];
+              let value = typeof parsed === "object" && parsed !== null
+                ? parsed[meta.vScale.axis]
+                : parsed;
+              if (value === undefined || value === null) {
+                const dataset = meta._dataset && Array.isArray(meta._dataset.data)
+                  ? meta._dataset.data[index]
+                  : undefined;
+                if (typeof dataset === "object" && dataset !== null) {
+                  value = dataset[meta.vScale?.axis] ?? dataset.y ?? dataset;
+                } else {
+                  value = dataset;
+                }
+              }
               if (value === 0) return;
               const { x, y } = element.tooltipPosition();
               ctx.save();
-              ctx.fillStyle = Chart.defaults.color;
+              ctx.fillStyle = labelColor;
               ctx.font = options.font || '9px sans-serif';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'bottom';
@@ -490,8 +212,57 @@
       };
       Chart.register(barLabelPlugin);
 
+      function getDesignTokens() {
+        const styles = getComputedStyle(document.body);
+        const readToken = (token, fallback) => {
+          const value = styles.getPropertyValue(token);
+          return value ? value.trim() || fallback : fallback;
+        };
+        const fontToken = readToken("--font-family-base", "Inter, system-ui, sans-serif");
+        return {
+          text: readToken("--color-text", "#0f172a"),
+          muted: readToken("--color-text-muted", "#475569"),
+          border: readToken("--color-border", "rgba(15, 23, 42, 0.18)"),
+          grid: readToken("--color-gridline", "rgba(148, 163, 184, 0.22)"),
+          fontFamily: fontToken.replace(/['"]/g, "").trim() || "Inter, system-ui, sans-serif"
+        };
+      }
+
+      function getChartTextColor(tokens) {
+        return tokens.text;
+      }
+
+      function applyChartDefaults() {
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
+        Chart.defaults.font.family = tokens.fontFamily;
+        Chart.defaults.font.size = 12;
+        Chart.defaults.font.weight = "500";
+        Chart.defaults.color = chartText;
+        Chart.defaults.borderColor = tokens.grid;
+        if (Chart.defaults.plugins?.legend?.labels) {
+          Chart.defaults.plugins.legend.labels.color = chartText;
+          Chart.defaults.plugins.legend.labels.font = Chart.defaults.plugins.legend.labels.font || {};
+          Chart.defaults.plugins.legend.labels.font.family = tokens.fontFamily;
+          Chart.defaults.plugins.legend.labels.font.weight = "500";
+        }
+        if (Chart.defaults.plugins?.tooltip) {
+          Chart.defaults.plugins.tooltip.titleColor = chartText;
+          Chart.defaults.plugins.tooltip.bodyColor = chartText;
+          Chart.defaults.plugins.tooltip.titleFont = Chart.defaults.plugins.tooltip.titleFont || {};
+          Chart.defaults.plugins.tooltip.bodyFont = Chart.defaults.plugins.tooltip.bodyFont || {};
+          Chart.defaults.plugins.tooltip.titleFont.family = tokens.fontFamily;
+          Chart.defaults.plugins.tooltip.titleFont.weight = "600";
+          Chart.defaults.plugins.tooltip.bodyFont.family = tokens.fontFamily;
+          Chart.defaults.plugins.tooltip.bodyFont.weight = "500";
+        }
+        return tokens;
+      }
+
+      applyChartDefaults();
+
       // Global variables for charts and table data.
-      let priorityChart, domainCountChart, statusCodeChart, loginChart, portChart, techChart, certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart, cdnTypeChart, cdnStackedChart;
+      let priorityChart, domainCountChart, statusCodeChart, loginChart, portChart, techChart, certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart, cdnTypeChart, cdnStackedChart, nsChart;
       let allTableRows = [];
       let currentPage = 1;
       let rowsPerPage = 20;
@@ -523,7 +294,8 @@
           const cols = row.querySelectorAll("td");
           const rowData = [];
           cols.forEach(td => {
-            rowData.push('"' + td.innerText.trim().replace(/"/g, '""') + '"');
+            const text = getCellContentText(td);
+            rowData.push('"' + text.replace(/"/g, '""') + '"');
           });
           csv.push(rowData.join(","));
         });
@@ -533,39 +305,83 @@
         exportAllTableRowsToCSV("report.csv");
       });
 
-      // Theme toggle
-      document.getElementById("themeToggle").addEventListener("click", () => {
-        document.body.classList.toggle("dark");
-        updateChartTheme();
-      });
-      function updateChartTheme() {
-        const newColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
-        Chart.defaults.color = newColor;
-        const charts = [
-          priorityChart, domainCountChart, statusCodeChart, loginChart,
-          portChart, techChart, certExpiryChart, tlsUsageChart,
-          headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart, cdnTypeChart, cdnStackedChart
-        ];
-        charts.forEach(chart => {
-          if (chart) {
-            if (chart.options.scales) {
-              if (chart.options.scales.x && chart.options.scales.x.ticks) {
-                chart.options.scales.x.ticks.color = newColor;
-              }
-              if (chart.options.scales.y && chart.options.scales.y.ticks) {
-                chart.options.scales.y.ticks.color = newColor;
-              }
-            }
-            if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels) {
-              chart.options.plugins.legend.labels.color = newColor;
-            }
-            if (chart.options.plugins && chart.options.plugins.title) {
-              chart.options.plugins.title.color = newColor;
-            }
-            chart.update();
+      function getCellContentText(cell) {
+        if (!cell) return "";
+        const wrapper = cell.querySelector(".cell-content");
+        const source = wrapper || cell;
+        return (source.innerText || "").trim();
+      }
+
+      function prepareRowCells(row) {
+        const cells = Array.from(row.cells);
+        cells.forEach((cell, index) => {
+          if (index === 0) return;
+          if (cell.dataset.clampPrepared === "true") return;
+          if (cell.querySelector("img")) {
+            cell.dataset.clampPrepared = "true";
+            return;
           }
+          const wrapper = document.createElement("div");
+          wrapper.className = "cell-content";
+          while (cell.firstChild) {
+            wrapper.appendChild(cell.firstChild);
+          }
+          cell.appendChild(wrapper);
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "cell-expander";
+          button.textContent = "View more";
+          button.setAttribute("aria-expanded", "false");
+          button.addEventListener("click", () => {
+            const expanded = cell.classList.toggle("is-expanded");
+            button.textContent = expanded ? "View less" : "View more";
+            button.setAttribute("aria-expanded", String(expanded));
+            updateSingleCellClamp(cell);
+          });
+          cell.appendChild(button);
+          cell.dataset.clampPrepared = "true";
+          updateSingleCellClamp(cell);
         });
       }
+
+      function updateSingleCellClamp(cell) {
+        const wrapper = cell.querySelector(".cell-content");
+        const button = cell.querySelector(".cell-expander");
+        if (!wrapper || !button) return;
+        if (cell.classList.contains("is-expanded")) {
+          cell.classList.add("is-clamped");
+          button.style.display = "inline-flex";
+          button.textContent = "View less";
+          button.setAttribute("aria-expanded", "true");
+          return;
+        }
+        const needsClamp = wrapper.scrollHeight > wrapper.clientHeight + 1;
+        if (needsClamp) {
+          cell.classList.add("is-clamped");
+          button.style.display = "inline-flex";
+          button.textContent = "View more";
+          button.setAttribute("aria-expanded", "false");
+        } else {
+          cell.classList.remove("is-clamped", "is-expanded");
+          button.style.display = "none";
+          button.textContent = "View more";
+          button.setAttribute("aria-expanded", "false");
+        }
+      }
+
+      function updateClampStates(rows) {
+        rows.forEach(row => {
+          const cells = Array.from(row.cells);
+          cells.forEach((cell, index) => {
+            if (index === 0) return;
+            if (cell.dataset.clampPrepared === "true") {
+              updateSingleCellClamp(cell);
+            }
+          });
+        });
+      }
+
+      // Theme support removed; charts render with default styling.
 
       // Utility function
       function formatCell(arr) {
@@ -656,10 +472,9 @@
           score += techCount;
           reasons.push(`+${techCount} (Tech stack count)`);
         }
-          if (linkCount && Number.isFinite(linkCount) && linkCount > 0) {
-            score += linkCount;
-            reasons.push(`${linkCount} crawled links for this URL`);
-
+        if (linkCount && Number.isFinite(linkCount) && linkCount > 0) {
+          score += linkCount;
+          reasons.push(`+${linkCount} (Crawled links discovered)`);
         }
         return { score, debug: reasons };
       }
@@ -677,23 +492,24 @@
 
       function buildScoreboard({ totalSubdomains, liveSubs, totalHttpx, loginFoundCount }) {
         const sb = document.getElementById("scoreboard");
+        const format = (value) => Number(value || 0).toLocaleString();
         sb.innerHTML = `
-          <div class="score-card">
-            <h2>${totalSubdomains}</h2>
-            <p>Total Unique Assets</p>
-          </div>
-          <div class="score-card">
-            <h2>${liveSubs}</h2>
-            <p>Total Live Assets</p>
-          </div>
-          <div class="score-card">
-            <h2>${totalHttpx}</h2>
-            <p>Application Endpoints</p>
-          </div>
-          <div class="score-card">
-            <h2>${loginFoundCount}</h2>
-            <p>Login Interface Found</p>
-          </div>
+          <article class="score-card">
+            <p class="score-card__label">Total Unique Assets</p>
+            <h2>${format(totalSubdomains)}</h2>
+          </article>
+          <article class="score-card">
+            <p class="score-card__label">Live Assets</p>
+            <h2>${format(liveSubs)}</h2>
+          </article>
+          <article class="score-card">
+            <p class="score-card__label">Application Endpoints</p>
+            <h2>${format(totalHttpx)}</h2>
+          </article>
+          <article class="score-card">
+            <p class="score-card__label">Login Interfaces</p>
+            <h2>${format(loginFoundCount)}</h2>
+          </article>
         `;
       }
 
@@ -703,6 +519,18 @@
         const prCanvas = document.getElementById("priorityChart");
         const portCanvas = document.getElementById("portChart");
         const techCanvas = document.getElementById("techChart");
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
+        const createTicks = () => ({
+          color: chartText,
+          font: { family: tokens.fontFamily, weight: "500" }
+        });
+        const createGrid = (display = true) => ({
+          color: tokens.grid,
+          drawBorder: false,
+          borderDash: [4, 4],
+          display
+        });
         if (prCanvas) {
           const funnelLabels = ["Total Assets", "Live Assets", "Applications"];
           const funnelValues = [totalSubdomains, liveSubs, endpointsCount];
@@ -714,14 +542,27 @@
               datasets: [{
                 label: "Assets Overview",
                 data: funnelValues,
-                backgroundColor: ["#2980b9", "#8e44ad", "#16a085"]
+                backgroundColor: ["#3b82f6", "#8b5cf6", "#14b8a6"],
+                hoverBackgroundColor: ["#2563eb", "#7c3aed", "#0d9488"],
+                borderRadius: 12,
+                maxBarThickness: 48
               }]
             },
             options: {
               responsive: true,
               indexAxis: "x",
-              plugins: { legend: { display: false }, title: { display: true, text: "Assets Overview" } },
-              scales: { x: { beginAtZero: true, title: { display: true, text: "Count" } } }
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  ticks: createTicks(),
+                  grid: createGrid(false)
+                },
+                y: {
+                  beginAtZero: true,
+                  ticks: createTicks(),
+                  grid: createGrid()
+                }
+              }
             }
           });
         }
@@ -734,10 +575,26 @@
               datasets: [{
                 label: "HTTP Status Codes",
                 data: sortedKeys.map(l => statusCount[l]),
-                backgroundColor: ["#3498db","#1abc9c","#9b59b6","#f1c40f","#e74c3c","#34495e","#95a5a6"]
+                backgroundColor: ["#60a5fa","#34d399","#a855f7","#facc15","#fb7185","#38bdf8","#cbd5f5"],
+                borderRadius: 10,
+                maxBarThickness: 36
               }]
             },
-            options: { responsive: true, plugins: { legend: { display: false }, title: { display: true, text: "HTTP Status Codes" } }, scales: { y: { beginAtZero: true } } }
+            options: {
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  ticks: createTicks(),
+                  grid: createGrid(false)
+                },
+                y: {
+                  beginAtZero: true,
+                  ticks: createTicks(),
+                  grid: createGrid()
+                }
+              }
+            }
           });
         }
         if (portCanvas) {
@@ -750,10 +607,27 @@
               datasets: [{
                 label: "Open Ports",
                 data: top10Ports.map(p => portCount[p]),
-                backgroundColor: "#f39c12"
+                backgroundColor: "#f97316",
+                hoverBackgroundColor: "#ea580c",
+                borderRadius: 10,
+                maxBarThickness: 36
               }]
             },
-            options: { responsive: true, plugins: { legend: { display: false }, title: { display: true, text: "Top 10 Ports" } }, scales: { y: { beginAtZero: true } } }
+            options: {
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  ticks: createTicks(),
+                  grid: createGrid(false)
+                },
+                y: {
+                  beginAtZero: true,
+                  ticks: createTicks(),
+                  grid: createGrid()
+                }
+              }
+            }
           });
         }
         if (techCanvas) {
@@ -766,14 +640,31 @@
               datasets: [{
                 label: "Tech Usage (Top 10)",
                 data: top10.map(t => techCount[t]),
-                backgroundColor: "#9b59b6"
+                backgroundColor: "#6366f1",
+                hoverBackgroundColor: "#4f46e5",
+                borderRadius: 10,
+                maxBarThickness: 36
               }]
             },
             options: {
               responsive: true,
               indexAxis: "x",
-              plugins: { legend: { display: false }, title: { display: true, text: "Top 10 Technologies" } },
-              scales: { x: { beginAtZero: true, ticks: { maxRotation: 60, minRotation: 70 } } }
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  ticks: {
+                    ...createTicks(),
+                    maxRotation: 40,
+                    minRotation: 0
+                  },
+                  grid: createGrid(false)
+                },
+                y: {
+                  beginAtZero: true,
+                  ticks: createTicks(),
+                  grid: createGrid()
+                }
+              }
             }
           });
         }
@@ -797,16 +688,47 @@
         const datasets = cdnTypes.map((type, idx) => ({
           label: type,
           data: cdnNames.map(name => cdnMap[name][type] || 0),
-          backgroundColor: palette[idx % palette.length]
+          backgroundColor: palette[idx % palette.length],
+          borderRadius: 8,
+          maxBarThickness: 36
         }));
         const ctx = document.getElementById("cdnStackedChart").getContext("2d");
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
+        const ticks = () => ({
+          color: chartText,
+          font: { family: tokens.fontFamily, weight: "500" }
+        });
         cdnStackedChart = new Chart(ctx, {
           type: "bar",
           data: { labels: cdnNames, datasets: datasets },
           options: {
             responsive: true,
-            plugins: { title: { display: true, text: "CDN Type vs. CDN Name" }, tooltip: { mode: "index", intersect: false } },
-            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: {
+                  usePointStyle: true,
+                  boxWidth: 10,
+                  color: chartText,
+                  font: { family: tokens.fontFamily, weight: "500" }
+                }
+              },
+              tooltip: { mode: "index", intersect: false }
+            },
+            scales: {
+              x: {
+                stacked: true,
+                ticks: ticks(),
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              },
+              y: {
+                stacked: true,
+                beginAtZero: true,
+                ticks: ticks(),
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              }
+            }
           }
         });
       }
@@ -823,17 +745,43 @@
         const top10 = sortedDomains.slice(0, 10);
         const data = top10.map(d => domainCount[d]);
         const ctx = document.getElementById("domainCountChart").getContext("2d");
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
         domainCountChart = new Chart(ctx, {
           type: "bar",
           data: {
             labels: top10,
-            datasets: [{ label: "Top 10 Domains (Active URLs)", data, backgroundColor: "#2980b9" }]
+            datasets: [{
+              label: "Top 10 Domains (Active URLs)",
+              data,
+              backgroundColor: "#38bdf8",
+              hoverBackgroundColor: "#0ea5e9",
+              borderRadius: 10,
+              maxBarThickness: 36
+            }]
           },
           options: {
             responsive: true,
             indexAxis: "x",
-            plugins: { legend: { display: false }, title: { display: true, text: "Top 10 Domains by Active URLs" } },
-            scales: { x: { beginAtZero: true, ticks: { stepSize: 1, maxRotation: 100, minRotation: 70 } } }
+            plugins: { legend: { display: false } },
+            scales: {
+              x: {
+                beginAtZero: true,
+                ticks: {
+                  color: chartText,
+                  font: { family: tokens.fontFamily, weight: "500" },
+                  stepSize: 1,
+                  maxRotation: 40,
+                  minRotation: 0
+                },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              }
+            }
           }
         });
       }
@@ -841,13 +789,35 @@
       function buildLoginBarChart(endpointsCount, loginFoundCount) {
         const canvas = document.getElementById("loginBarChart");
         if (!canvas) return;
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
         loginChart = new Chart(canvas, {
           type: "bar",
           data: {
             labels: ["Found", "Not Found"],
-            datasets: [{ data: [loginFoundCount, endpointsCount - loginFoundCount], backgroundColor: ["#e74c3c", "#2ecc71"] }]
+            datasets: [{
+              data: [loginFoundCount, endpointsCount - loginFoundCount],
+              backgroundColor: ["#ef4444", "#22c55e"],
+              hoverBackgroundColor: ["#dc2626", "#16a34a"],
+              borderRadius: 10,
+              maxBarThickness: 42
+            }]
           },
-          options: { responsive: true, plugins: { title: { display: true, text: "Login Interfaces Identified" }, legend: { display: false } } }
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: {
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              }
+            }
+          }
         });
       }
 
@@ -867,13 +837,36 @@
           }
         });
         const ctx = document.getElementById("certExpiryChart").getContext("2d");
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
         certExpiryChart = new Chart(ctx, {
           type: "bar",
           data: {
             labels: ["Expired", "Next 7 Days", "Next 14 Days", "Next 30 Days"],
-            datasets: [{ label: "Certs Expiring", data: [expired, exp7, exp14, exp30], backgroundColor: ["#FF0000", "#e74c3c", "#e67e22", "#3498db"] }]
+            datasets: [{
+              label: "Certs Expiring",
+              data: [expired, exp7, exp14, exp30],
+              backgroundColor: ["#f97316", "#fb7185", "#eab308", "#38bdf8"],
+              hoverBackgroundColor: ["#ea580c", "#f43f5e", "#ca8a04", "#0ea5e9"],
+              borderRadius: 10,
+              maxBarThickness: 36
+            }]
           },
-          options: { responsive: true, plugins: { title: { display: true, text: "Certificate Expiry" }, legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: {
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              }
+            }
+          }
         });
       }
 
@@ -887,10 +880,36 @@
         const labels = Object.keys(tlsCounts);
         const data = labels.map(l => tlsCounts[l]);
         const ctx = document.getElementById("tlsUsageChart").getContext("2d");
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
         tlsUsageChart = new Chart(ctx, {
           type: "bar",
-          data: { labels, datasets: [{ label: "TLS Version Usage", data, backgroundColor: "#2ecc71" }] },
-          options: { responsive: true, plugins: { title: { display: true, text: "SSL/TLS Usage" }, legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+          data: {
+            labels,
+            datasets: [{
+              label: "TLS Version Usage",
+              data,
+              backgroundColor: "#22c55e",
+              hoverBackgroundColor: "#16a34a",
+              borderRadius: 10,
+              maxBarThickness: 36
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: {
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              }
+            }
+          }
         });
       }
 
@@ -914,20 +933,58 @@
           pp && pp.toLowerCase() !== "n/a" && pp.toLowerCase() !== "false" ? ppPresent++ : ppMissing++;
         });
         const ctx = document.getElementById("headersChart").getContext("2d");
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
+        const ticks = () => ({ color: chartText, font: { family: tokens.fontFamily, weight: "500" } });
         headersChart = new Chart(ctx, {
           type: "bar",
           data: {
             labels: ["HSTS", "X-Frame-Options", "CSP", "X-XSS-Protection", "Referrer-Policy", "Permissions-Policy"],
             datasets: [
-              { label: "Present", data: [hstsPresent, xfoPresent, cspPresent, xssPresent, rpPresent, ppPresent], backgroundColor: "#2ecc71" },
-              { label: "Missing", data: [hstsMissing, xfoMissing, cspMissing, xssMissing, rpMissing, ppMissing], backgroundColor: "#e74c3c" }
+              {
+                label: "Present",
+                data: [hstsPresent, xfoPresent, cspPresent, xssPresent, rpPresent, ppPresent],
+                backgroundColor: "#22c55e",
+                borderRadius: 8,
+                maxBarThickness: 30
+              },
+              {
+                label: "Missing",
+                data: [hstsMissing, xfoMissing, cspMissing, xssMissing, rpMissing, ppMissing],
+                backgroundColor: "#ef4444",
+                borderRadius: 8,
+                maxBarThickness: 30
+              }
             ]
           },
           options: {
             responsive: true,
             indexAxis: "x",
-            plugins: { title: { display: true, text: "Security Headers" }, tooltip: { mode: "index", intersect: false } },
-            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: {
+                  usePointStyle: true,
+                  boxWidth: 10,
+                  color: chartText,
+                  font: { family: tokens.fontFamily, weight: "500" }
+                }
+              },
+              tooltip: { mode: "index", intersect: false }
+            },
+            scales: {
+              x: {
+                stacked: true,
+                ticks: ticks(),
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
+              },
+              y: {
+                stacked: true,
+                beginAtZero: true,
+                ticks: ticks(),
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              }
+            }
           }
         });
       }
@@ -943,19 +1000,57 @@
           dmarc.toLowerCase().includes("dmarc1") ? dmarcSet++ : dmarcMissing++;
         });
         const ctx = document.getElementById("emailSecChart").getContext("2d");
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
+        const ticks = () => ({ color: chartText, font: { family: tokens.fontFamily, weight: "500" } });
         emailSecChart = new Chart(ctx, {
           type: "bar",
           data: {
             labels: ["SPF", "DKIM", "DMARC"],
             datasets: [
-              { label: "Present", data: [spfSet, dkimSet, dmarcSet], backgroundColor: "#2ecc71" },
-              { label: "Missing", data: [spfMissing, dkimMissing, dmarcMissing], backgroundColor: "#e74c3c" }
+              {
+                label: "Present",
+                data: [spfSet, dkimSet, dmarcSet],
+                backgroundColor: "#22c55e",
+                borderRadius: 8,
+                maxBarThickness: 30
+              },
+              {
+                label: "Missing",
+                data: [spfMissing, dkimMissing, dmarcMissing],
+                backgroundColor: "#ef4444",
+                borderRadius: 8,
+                maxBarThickness: 30
+              }
             ]
           },
           options: {
             responsive: true,
-            plugins: { title: { display: true, text: "Email Security Records" }, tooltip: { mode: "index", intersect: false } },
-            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: {
+                  usePointStyle: true,
+                  boxWidth: 10,
+                  color: chartText,
+                  font: { family: tokens.fontFamily, weight: "500" }
+                }
+              },
+              tooltip: { mode: "index", intersect: false }
+            },
+            scales: {
+              x: {
+                stacked: true,
+                ticks: ticks(),
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
+              },
+              y: {
+                stacked: true,
+                beginAtZero: true,
+                ticks: ticks(),
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              }
+            }
           }
         });
       }
@@ -978,6 +1073,8 @@
         const sortedServices = Object.keys(serviceCount).sort((a, b) => serviceCount[b] - serviceCount[a]);
         const top10Services = sortedServices.slice(0, 10);
         const data = top10Services.map(service => serviceCount[service]);
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
         serviceChart = new Chart(ctx, {
           type: "bar",
           data: {
@@ -985,11 +1082,33 @@
             datasets: [{
               label: "Open Services",
               data,
-              backgroundColor: "#9b59b6"
+              backgroundColor: "#6366f1",
+              hoverBackgroundColor: "#4f46e5",
+              borderRadius: 10,
+              maxBarThickness: 36
             }]
           },
-          options: { responsive: true, plugins: { legend: { display: false }, title: { display: true, text: "Top 10 Services" } },
-          scales: { x: { beginAtZero: true, ticks: { maxRotation: 60, minRotation: 70 } } } }
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: {
+                beginAtZero: true,
+                ticks: {
+                  color: chartText,
+                  font: { family: tokens.fontFamily, weight: "500" },
+                  maxRotation: 40,
+                  minRotation: 0
+                },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              }
+            }
+          }
         });
       }
 
@@ -997,6 +1116,8 @@
         const countEmployee = colleagueData.filter(x => x.colleague_endpoint === "Yes").length;
         const countCustomer = colleagueData.length - countEmployee;
         const ctx = document.getElementById("colleagueEndpointChart").getContext("2d");
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
         colleagueChart = new Chart(ctx, {
           type: "bar",
           data: {
@@ -1004,10 +1125,27 @@
             datasets: [{
               label: "Purpose Count",
               data: [countEmployee, countCustomer],
-              backgroundColor: ["#e74c3c", "#2ecc71"]
+              backgroundColor: ["#38bdf8", "#34d399"],
+              hoverBackgroundColor: ["#0ea5e9", "#22c55e"],
+              borderRadius: 10,
+              maxBarThickness: 42
             }]
           },
-          options: { responsive: true, plugins: { title: { display: true, text: "Employee vs Customer Intended Endpoints" }, legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: {
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              }
+            }
+          }
         });
       }
 
@@ -1018,23 +1156,40 @@
         });
         const top5Labels = trimmedLabels.slice(0, 5);
         const top5Data = data.slice(0, 5);
-        const bgColors = ["#3498db", "#1abc9c", "#9b59b6", "#f1c40f", "#e74c3c"];
+        const bgColors = ["#3b82f6", "#22c55e", "#a855f7", "#facc15", "#fb7185"];
         const ctx = document.getElementById("nsChart").getContext("2d");
-        new Chart(ctx, {
+        const tokens = getDesignTokens();
+        const chartText = getChartTextColor(tokens);
+        nsChart = new Chart(ctx, {
           type: "bar",
           data: {
             labels: top5Labels,
             datasets: [{
               label: "Nameserver Summary",
               data: top5Data,
-              backgroundColor: bgColors
+              backgroundColor: bgColors,
+              borderRadius: 12,
+              maxBarThickness: 32
             }]
           },
           options: {
             indexAxis: "y",
             responsive: true,
-            plugins: { title: { display: true, text: "Top 5 Name Servers (Hosting Providers)" }, tooltip: { enabled: true }, legend: { display: false } },
-            scales: { x: { beginAtZero: true } }
+            plugins: {
+              tooltip: { enabled: true },
+              legend: { display: false }
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
+              },
+              y: {
+                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
+                grid: { color: tokens.grid, drawBorder: false, display: false }
+              }
+            }
           }
         });
       }
@@ -1137,7 +1292,6 @@
                 xss: xssFlag,
                 rp: rpFlag,
                 pp: ppFlag,
-                openPortsCount: window.naabuMap && window.naabuMap[domain] ? window.naabuMap[domain].length : 0,
                 openPortsCount: openPortsCount,
                 dbPortsCount: dbPortsCount,
                 managementPortsCount: managementPortsCount,
@@ -1196,6 +1350,7 @@
               const scoreCell = row.getElementsByTagName("td")[0];
               scoreCell.innerText = score;
               scoreCell.title = debug.join("\n");
+              prepareRowCells(row);
               allTableRows.push(row);
             });
           }
@@ -1240,6 +1395,7 @@
               <td>N/A</td>
               <td>N/A</td>
             `;
+            prepareRowCells(row);
             allTableRows.push(row);
           }
         });
@@ -1302,48 +1458,56 @@
 
         };
         const filtered = allTableRows.filter(row => {
-          const cells = row.getElementsByTagName("td");
-          if (filters.priority && !cells[0].innerText.toLowerCase().includes(filters.priority)) return false;
-          if (filters.domain && !cells[1].innerText.toLowerCase().includes(filters.domain)) return false;
-          if (filters.purpose && !cells[2].innerText.toLowerCase().includes(filters.purpose)) return false;
-          if (filters.resolvers && !cells[3].innerText.toLowerCase().includes(filters.resolvers)) return false;
-          if (filters.arecords && !cells[4].innerText.toLowerCase().includes(filters.arecords)) return false;
-          if (filters.ns && !cells[5].innerText.toLowerCase().includes(filters.ns)) return false;
-          if (filters.mx && !cells[6].innerText.toLowerCase().includes(filters.mx)) return false;
-          if (filters.ptr && !cells[7].innerText.toLowerCase().includes(filters.ptr)) return false;
-          if (filters.dnsstatus && !cells[8].innerText.toLowerCase().includes(filters.dnsstatus)) return false;
-          if (filters.cdnname && !cells[9].innerText.toLowerCase().includes(filters.cdnname)) return false;
-          if (filters.cdntype && !cells[10].innerText.toLowerCase().includes(filters.cdntype)) return false;
-          if (filters.port && !cells[11].innerText.toLowerCase().includes(filters.port)) return false;
-          if (filters.url && !cells[12].innerText.toLowerCase().includes(filters.url)) return false;
-          if (filters.screenshot && !cells[13].textContent.toLowerCase().includes(filters.screenshot)) {
-            return false;
+          const cells = Array.from(row.getElementsByTagName("td"));
+          const cellTexts = cells.map(cell => getCellContentText(cell).toLowerCase());
+          if (filters.priority && !(cellTexts[0] || "").includes(filters.priority)) return false;
+          if (filters.domain && !(cellTexts[1] || "").includes(filters.domain)) return false;
+          if (filters.purpose && !(cellTexts[2] || "").includes(filters.purpose)) return false;
+          if (filters.resolvers && !(cellTexts[3] || "").includes(filters.resolvers)) return false;
+          if (filters.arecords && !(cellTexts[4] || "").includes(filters.arecords)) return false;
+          if (filters.ns && !(cellTexts[5] || "").includes(filters.ns)) return false;
+          if (filters.mx && !(cellTexts[6] || "").includes(filters.mx)) return false;
+          if (filters.ptr && !(cellTexts[7] || "").includes(filters.ptr)) return false;
+          if (filters.dnsstatus && !(cellTexts[8] || "").includes(filters.dnsstatus)) return false;
+          if (filters.cdnname && !(cellTexts[9] || "").includes(filters.cdnname)) return false;
+          if (filters.cdntype && !(cellTexts[10] || "").includes(filters.cdntype)) return false;
+          if (filters.port && !(cellTexts[11] || "").includes(filters.port)) return false;
+          if (filters.url && !(cellTexts[12] || "").includes(filters.url)) return false;
+          const screenshotFilter = filters.screenshot;
+          if (screenshotFilter) {
+            const screenshotCell = cells[13];
+            const hasImage = !!(screenshotCell && screenshotCell.querySelector("img"));
+            if (screenshotFilter === "has screenshot" && !hasImage) return false;
+            if (screenshotFilter === "no screenshot" && hasImage) return false;
           }
-          if (filters.location && !cells[14].innerText.toLowerCase().includes(filters.location)) return false;
-          if (filters.title && !cells[15].innerText.toLowerCase().includes(filters.title)) return false;
-          if (filters.webserver && !cells[16].innerText.toLowerCase().includes(filters.webserver)) return false;
-          if (filters.login && !cells[17].innerText.toLowerCase().includes(filters.login)) return false;
-          if (filters.apiEndpoint && !cells[18].innerText.toLowerCase().includes(filters.apiEndpoint)) return false;
-          if (filters.tech && !cells[19].innerText.toLowerCase().includes(filters.tech)) return false;
-          if (filters.statuscode && !cells[20].innerText.toLowerCase().includes(filters.statuscode)) return false;
-          if (filters.contentlength && !cells[21].innerText.toLowerCase().includes(filters.contentlength)) return false;
-          if (filters.cdn && !cells[22].innerText.toLowerCase().includes(filters.cdn)) return false;
-          if (filters.spf && !cells[23].innerText.toLowerCase().includes(filters.spf)) return false;
-          if (filters.dkim && !cells[24].innerText.toLowerCase().includes(filters.dkim)) return false;
-          if (filters.dmarc && !cells[25].innerText.toLowerCase().includes(filters.dmarc)) return false;
-          if (filters.dnssec && !cells[26].innerText.toLowerCase().includes(filters.dnssec)) return false;
-          if (filters.sslversion && !cells[27].innerText.toLowerCase().includes(filters.sslversion)) return false;
-          if (filters.certexpiry && !cells[28].innerText.toLowerCase().includes(filters.certexpiry)) return false;
-          if (filters.sslissuer && !cells[29].innerText.toLowerCase().includes(filters.sslissuer)) return false;
-          if (filters.sts && !cells[30].innerText.toLowerCase().includes(filters.sts)) return false;
-          if (filters.xfo && !cells[31].innerText.toLowerCase().includes(filters.xfo)) return false;
-          if (filters.csp && !cells[32].innerText.toLowerCase().includes(filters.csp)) return false;
-          if (filters.xss && !cells[33].innerText.toLowerCase().includes(filters.xss)) return false;
-          if (filters.rp && !cells[34].innerText.toLowerCase().includes(filters.rp)) return false;
-          if (filters.pp && !cells[35].innerText.toLowerCase().includes(filters.pp)) return false;
-          if (filters.portsservices && !cells[36].innerText.toLowerCase().includes(filters.portsservices)) return false;
-          if (filters.crawledlinks && !cells[37].innerText.toLowerCase().includes(filters.crawledlinks)) return false;
-          if (query && !row.innerText.toLowerCase().includes(query)) return false;
+          if (filters.location && !(cellTexts[14] || "").includes(filters.location)) return false;
+          if (filters.title && !(cellTexts[15] || "").includes(filters.title)) return false;
+          if (filters.webserver && !(cellTexts[16] || "").includes(filters.webserver)) return false;
+          if (filters.login && !(cellTexts[17] || "").includes(filters.login)) return false;
+          if (filters.apiEndpoint && !(cellTexts[18] || "").includes(filters.apiEndpoint)) return false;
+          if (filters.tech && !(cellTexts[19] || "").includes(filters.tech)) return false;
+          if (filters.statuscode && !(cellTexts[20] || "").includes(filters.statuscode)) return false;
+          if (filters.contentlength && !(cellTexts[21] || "").includes(filters.contentlength)) return false;
+          if (filters.cdn && !(cellTexts[22] || "").includes(filters.cdn)) return false;
+          if (filters.spf && !(cellTexts[23] || "").includes(filters.spf)) return false;
+          if (filters.dkim && !(cellTexts[24] || "").includes(filters.dkim)) return false;
+          if (filters.dmarc && !(cellTexts[25] || "").includes(filters.dmarc)) return false;
+          if (filters.dnssec && !(cellTexts[26] || "").includes(filters.dnssec)) return false;
+          if (filters.sslversion && !(cellTexts[27] || "").includes(filters.sslversion)) return false;
+          if (filters.certexpiry && !(cellTexts[28] || "").includes(filters.certexpiry)) return false;
+          if (filters.sslissuer && !(cellTexts[29] || "").includes(filters.sslissuer)) return false;
+          if (filters.sts && !(cellTexts[30] || "").includes(filters.sts)) return false;
+          if (filters.xfo && !(cellTexts[31] || "").includes(filters.xfo)) return false;
+          if (filters.csp && !(cellTexts[32] || "").includes(filters.csp)) return false;
+          if (filters.xss && !(cellTexts[33] || "").includes(filters.xss)) return false;
+          if (filters.rp && !(cellTexts[34] || "").includes(filters.rp)) return false;
+          if (filters.pp && !(cellTexts[35] || "").includes(filters.pp)) return false;
+          if (filters.portsservices && !(cellTexts[36] || "").includes(filters.portsservices)) return false;
+          if (filters.crawledlinks && !(cellTexts[37] || "").includes(filters.crawledlinks)) return false;
+          if (query) {
+            const rowText = cellTexts.join(" ");
+            if (!rowText.includes(query)) return false;
+          }
           return true;
         });
         filtered.sort((a, b) => {
@@ -1364,7 +1528,11 @@
           endIndex = startIndex + rowsPerPage;
         }
         const rowsToShow = filteredRows.slice(startIndex, endIndex);
-        rowsToShow.forEach(row => tBody.appendChild(row));
+        rowsToShow.forEach(row => {
+          prepareRowCells(row);
+          tBody.appendChild(row);
+        });
+        window.requestAnimationFrame(() => updateClampStates(rowsToShow));
         renderPaginationControls(filteredRows.length);
       }
 
@@ -1416,7 +1584,15 @@
         allTableRows.forEach(row => {
           const cells = row.getElementsByTagName("td");
           for (let col = 0; col < 38; col++) {
-            if (cells[col]) uniqueCols[col].add(cells[col].innerText.trim());
+            const cell = cells[col];
+            if (!cell) continue;
+            if (col === 13) {
+              const hasImage = !!cell.querySelector("img");
+              uniqueCols[col].add(hasImage ? "Has screenshot" : "No screenshot");
+            } else {
+              const text = getCellContentText(cell);
+              if (text) uniqueCols[col].add(text);
+            }
           }
         });
         function fillSelectOptions(selectId, values) {
