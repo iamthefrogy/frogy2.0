@@ -136,6 +136,9 @@ USE_NAABU="true"
 USE_HTTPX="true"
 USE_GAU="true"
 
+# Default naabu scan mode; override via NAABU_SCAN_MODE env (auto|syn|connect).
+NAABU_SCAN_MODE="${NAABU_SCAN_MODE:-auto}"
+
 ##############################################
 # Logging Functions (with timestamps)
 ##############################################
@@ -147,6 +150,13 @@ info() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [+] $*"; }
 warning() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [!] $*"; }
 # error: print error messages
 error() { echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] [-] $*${NC}"; }
+
+# Helper: count JSON records in newline-delimited or array form
+json_count() {
+	local file="$1"
+	[[ -s "$file" ]] || { echo 0; return; }
+	jq -s 'if length == 0 then 0 elif length == 1 and (.[0]|type=="array") then (.[0]|length) else length end' "$file" 2>/dev/null || wc -l <"$file"
+}
 
 ##############################################
 # Function: merge_and_count
@@ -341,12 +351,80 @@ run_naabu() {
 			warning "Master subdomains file is empty. Skipping naabu."
 			return
 		fi
-		naabu -silent \
-			-l "$MASTER_SUBS" \
-			-p "7,9,13,21,22,23,25,26,37,53,66,79,80,81,88,106,110,111,113,119,135,139,143,144,179,199,443,457,465,513,514,515,543,544,548,554,587,631,646,7647,8000,8001,8008,8080,8081,8085,8089,8090,873,8880,8888,9000,9080,9100,990,993,995,1024,1025,1026,1027,1028,1029,10443,1080,1100,1110,1241,1352,1433,1434,1521,1720,1723,1755,1900,1944,2000,2001,2049,2121,2301,2717,3000,3128,32768,3306,3389,3986,4000,4001,4002,4100,4567,4899,49152-49157,5000,5001,5009,5051,5060,5101,5190,5357,5432,5631,5666,5800,5801,5802,5900,5985,6000,6001,6346,6347,6646,7001,7002,7070,7170,7777,8800,9999,10000,20000,30821" \
-			-o "$RUN_DIR/naabu.json" \
-			-j \
-			>/dev/null 2>&1 || true
+		local -a naabu_base_args=(
+			-silent
+			-l "$MASTER_SUBS"
+			-p "7,9,13,21,22,23,25,26,37,53,66,79,80,81,88,106,110,111,113,119,135,139,143,144,179,199,443,457,465,513,514,515,543,544,548,554,587,631,646,7647,8000,8001,8008,8080,8081,8085,8089,8090,873,8880,8888,9000,9080,9100,990,993,995,1024,1025,1026,1027,1028,1029,10443,1080,1100,1110,1241,1352,1433,1434,1521,1720,1723,1755,1900,1944,2000,2001,2049,2121,2301,2717,3000,3128,32768,3306,3389,3986,4000,4001,4002,4100,4567,4899,49152-49157,5000,5001,5009,5051,5060,5101,5190,5357,5432,5631,5666,5800,5801,5802,5900,5985,6000,6001,6346,6347,6646,7001,7002,7070,7170,7777,8800,9999,10000,20000,30821"
+			-o "$RUN_DIR/naabu.json"
+			-json
+		)
+
+		run_naabu_pass() {
+			rm -f "$RUN_DIR/naabu.json"
+			naabu "${naabu_base_args[@]}" "$@" >/dev/null || true
+		}
+
+		local min_expected=$((DNSX_LIVE_COUNT / 2))
+		((min_expected < 10)) && min_expected=10
+
+		local scan_mode="${NAABU_SCAN_MODE,,}"
+		case "$scan_mode" in
+		connect)
+			info "Running naabu in TCP connect mode (-sC -Pn)."
+			run_naabu_pass -sC -Pn
+			info "Naabu connect scan produced $(json_count "$RUN_DIR/naabu.json") results."
+			;;
+		syn)
+			run_naabu_pass
+			info "Naabu SYN scan produced $(json_count "$RUN_DIR/naabu.json") results."
+			;;
+		auto | "")
+			run_naabu_pass
+			local syn_hits
+			syn_hits=$(json_count "$RUN_DIR/naabu.json")
+			if ((syn_hits < min_expected)); then
+				local syn_file="$RUN_DIR/naabu_syn.json"
+				if [[ -f "$RUN_DIR/naabu.json" ]]; then
+					mv "$RUN_DIR/naabu.json" "$syn_file"
+				else
+					: >"$syn_file"
+				fi
+				info "Naabu SYN scan returned ${syn_hits} results (< ${min_expected}); retrying with TCP connect mode."
+				run_naabu_pass -sC -Pn
+				local connect_hits
+				connect_hits=$(json_count "$RUN_DIR/naabu.json")
+				if ((connect_hits < min_expected)); then
+					info "Naabu connect scan produced ${connect_hits} results (< ${min_expected}); retrying with slower TCP connect mode."
+					run_naabu_pass -sC -Pn -rate 50 -c 25 -timeout 2000
+					connect_hits=$(json_count "$RUN_DIR/naabu.json")
+				fi
+				info "Naabu connect scan produced ${connect_hits} results."
+				if [[ -s "$syn_file" ]]; then
+					if [[ -s "$RUN_DIR/naabu.json" ]]; then echo >>"$RUN_DIR/naabu.json"; fi
+					cat "$syn_file" >>"$RUN_DIR/naabu.json"
+				else
+					# If connect yielded nothing, restore SYN results.
+					if [[ ! -s "$RUN_DIR/naabu.json" && -f "$syn_file" ]]; then
+						mv "$syn_file" "$RUN_DIR/naabu.json"
+					fi
+				fi
+				rm -f "$syn_file"
+			else
+				info "Naabu SYN scan produced ${syn_hits} results."
+			fi
+			;;
+		*)
+			warning "Unknown NAABU_SCAN_MODE='${NAABU_SCAN_MODE}'. Falling back to adaptive mode."
+			run_naabu_pass
+			;;
+		esac
+
+		local total_hits
+		total_hits=$(json_count "$RUN_DIR/naabu.json")
+		if ((total_hits < min_expected)); then
+			warning "Naabu combined results (${total_hits}) remain below expected threshold ${min_expected}. Results may be incomplete (try NAABU_SCAN_MODE=connect or running outside Docker)."
+		fi
+
 		# Process naabu JSON to extract unique host:port pairs
 		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 		if [[ -s "$RUN_DIR/naabu.json" ]]; then
@@ -370,7 +448,7 @@ run_httpx() {
 		# If naabu found no open ports, there's nothing for httpx to do.
 		if [ ! -s "$final_urls_ports" ]; then
 			warning "Input file for httpx is empty. Skipping."
-			echo "[]" >"$httpx_json_file"
+			>"$httpx_json_file"
 			HTTPX_LIVE_COUNT=0
 			return
 		fi
@@ -381,9 +459,9 @@ run_httpx() {
 			-timeout 15 \
 			-retries 2 \
 			-l "$final_urls_ports" \
-			-j \
+			-json \
 			-o "$RUN_DIR/httpx.json" \
-			>/dev/null 2>&1 || true
+			>/dev/null || true
 
 		# Ensure the JSON file exists even if httpx produced nothing.
 		if [[ ! -f "$httpx_json_file" ]]; then
@@ -412,7 +490,7 @@ run_httpx() {
 		  -retries 2 \
 			-l "$final_urls_ports" \
 			-ss \
-			>/dev/null 2>&1 || true
+			>/dev/null || true
 
 		# --- DYNAMIC BLOCK DETECTION LOGIC ---
 		local naabu_target_count
@@ -490,7 +568,7 @@ run_katana() {
 	fi
 
 	local seeds="$RUN_DIR/katana_seeds.txt"
-	jq -r '.url' "$httpx_file" | sort -u >"$seeds"
+	jq -r 'if type=="array" then (.[] | .url) else .url end' "$httpx_file" | sort -u >"$seeds"
 
 	echo "{" >"$output_file"
 	local first=true
@@ -1080,6 +1158,9 @@ build_html_report() {
     r '"$RUN_DIR/screenshot_map.json"'
     d
   }' report.html && rm -f report.html.bak
+
+	mkdir -p "$RUN_DIR/assets"
+	cp assets/report.css "$RUN_DIR/assets/report.css"
 
 	mv report.html $RUN_DIR/
 
