@@ -19,12 +19,12 @@
     <header class="header">
       <div class="header__content">
         <div class="header__titles">
-          <p class="header__eyebrow">Reconnaissance Intelligence Report</p>
-          <h1>External Attack Surface Analysis</h1>
-          <p class="header__subtitle">Consolidated intelligence across discovered assets, live exposure points, and defensive posture.</p>
+          <h1>External Attack Surface Intelligence Report</h1>
+          <p class="header__subtitle">Unified visibility across internet-exposed assets, live services, and defensive readiness indicators.</p>
         </div>
         <div class="header__actions">
-          <button id="exportCsvButton" class="btn btn--primary">Export CSV</button>
+          <button id="themeToggleButton" class="btn btn--ghost theme-toggle" type="button" aria-pressed="false" title="Switch to dark theme">Dark theme</button>
+          <button id="exportCsvButton" class="btn btn--primary" type="button">Export CSV</button>
         </div>
       </div>
     </header>
@@ -212,6 +212,11 @@
       };
       Chart.register(barLabelPlugin);
 
+      const THEME_STORAGE_KEY = "report-theme-preference";
+      const themeToggleButton = document.getElementById("themeToggleButton");
+      setTheme(readStoredTheme() || "light", false);
+      configureThemeToggle();
+
       function getDesignTokens() {
         const styles = getComputedStyle(document.body);
         const readToken = (token, fallback) => {
@@ -230,6 +235,28 @@
 
       function getChartTextColor(tokens) {
         return tokens.text;
+      }
+
+      function setTheme(theme, persist = true) {
+        const normalized = theme === "dark" ? "dark" : "light";
+        document.body.dataset.theme = normalized;
+        if (themeToggleButton) {
+          themeToggleButton.textContent = normalized === "dark" ? "Light theme" : "Dark theme";
+          themeToggleButton.setAttribute("aria-pressed", normalized === "dark" ? "true" : "false");
+          themeToggleButton.title = normalized === "dark" ? "Switch to light theme" : "Switch to dark theme";
+        }
+        if (persist) {
+          storeTheme(normalized);
+        }
+      }
+
+      function configureThemeToggle() {
+        if (!themeToggleButton) return;
+        themeToggleButton.addEventListener("click", () => {
+          const nextTheme = document.body.dataset.theme === "dark" ? "light" : "dark";
+          setTheme(nextTheme);
+          refreshThemeTokens();
+        });
       }
 
       function applyChartDefaults() {
@@ -260,6 +287,82 @@
       }
 
       applyChartDefaults();
+
+      function refreshThemeTokens() {
+        const tokens = applyChartDefaults();
+        [
+          priorityChart,
+          domainCountChart,
+          statusCodeChart,
+          loginChart,
+          portChart,
+          techChart,
+          certExpiryChart,
+          tlsUsageChart,
+          headersChart,
+          emailSecChart,
+          cdnChart,
+          serviceChart,
+          colleagueChart,
+          cdnTypeChart,
+          cdnStackedChart,
+          nsChart
+        ].filter(Boolean).forEach(chart => updateChartAppearance(chart, tokens));
+      }
+
+      function updateChartAppearance(chart, tokens) {
+        if (!chart || !chart.options) return;
+        const { options } = chart;
+        if (options.scales) {
+          Object.values(options.scales).forEach(scale => {
+            if (!scale) return;
+            if (scale.ticks) {
+              const currentFont = scale.ticks.font || {};
+              scale.ticks.color = tokens.text;
+              scale.ticks.font = Object.assign({}, currentFont, {
+                family: tokens.fontFamily,
+                weight: currentFont.weight || "500"
+              });
+            }
+            if (scale.grid) {
+              scale.grid.color = tokens.grid;
+            }
+          });
+        }
+        if (options.plugins?.legend?.labels) {
+          const legendFont = options.plugins.legend.labels.font || {};
+          options.plugins.legend.labels.color = tokens.text;
+          options.plugins.legend.labels.font = Object.assign({}, legendFont, {
+            family: tokens.fontFamily,
+            weight: legendFont.weight || "500"
+          });
+        }
+        if (options.plugins?.tooltip) {
+          options.plugins.tooltip.titleColor = tokens.text;
+          options.plugins.tooltip.bodyColor = tokens.text;
+          if (options.plugins.tooltip.titleFont) {
+            options.plugins.tooltip.titleFont.family = tokens.fontFamily;
+          }
+          if (options.plugins.tooltip.bodyFont) {
+            options.plugins.tooltip.bodyFont.family = tokens.fontFamily;
+          }
+        }
+        chart.update("none");
+      }
+
+      function storeTheme(value) {
+        try {
+          localStorage.setItem(THEME_STORAGE_KEY, value);
+        } catch {}
+      }
+
+      function readStoredTheme() {
+        try {
+          return localStorage.getItem(THEME_STORAGE_KEY);
+        } catch {
+          return null;
+        }
+      }
 
       // Global variables for charts and table data.
       let priorityChart, domainCountChart, statusCodeChart, loginChart, portChart, techChart, certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart, cdnTypeChart, cdnStackedChart, nsChart;
@@ -381,7 +484,7 @@
         });
       }
 
-      // Theme support removed; charts render with default styling.
+      // Theme-aware rendering relies on the active CSS custom properties.
 
       // Utility function
       function formatCell(arr) {
