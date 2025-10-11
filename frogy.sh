@@ -364,66 +364,23 @@ run_naabu() {
 			naabu "${naabu_base_args[@]}" "$@" >/dev/null || true
 		}
 
-		local min_expected=$((DNSX_LIVE_COUNT / 2))
-		((min_expected < 10)) && min_expected=10
-
 		local scan_mode="${NAABU_SCAN_MODE,,}"
 		case "$scan_mode" in
 		connect)
 			info "Running naabu in TCP connect mode (-sC -Pn)."
 			run_naabu_pass -sC -Pn
-			info "Naabu connect scan produced $(json_count "$RUN_DIR/naabu.json") results."
 			;;
-		syn)
+		syn | auto | "")
 			run_naabu_pass
-			info "Naabu SYN scan produced $(json_count "$RUN_DIR/naabu.json") results."
-			;;
-		auto | "")
-			run_naabu_pass
-			local syn_hits
-			syn_hits=$(json_count "$RUN_DIR/naabu.json")
-			if ((syn_hits < min_expected)); then
-				local syn_file="$RUN_DIR/naabu_syn.json"
-				if [[ -f "$RUN_DIR/naabu.json" ]]; then
-					mv "$RUN_DIR/naabu.json" "$syn_file"
-				else
-					: >"$syn_file"
-				fi
-				info "Naabu SYN scan returned ${syn_hits} results (< ${min_expected}); retrying with TCP connect mode."
-				run_naabu_pass -sC -Pn
-				local connect_hits
-				connect_hits=$(json_count "$RUN_DIR/naabu.json")
-				if ((connect_hits < min_expected)); then
-					info "Naabu connect scan produced ${connect_hits} results (< ${min_expected}); retrying with slower TCP connect mode."
-					run_naabu_pass -sC -Pn -rate 50 -c 25 -timeout 2000
-					connect_hits=$(json_count "$RUN_DIR/naabu.json")
-				fi
-				info "Naabu connect scan produced ${connect_hits} results."
-				if [[ -s "$syn_file" ]]; then
-					if [[ -s "$RUN_DIR/naabu.json" ]]; then echo >>"$RUN_DIR/naabu.json"; fi
-					cat "$syn_file" >>"$RUN_DIR/naabu.json"
-				else
-					# If connect yielded nothing, restore SYN results.
-					if [[ ! -s "$RUN_DIR/naabu.json" && -f "$syn_file" ]]; then
-						mv "$syn_file" "$RUN_DIR/naabu.json"
-					fi
-				fi
-				rm -f "$syn_file"
-			else
-				info "Naabu SYN scan produced ${syn_hits} results."
-			fi
 			;;
 		*)
-			warning "Unknown NAABU_SCAN_MODE='${NAABU_SCAN_MODE}'. Falling back to adaptive mode."
+			warning "Unknown NAABU_SCAN_MODE='${NAABU_SCAN_MODE}'. Defaulting to SYN scan."
 			run_naabu_pass
 			;;
 		esac
 
 		local total_hits
 		total_hits=$(json_count "$RUN_DIR/naabu.json")
-		if ((total_hits < min_expected)); then
-			warning "Naabu combined results (${total_hits}) remain below expected threshold ${min_expected}. Results may be incomplete (try NAABU_SCAN_MODE=connect or running outside Docker)."
-		fi
 
 		# Process naabu JSON to extract unique host:port pairs
 		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
