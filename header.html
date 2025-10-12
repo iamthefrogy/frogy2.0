@@ -9,6 +9,234 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="assets/report.css" />
+    <style>
+      .summary-card {
+        background: var(--color-surface);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--color-border);
+        padding: 24px 26px;
+        box-shadow: var(--shadow-soft);
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .summary-card__header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .summary-card__header h2 {
+        margin: 0;
+        font-size: clamp(20px, 2.2vw, 24px);
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .summary-card__timestamp {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+      }
+      .summary-card__headline {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 12px;
+      }
+      .summary-card__risk-label {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+      }
+      .summary-card__risk-score {
+        font-size: clamp(30px, 4vw, 30px);
+        font-weight: 700;
+        color: var(--color-danger);
+      }
+      .summary-card__risk-asset {
+        font-size: clamp(16px, 2.1vw, 20px);
+        font-weight: 600;
+        color: var(--color-text);
+      }
+      .summary-card__pipeline {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--color-text-muted);
+      }
+      .summary-card__actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0;
+      }
+      .summary-card__actions span {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+      }
+      .summary-card__actions ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+      }
+      .summary-card__meta {
+        margin: 0;
+        font-size: 12px;
+        color: var(--color-text-muted);
+      }
+      .score-card__label {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+      }
+      .score-card__meta {
+        margin: 0;
+        font-size: 12px;
+        color: var(--color-text-muted);
+      }
+      .score-card__context {
+        margin: 0;
+        font-size: 12px;
+        color: var(--color-text-muted);
+        opacity: 0.85;
+      }
+      .scoreboard__section {
+        display: flex;
+        flex-direction: column;
+      }
+      .scoreboard__section-title {
+        margin: 15;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+      }
+      .scoreboard__grid--kpis {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      }
+      @media (min-width: 1200px) {
+        .scoreboard__grid--kpis {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+      .score-card--danger h2 {
+        color: var(--color-danger);
+      }
+      .score-card--warning h2 {
+        color: #f59e0b;
+      }
+      .score-card--success h2 {
+        color: var(--color-accent);
+      }
+      .score-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+        background: #3b82f6;
+        min-width: 44px;
+      }
+      .score-badge--moderate {
+        background: #3b82f6;
+      }
+      .score-badge--high {
+        background: #f97316;
+      }
+
+      .score-badge--low {
+        background: #10b981;
+      }
+      .chip-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        background: var(--color-surface-muted);
+        color: var(--color-text);
+        border: 1px solid var(--color-border);
+        white-space: nowrap;
+      }
+      .chip small {
+        font-size: 10px;
+        font-weight: 700;
+        opacity: 0.7;
+      }
+      .chip--danger {
+        background: rgba(239, 68, 68, 0.14);
+        color: #b91c1c;
+        border-color: rgba(239, 68, 68, 0.35);
+      }
+      .chip--warning {
+        background: rgba(249, 115, 22, 0.16);
+        color: #c2410c;
+        border-color: rgba(249, 115, 22, 0.35);
+      }
+      .chip--info {
+        background: rgba(59, 130, 246, 0.16);
+        color: #1d4ed8;
+        border-color: rgba(59, 130, 246, 0.32);
+      }
+      .table-top-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+        padding: 8px 0;
+      }
+      .table-top-controls input[type="text"] {
+        min-width: 420px;
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--color-border);
+        font-size: 14px;
+        color: var(--color-text);
+        background: var(--color-surface-muted);
+      }
+      .table-top-controls input[type="text"]:focus {
+        outline: none;
+        background: var(--color-surface);
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px var(--color-primary-soft);
+      }
+      .table-top-controls .hint {
+        flex: 1 1 260px;
+        min-width: 500px;
+        text-align: left;
+      }
+      .table-top-controls .table-controls {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+    </style>
     <script>
       const screenshotMap =
       %%SCREENSHOT_MAP%%
@@ -33,20 +261,14 @@
       <section class="scoreboard" id="scoreboard"></section>
 
       <section class="charts-grid">
-        <div class="chart-container"><h3>Asset Overview</h3><canvas id="priorityChart"></canvas></div>
-        <div class="chart-container"><h3>Domains by Status</h3><canvas id="domainCountChart"></canvas></div>
-        <div class="chart-container"><h3>Internal vs External Footprint</h3><canvas id="colleagueEndpointChart"></canvas></div>
-        <div class="chart-container"><h3>Login Surface</h3><canvas id="loginBarChart"></canvas></div>
-        <div class="chart-container"><h3>HTTP Status Codes</h3><canvas id="statusCodeChart"></canvas></div>
-        <div class="chart-container"><h3>Top Ports</h3><canvas id="portChart"></canvas></div>
-        <div class="chart-container"><h3>Service Exposure</h3><canvas id="serviceChart"></canvas></div>
-        <div class="chart-container"><h3>Technology Stack</h3><canvas id="techChart"></canvas></div>
-        <div class="chart-container"><h3>TLS Adoption</h3><canvas id="tlsUsageChart"></canvas></div>
-        <div class="chart-container"><h3>Certificate Expiry</h3><canvas id="certExpiryChart"></canvas></div>
-        <div class="chart-container"><h3>Security Headers</h3><canvas id="headersChart"></canvas></div>
-        <div class="chart-container"><h3>Email Security</h3><canvas id="emailSecChart"></canvas></div>
-        <div class="chart-container"><h3>CDN Distribution</h3><canvas id="cdnStackedChart"></canvas></div>
-        <div class="chart-container"><h3>Nameserver Footprint</h3><canvas id="nsChart"></canvas></div>
+        <div class="chart-container"><h3>Discovery Summary</h3><canvas id="funnelChart"></canvas></div>
+        <div class="chart-container"><h3>Risk Leaderboard</h3><canvas id="riskLeaderboardChart"></canvas></div>
+        <div class="chart-container"><h3>DNS Health</h3><canvas id="dnsHealthChart"></canvas></div>
+        <div class="chart-container"><h3>Endpoint vs Login Exposure</h3><canvas id="tlsLoginChart"></canvas></div>
+        <div class="chart-container"><h3>HTTP Status Distribution</h3><canvas id="statusCodeChart"></canvas></div>
+        <div class="chart-container"><h3>Security Header Coverage</h3><canvas id="headerCoverageChart"></canvas></div>
+        <div class="chart-container"><h3>Email Authentication</h3><canvas id="emailCoverageChart"></canvas></div>
+        <div class="chart-container"><h3>Top 10 Technologies Observed</h3><canvas id="techChart"></canvas></div>
       </section>
 
       <section class="table-top-controls">
@@ -212,6 +434,14 @@
       };
       Chart.register(barLabelPlugin);
 
+      const DATABASE_PORTS = new Set([1433, 1434, 1521, 1522, 2483, 2484, 2638, 3050, 3306, 3389, 5432, 5984, 6379, 7000, 7199, 7474, 7687, 9042, 9160, 27017, 27018, 27019, 28015]);
+      const MANAGEMENT_PORTS = new Set([8000, 8008, 8080, 8081, 8083, 8089, 8090, 8443, 8880, 8888, 9000, 9090, 9091, 9092, 9100, 9990, 10000, 10080, 10443, 11211, 15672, 3000, 5000, 54321, 7001, 7002, 7070, 8181, 8800, 9200, 9443, 22, 23, 2222, 2323, 3389, 5900, 5800, 4899, 5631, 5666, 5985, 5986, 8291, 1723, 1194, 992, 6513, 5801, 5802, 5803, 5804, 5805, 5806, 5807, 5809]);
+      const WEB_PORTS = new Set([80, 443, 8000, 8008, 8080, 8081, 8083, 8089, 8090, 8443, 8880, 8888, 9200, 9443]);
+      const EMAIL_TRANSPORT_PORTS = new Set([25, 26, 465, 587]);
+      const EMAIL_ACCESS_PORTS = new Set([110, 143, 993, 995]);
+      const DNS_PORTS = new Set([53]);
+      const FTP_PORTS = new Set([20, 21]);
+
       const THEME_STORAGE_KEY = "report-theme-preference";
       const themeToggleButton = document.getElementById("themeToggleButton");
       setTheme(readStoredTheme() || "light", false);
@@ -235,6 +465,18 @@
 
       function getChartTextColor(tokens) {
         return tokens.text;
+      }
+      function getTooltipTheme(tokens) {
+        const isDark = (document.body.dataset.theme || "light") === "dark";
+        return {
+          backgroundColor: isDark ? "rgba(15, 23, 42, 0.92)" : "#f8fafc",
+          titleColor: tokens.text,
+          bodyColor: tokens.text,
+          borderColor: isDark ? "rgba(148, 163, 184, 0.32)" : "rgba(15, 23, 42, 0.18)",
+          borderWidth: 1,
+          displayColors: false,
+          padding: 10
+        };
       }
 
       function setTheme(theme, persist = true) {
@@ -291,22 +533,14 @@
       function refreshThemeTokens() {
         const tokens = applyChartDefaults();
         [
-          priorityChart,
-          domainCountChart,
+          funnelChart,
+          riskLeaderboardChart,
+          dnsHealthChart,
+          tlsLoginChart,
           statusCodeChart,
-          loginChart,
-          portChart,
-          techChart,
-          certExpiryChart,
-          tlsUsageChart,
-          headersChart,
-          emailSecChart,
-          cdnChart,
-          serviceChart,
-          colleagueChart,
-          cdnTypeChart,
-          cdnStackedChart,
-          nsChart
+          headerCoverageChart,
+          emailCoverageChart,
+          techChart
         ].filter(Boolean).forEach(chart => updateChartAppearance(chart, tokens));
       }
 
@@ -338,14 +572,8 @@
           });
         }
         if (options.plugins?.tooltip) {
-          options.plugins.tooltip.titleColor = tokens.text;
-          options.plugins.tooltip.bodyColor = tokens.text;
-          if (options.plugins.tooltip.titleFont) {
-            options.plugins.tooltip.titleFont.family = tokens.fontFamily;
-          }
-          if (options.plugins.tooltip.bodyFont) {
-            options.plugins.tooltip.bodyFont.family = tokens.fontFamily;
-          }
+          const tooltipTheme = getTooltipTheme(tokens);
+          options.plugins.tooltip = Object.assign({}, options.plugins.tooltip, tooltipTheme);
         }
         chart.update("none");
       }
@@ -365,7 +593,7 @@
       }
 
       // Global variables for charts and table data.
-      let priorityChart, domainCountChart, statusCodeChart, loginChart, portChart, techChart, certExpiryChart, tlsUsageChart, headersChart, emailSecChart, cdnChart, serviceChart, colleagueChart, cdnTypeChart, cdnStackedChart, nsChart;
+      let funnelChart, riskLeaderboardChart, dnsHealthChart, tlsLoginChart, statusCodeChart, headerCoverageChart, emailCoverageChart, techChart;
       let allTableRows = [];
       let currentPage = 1;
       let rowsPerPage = 20;
@@ -373,6 +601,7 @@
       let minRiskScore = Infinity;
       let maxRiskScore = -Infinity;
       let riskSortOrder = "desc";
+      let riskEntries = [];
 
       // CSV Export Functions
       function downloadCSV(csv, filename) {
@@ -583,719 +812,870 @@
       }
 
       function getDynamicColor(score, minScore, maxScore) {
-        if (maxScore === minScore) return "rgb(46, 204, 113)";
-        const fraction = (score - minScore) / (maxScore - minScore);
+        if (!Number.isFinite(score)) return "rgb(59, 130, 246)";
+        if (maxScore === minScore) return "rgb(59, 130, 246)";
+        const fraction = Math.max(0, Math.min(1, (score - minScore) / (maxScore - minScore)));
         const start = { r: 46, g: 204, b: 113 };
-        const end   = { r: 231, g: 76, b: 60 };
-        const r = Math.round(start.r + fraction * (end.r - start.r));
-        const g = Math.round(start.g + fraction * (end.g - start.g));
-        const b = Math.round(start.b + fraction * (end.b - start.b));
+        const mid = { r: 249, g: 115, b: 22 };
+        const end   = { r: 239, g: 68, b: 68 };
+        const pivot = 0.6;
+        let from, to, localFraction;
+        if (fraction <= pivot) {
+          from = start;
+          to = mid;
+          localFraction = fraction / pivot;
+        } else {
+          from = mid;
+          to = end;
+          localFraction = (fraction - pivot) / (1 - pivot);
+        }
+        const r = Math.round(from.r + localFraction * (to.r - from.r));
+        const g = Math.round(from.g + localFraction * (to.g - from.g));
+        const b = Math.round(from.b + localFraction * (to.b - from.b));
         return `rgb(${r}, ${g}, ${b})`;
       }
 
-      function buildScoreboard({ totalSubdomains, liveSubs, totalHttpx, loginFoundCount }) {
+      const ESCAPE_HTML_REGEX = /[&<>"']/g;
+      const ESCAPE_HTML_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+      function escapeHtml(value) {
+        if (value === undefined || value === null) return "";
+        return String(value).replace(ESCAPE_HTML_REGEX, ch => ESCAPE_HTML_MAP[ch] || ch);
+      }
+
+      const FOOTPRINT_BUCKETS = [
+        { max: 10, label: "Minimal" },
+        { max: 50, label: "Lean" },
+        { max: 150, label: "Growing" },
+        { max: 400, label: "Large" },
+        { max: Infinity, label: "Expansive" }
+      ];
+
+      function formatNumber(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) return "0";
+        return num.toLocaleString();
+      }
+
+      function pluralize(value, singular, plural) {
+        return `${formatNumber(value)} ${value === 1 ? singular : (plural || `${singular}s`)}`;
+      }
+
+      function describeFootprint(pipeline) {
+        const discovered = Number(pipeline?.discovered) || 0;
+        const endpoints = Number(pipeline?.endpoints) || 0;
+        const bucket = FOOTPRINT_BUCKETS.find(entry => discovered <= entry.max) || FOOTPRINT_BUCKETS[FOOTPRINT_BUCKETS.length - 1];
+        const descriptorParts = [];
+        if (discovered > 0) descriptorParts.push(pluralize(discovered, "domain"));
+        if (endpoints > 0) descriptorParts.push(pluralize(endpoints, "endpoint"));
+        if (!descriptorParts.length) descriptorParts.push("no observable assets");
+        return {
+          label: bucket.label,
+          descriptor: descriptorParts.join(", ")
+        };
+      }
+
+      function assessRiskPosture(summary) {
+        if (!summary) {
+          return { posture: "Low", reason: "" };
+        }
+        const reasons = [];
+        let severity = 0;
+
+        const riskScore = Number(summary.topRiskScore) || 0;
+        if (riskScore >= 60) {
+          severity += 4;
+          reasons.push("top endpoints scoring 60+ risk");
+        } else if (riskScore >= 40) {
+          severity += 3;
+          reasons.push("elevated endpoint risk scores");
+        } else if (riskScore >= 25) {
+          severity += 2;
+          reasons.push("moderate endpoint risk");
+        }
+
+        const httpLogins = Number(summary?.httpLogin?.count) || 0;
+        if (httpLogins > 0) {
+          severity += httpLogins >= 5 ? 3 : 2;
+          reasons.push(`${httpLogins} HTTP login surface${httpLogins === 1 ? "" : "s"}`);
+        }
+
+        const managementPorts = Number(summary.managementPortCount) || 0;
+        if (managementPorts > 0) {
+          severity += managementPorts > 5 ? 3 : 2;
+          reasons.push(`${managementPorts} administrative service${managementPorts === 1 ? "" : "s"} exposed externally`);
+        }
+
+        const databasePorts = Number(summary.databasePortCount) || 0;
+        if (databasePorts > 0) {
+          severity += databasePorts > 2 ? 3 : 2;
+          reasons.push(`${databasePorts} internet-facing database port${databasePorts === 1 ? "" : "s"}`);
+        }
+
+        const openPorts = Number(summary.totalOpenPorts) || 0;
+        if (openPorts > 20) {
+          severity += 2;
+          reasons.push("high volume of open services");
+        } else if (openPorts > 0) {
+          severity += 1;
+          reasons.push("multiple open services detected");
+        }
+
+        const missingDmarc = Number(summary.missingDmarc) || 0;
+        if (missingDmarc > 0) {
+          severity += missingDmarc > 3 ? 2 : 1;
+          reasons.push(`email auth gaps on ${missingDmarc} domain${missingDmarc === 1 ? "" : "s"}`);
+        }
+
+        const dnsCoverage = Number(summary.dnsCoverage) || 0;
+        if (dnsCoverage > 0 && dnsCoverage < 50) {
+          severity += 1;
+          reasons.push("large portion of discovered domains non-resolving");
+        }
+
+        const totalLoginSurfaces = Number(summary.totalLoginSurfaces) || 0;
+        if (httpLogins === 0 && totalLoginSurfaces > 0) severity = Math.max(0, severity - 1);
+
+        const emailTotal = Number(summary?.emailCoverage?.total) || 0;
+        if (emailTotal && summary.emailCoverage?.dmarcCovered === emailTotal) severity = Math.max(0, severity - 1);
+
+        if (openPorts === 0) severity = Math.max(0, severity - 1);
+
+        let posture = "Low";
+        if (severity >= 7) posture = "Critical";
+        else if (severity >= 4) posture = "Elevated";
+        else if (severity >= 2) posture = "Watch";
+
+        return {
+          posture,
+          reason: reasons.slice(0, 2).join("; ")
+        };
+      }
+
+      function buildKeyDrivers(summary, topRisk) {
+        const candidates = [];
+        const pushDriver = (condition, text, weight) => {
+          if (!condition || !text) return;
+          candidates.push({ text, weight });
+        };
+
+        const riskLabel = topRisk?.label || summary?.topRiskLabel;
+        const riskScore = Number(topRisk?.score ?? summary?.topRiskScore);
+        if (riskLabel) {
+          const suffix = Number.isFinite(riskScore) && riskScore > 0 ? ` (score ${riskScore})` : "";
+          pushDriver(true, `Risk hotspot: ${riskLabel}${suffix}`, 80);
+        }
+
+        const httpLogins = Number(summary?.httpLogin?.count) || 0;
+        pushDriver(httpLogins > 0, `${httpLogins} login flow${httpLogins === 1 ? "" : "s"} still run over HTTP`, 90);
+        const totalLoginSurfaces = Number(summary?.totalLoginSurfaces) || 0;
+        if (httpLogins === 0 && totalLoginSurfaces > 0) {
+          pushDriver(true, "All login surfaces enforce HTTPS", 30);
+        }
+
+        const managementPorts = Number(summary?.managementPortCount) || 0;
+        pushDriver(managementPorts > 0, `${managementPorts} administrative service${managementPorts === 1 ? "" : "s"} exposed externally`, 85);
+
+        const databasePorts = Number(summary?.databasePortCount) || 0;
+        pushDriver(databasePorts > 0, `${databasePorts} database port${databasePorts === 1 ? "" : "s"} reachable from the internet`, 75);
+
+        const openPorts = Number(summary?.totalOpenPorts) || 0;
+        pushDriver(openPorts > 0 && managementPorts + databasePorts === 0, `${openPorts} miscellaneous services exposed`, 55);
+        pushDriver(openPorts === 0, "No unexpected services detected beyond core web stack", 25);
+
+        const nxdomain = Number(summary?.nxdomainCount) || 0;
+        pushDriver(nxdomain > 0, `${nxdomain} dormant NXDOMAIN host${nxdomain === 1 ? "" : "s"} still referenced`, 45);
+
+        const emailTotal = Number(summary?.emailCoverage?.total) || 0;
+        const dmarcCovered = Number(summary?.emailCoverage?.dmarcCovered) || 0;
+        const missingDmarc = Math.max(emailTotal - dmarcCovered, 0);
+        if (missingDmarc > 0) {
+          pushDriver(true, `Email auth missing on ${missingDmarc} of ${emailTotal} domains`, 70);
+        } else if (emailTotal) {
+          pushDriver(true, `DMARC enforced across all ${emailTotal} monitored domains`, 35);
+        }
+
+        const dnsCoverage = Number(summary?.dnsCoverage) || 0;
+        const discovered = Number(summary?.pipeline?.discovered) || 0;
+        if (discovered > 0) {
+          pushDriver(dnsCoverage < 60, `Only ${dnsCoverage}% of discovered domains still resolve`, 40);
+          pushDriver(dnsCoverage >= 90, `${dnsCoverage}% of discovered domains resolve cleanly`, 25);
+        }
+
+        const employeeAssets = Number(summary?.employeeAssetCount) || 0;
+        pushDriver(employeeAssets > 0, `${employeeAssets} employee-facing asset${employeeAssets === 1 ? "" : "s"} surfaced`, 35);
+
+        const katanaTotal = Number(summary?.katanaTotal) || 0;
+        pushDriver(katanaTotal > 1500, `${katanaTotal.toLocaleString()} crawlable URLs uncovered`, 30);
+
+        const headerBaseline = Number(summary?.headerBaseline) || 0;
+        if (headerBaseline > 0 && summary?.headerCoverage) {
+          const hstsPresent = summary.headerCoverage["HSTS"]?.present ?? summary.headerCoverage["Strict-Transport-Security"]?.present;
+          if (Number(hstsPresent) === headerBaseline) {
+            pushDriver(true, "HSTS present across observed domains", 20);
+          }
+        }
+
+        const seen = new Set();
+        return candidates
+          .sort((a, b) => b.weight - a.weight)
+          .map(item => item.text)
+          .filter(text => {
+            if (!text || seen.has(text)) return false;
+            seen.add(text);
+            return true;
+          })
+          .slice(0, 3);
+      }
+
+      function buildNarrative(summary, posture, footprint) {
+        if (!summary) return "";
+        const sentences = [];
+        const footprintSnippet = footprint?.descriptor
+          ? `${footprint.label} footprint (${footprint.descriptor})`
+          : `${footprint?.label || "Minimal"} footprint`;
+        sentences.push(`${footprintSnippet.charAt(0).toUpperCase()}${footprintSnippet.slice(1)}.`);
+
+        if (posture?.posture) {
+          const reason = posture.reason ? ` because ${posture.reason}` : "";
+          sentences.push(`Overall posture is ${posture.posture}${reason}.`);
+        }
+
+        const positives = [];
+        const httpLogins = Number(summary?.httpLogin?.count) || 0;
+        const totalLogins = Number(summary?.totalLoginSurfaces) || 0;
+        if (httpLogins === 0 && totalLogins > 0) positives.push("All login flows enforce HTTPS.");
+
+        const emailTotal = Number(summary?.emailCoverage?.total) || 0;
+        if (emailTotal && summary.emailCoverage?.dmarcCovered === emailTotal) positives.push("DMARC is enforced across every monitored domain.");
+
+        if (Number(summary?.totalOpenPorts) === 0) positives.push("No unexpected services were detected beyond the primary web stack.");
+
+        if (Number(summary?.katanaTotal) && Number(summary.katanaTotal) <= 200) {
+          positives.push(`${formatNumber(summary.katanaTotal)} crawlable URLs surfaced, manageable for manual review.`);
+        }
+
+        if (positives.length) sentences.push(positives.slice(0, 2).join(" "));
+
+        return sentences.join(" ").replace(/\s+/g, " ").trim();
+      }
+
+      function generateExecutiveSummary({ summarySignals, actions, topRisk }) {
+        const footprint = describeFootprint(summarySignals?.pipeline || {});
+        const posture = assessRiskPosture(summarySignals || {});
+        const keyDrivers = buildKeyDrivers(summarySignals || {}, topRisk);
+        const narrative = buildNarrative(summarySignals || {}, posture, footprint);
+
+        const actionList = Array.isArray(actions) && actions.length
+          ? actions.slice(0, 3)
+          : ["Maintain current controls and monitor upcoming scans for emerging trends."];
+
+        return {
+          heading: `Executive Summary - ${posture.posture || "Low"}`,
+          postureLabel: "Overall posture",
+          postureValue: posture.posture || "Low",
+          footprintText: footprint.descriptor
+            ? `${footprint.label} footprint - ${footprint.descriptor}`
+            : `${footprint.label} footprint`,
+          narrative,
+          keyDrivers,
+          actionList
+        };
+      }
+
+      function buildScoreboard(metrics) {
         const sb = document.getElementById("scoreboard");
-        const format = (value) => Number(value || 0).toLocaleString();
+        if (!sb || !metrics) return;
+
+        const {
+          pipeline,
+          topRisk,
+          actions,
+          exposure,
+          authentication,
+          controls,
+          infrastructure,
+          metadata,
+          summary
+        } = metrics;
+        const summaryData = generateExecutiveSummary({
+          summarySignals: summary,
+          actions,
+          topRisk
+        });
+        const contextMap = {
+          "Discovered Subdomains": "Total internet-facing domains discovered this run.",
+          "DNS Resolvable": "Shows which domains still resolve publicly and are reachable.",
+          "Active Web Hosts": "Live hosts serving HTTP/S content attackers can reach.",
+          "NXDOMAIN Findings": "Dormant names still owned but no longer resolving.",
+          "Login Interfaces": "Applications presenting an authentication flow to users.",
+          "HTTP Login Pages": "Plaintext logins that can be intercepted or modified.",
+          "HTTPS Login Pages": "Login flows already protected by TLS.",
+          "Employee-Facing Assets": "Assets intended for staff that warrant extra scrutiny.",
+          "SPF Coverage": "Domains publishing SPF to curb sender spoofing.",
+          "DMARC Coverage": "Domains enforcing DMARC for phishing resilience.",
+          "DKIM Coverage": "Domains signing outbound mail with DKIM.",
+          "DNSSEC Enabled": "Domains validated with DNSSEC against tampering.",
+          "Open Services": "Externally reachable TCP services on observed hosts.",
+          "Management Ports": "Administrative services such as SSH or RDP exposed.",
+          "Database Ports": "Database engines reachable directly from the internet.",
+          "Shared Host Exposure": "Hostnames co-hosted on the same origin/IP."
+        };
+
+        const renderScoreCard = ({ label, value, meta, tone, context }) => {
+          const toneClass = tone ? ` score-card--${tone}` : "";
+          const normalizedValue = (typeof value === "number" && Number.isFinite(value))
+            ? value.toLocaleString()
+            : escapeHtml(value);
+          const safeMeta = meta ? escapeHtml(meta) : "";
+          const contextText = context || contextMap[label];
+          const contextMarkup = contextText
+            ? `<p class="score-card__context">${escapeHtml(contextText)}</p>`
+            : "";
+          return `
+            <article class="score-card${toneClass}">
+              <p class="score-card__label">${escapeHtml(label)}</p>
+              <h2>${normalizedValue}</h2>
+              ${safeMeta ? `<p class="score-card__meta">${safeMeta}</p>` : ""}
+              ${contextMarkup}
+            </article>
+          `;
+        };
+
+        const renderSection = (title, items) => {
+          if (!Array.isArray(items) || items.length === 0) return "";
+          return `
+            <div class="scoreboard__section">
+              <h3 class="scoreboard__section-title">${escapeHtml(title)}</h3>
+              <div class="scoreboard__grid scoreboard__grid--kpis">
+                ${items.map(renderScoreCard).join("")}
+              </div>
+            </div>
+          `;
+        };
+
+        const postureLabel = summaryData.postureLabel || "Overall posture";
+        const postureValue = summaryData.postureValue || ((typeof topRisk?.score === "number" && Number.isFinite(topRisk.score)) ? topRisk.score.toLocaleString() : "Low");
+        const defaultFootprint = pipeline
+          ? `${pipeline.discovered.toLocaleString()} discovered -> ${pipeline.resolvable.toLocaleString()} resolvable -> ${pipeline.webHosts.toLocaleString()} web hosts`
+          : "No footprint data available";
+        const footprintText = summaryData.footprintText || defaultFootprint;
+        const keyDrivers = Array.isArray(summaryData.keyDrivers) ? summaryData.keyDrivers : [];
+        const riskContext = keyDrivers.length
+          ? `<p class="summary-card__meta">Key drivers: ${escapeHtml(keyDrivers.join(" | "))}</p>`
+          : "";
+        const narrativeCopy = summaryData.narrative || defaultFootprint;
+        const actionsList = (Array.isArray(summaryData.actionList) && summaryData.actionList.length
+          ? summaryData.actionList
+          : (Array.isArray(actions) && actions.length ? actions : ["Maintain current controls and monitor upcoming scans for emerging trends."]))
+          .slice(0, 3);
+        const summaryActions = actionsList
+          .map(item => `<li>${escapeHtml(item)}</li>`)
+          .join("");
+        const timestampLabel = metadata?.timestampLabel ? escapeHtml(metadata.timestampLabel) : "Scan time unavailable";
+        const summaryMeta = metadata?.meta ? `<p class="summary-card__meta">${escapeHtml(metadata.meta)}</p>` : "";
+
         sb.innerHTML = `
-          <article class="score-card">
-            <p class="score-card__label">Total Unique Assets</p>
-            <h2>${format(totalSubdomains)}</h2>
+          <article class="summary-card">
+            <div class="summary-card__header">
+              <h2>${escapeHtml(summaryData.heading || "Executive Summary")}</h2>
+              <span class="summary-card__timestamp">${timestampLabel}</span>
+            </div>
+            <div class="summary-card__headline">
+              <span class="summary-card__risk-label">${escapeHtml(postureLabel)}</span>
+              <span class="summary-card__risk-score">${escapeHtml(postureValue)}</span>
+              <span class="summary-card__risk-asset">${escapeHtml(footprintText)}</span>
+            </div>
+            ${riskContext}
+            ${narrativeCopy ? `<p class="summary-card__pipeline">${escapeHtml(narrativeCopy)}</p>` : ""}
+            <div class="summary-card__actions">
+              <span>Immediate actions</span>
+              <ul>${summaryActions}</ul>
+            </div>
+            ${summaryMeta}
           </article>
-          <article class="score-card">
-            <p class="score-card__label">Live Assets</p>
-            <h2>${format(liveSubs)}</h2>
-          </article>
-          <article class="score-card">
-            <p class="score-card__label">Application Endpoints</p>
-            <h2>${format(totalHttpx)}</h2>
-          </article>
-          <article class="score-card">
-            <p class="score-card__label">Login Interfaces</p>
-            <h2>${format(loginFoundCount)}</h2>
-          </article>
+          ${renderSection("Exposure", exposure)}
+          ${renderSection("Authentication", authentication)}
+          ${renderSection("Controls", controls)}
+          ${renderSection("Infrastructure", infrastructure)}
         `;
       }
 
-      // The following functions build various charts...
-      function buildCharts({ statusCount, priorityCount, portCount, techCount, totalSubdomains, liveSubs, endpointsCount }) {
-        const scCanvas = document.getElementById("statusCodeChart");
-        const prCanvas = document.getElementById("priorityChart");
-        const portCanvas = document.getElementById("portChart");
-        const techCanvas = document.getElementById("techChart");
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        const createTicks = () => ({
-          color: chartText,
-          font: { family: tokens.fontFamily, weight: "500" }
+      function coerceTimestamp(value) {
+        if (!value) return null;
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+
+      function deriveScanTimestamp(datasets) {
+        const timestamps = [];
+        datasets.forEach(data => {
+          if (!Array.isArray(data)) return;
+          data.forEach(entry => {
+            if (!entry) return;
+            const ts = entry.timestamp || entry.Timestamp || entry.time || entry.scanned_at;
+            const parsed = coerceTimestamp(ts);
+            if (parsed) {
+              timestamps.push(parsed);
+            }
+          });
         });
-        const createGrid = (display = true) => ({
-          color: tokens.grid,
-          drawBorder: false,
-          borderDash: [4, 4],
-          display
-        });
-        if (prCanvas) {
-          const funnelLabels = ["Total Assets", "Live Assets", "Applications"];
-          const funnelValues = [totalSubdomains, liveSubs, endpointsCount];
-          if (priorityChart) priorityChart.destroy();
-          priorityChart = new Chart(prCanvas, {
-            type: "bar",
-            data: {
-              labels: funnelLabels,
-              datasets: [{
-                label: "Assets Overview",
-                data: funnelValues,
-                backgroundColor: ["#3b82f6", "#8b5cf6", "#14b8a6"],
-                hoverBackgroundColor: ["#2563eb", "#7c3aed", "#0d9488"],
-                borderRadius: 12,
-                maxBarThickness: 48
-              }]
-            },
-            options: {
-              responsive: true,
-              indexAxis: "x",
-              plugins: { legend: { display: false } },
-              scales: {
-                x: {
-                  ticks: createTicks(),
-                  grid: createGrid(false)
-                },
-                y: {
-                  beginAtZero: true,
-                  ticks: createTicks(),
-                  grid: createGrid()
-                }
-              }
-            }
-          });
-        }
-        if (scCanvas) {
-          const sortedKeys = Object.keys(statusCount).sort((a, b) => +a - +b);
-          statusCodeChart = new Chart(scCanvas, {
-            type: "bar",
-            data: {
-              labels: sortedKeys,
-              datasets: [{
-                label: "HTTP Status Codes",
-                data: sortedKeys.map(l => statusCount[l]),
-                backgroundColor: ["#60a5fa","#34d399","#a855f7","#facc15","#fb7185","#38bdf8","#cbd5f5"],
-                borderRadius: 10,
-                maxBarThickness: 36
-              }]
-            },
-            options: {
-              responsive: true,
-              plugins: { legend: { display: false } },
-              scales: {
-                x: {
-                  ticks: createTicks(),
-                  grid: createGrid(false)
-                },
-                y: {
-                  beginAtZero: true,
-                  ticks: createTicks(),
-                  grid: createGrid()
-                }
-              }
-            }
-          });
-        }
-        if (portCanvas) {
-          const sortedPorts = Object.keys(portCount).sort((a, b) => portCount[b] - portCount[a]);
-          const top10Ports = sortedPorts.slice(0, 10);
-          portChart = new Chart(portCanvas, {
-            type: "bar",
-            data: {
-              labels: top10Ports,
-              datasets: [{
-                label: "Open Ports",
-                data: top10Ports.map(p => portCount[p]),
-                backgroundColor: "#f97316",
-                hoverBackgroundColor: "#ea580c",
-                borderRadius: 10,
-                maxBarThickness: 36
-              }]
-            },
-            options: {
-              responsive: true,
-              plugins: { legend: { display: false } },
-              scales: {
-                x: {
-                  ticks: createTicks(),
-                  grid: createGrid(false)
-                },
-                y: {
-                  beginAtZero: true,
-                  ticks: createTicks(),
-                  grid: createGrid()
-                }
-              }
-            }
-          });
-        }
-        if (techCanvas) {
-          const sortedTech = Object.keys(techCount).sort((a, b) => techCount[b] - techCount[a]);
-          const top10 = sortedTech.slice(0, 10);
-          techChart = new Chart(techCanvas, {
-            type: "bar",
-            data: {
-              labels: top10,
-              datasets: [{
-                label: "Tech Usage (Top 10)",
-                data: top10.map(t => techCount[t]),
-                backgroundColor: "#6366f1",
-                hoverBackgroundColor: "#4f46e5",
-                borderRadius: 10,
-                maxBarThickness: 36
-              }]
-            },
-            options: {
-              responsive: true,
-              indexAxis: "x",
-              plugins: { legend: { display: false } },
-              scales: {
-                x: {
-                  ticks: {
-                    ...createTicks(),
-                    maxRotation: 40,
-                    minRotation: 0
-                  },
-                  grid: createGrid(false)
-                },
-                y: {
-                  beginAtZero: true,
-                  ticks: createTicks(),
-                  grid: createGrid()
-                }
-              }
-            }
-          });
+        if (!timestamps.length) return null;
+        return new Date(Math.max(...timestamps.map(date => date.getTime())));
+      }
+
+      function formatTimestampUTC(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+        try {
+          return date.toLocaleString("en-US", {
+            timeZone: "UTC",
+            year: "numeric",
+            month: "short",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+          }) + " UTC";
+        } catch {
+          return null;
         }
       }
 
-      function buildCDNStackedChart(httpxData) {
-        const cdnMap = {};
-        httpxData.forEach(record => {
-          let cdnName = record.cdn_name && record.cdn_name.trim();
-          let cdnType = record.cdn_type && record.cdn_type.trim();
-          if (!cdnName || cdnName === "N/A") return;
-          if (!cdnType || cdnType === "N/A") cdnType = "Unknown";
-          if (!cdnMap[cdnName]) cdnMap[cdnName] = {};
-          cdnMap[cdnName][cdnType] = (cdnMap[cdnName][cdnType] || 0) + 1;
-        });
-        const cdnNames = Object.keys(cdnMap);
-        const cdnTypesSet = new Set();
-        cdnNames.forEach(name => { Object.keys(cdnMap[name]).forEach(type => cdnTypesSet.add(type)); });
-        const cdnTypes = Array.from(cdnTypesSet);
-        const palette = ["#3498db","#1abc9c","#9b59b6","#f1c40f","#e74c3c","#34495e","#95a5a6","#e67e22","#2ecc71","#8e44ad","#7f8c8d"];
-        const datasets = cdnTypes.map((type, idx) => ({
-          label: type,
-          data: cdnNames.map(name => cdnMap[name][type] || 0),
-          backgroundColor: palette[idx % palette.length],
-          borderRadius: 8,
-          maxBarThickness: 36
-        }));
-        const ctx = document.getElementById("cdnStackedChart").getContext("2d");
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        const ticks = () => ({
-          color: chartText,
-          font: { family: tokens.fontFamily, weight: "500" }
-        });
-        cdnStackedChart = new Chart(ctx, {
-          type: "bar",
-          data: { labels: cdnNames, datasets: datasets },
-          options: {
-            responsive: true,
-            plugins: {
-              legend: {
-                position: "bottom",
-                labels: {
-                  usePointStyle: true,
-                  boxWidth: 10,
-                  color: chartText,
-                  font: { family: tokens.fontFamily, weight: "500" }
-                }
-              },
-              tooltip: { mode: "index", intersect: false }
-            },
-            scales: {
-              x: {
-                stacked: true,
-                ticks: ticks(),
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              },
-              y: {
-                stacked: true,
-                beginAtZero: true,
-                ticks: ticks(),
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              }
-            }
-          }
-        });
+      function categorizePort(port) {
+        if (WEB_PORTS.has(port)) return "Web";
+        if (EMAIL_TRANSPORT_PORTS.has(port)) return "Email Transport";
+        if (EMAIL_ACCESS_PORTS.has(port)) return "Email Access";
+        if (DATABASE_PORTS.has(port)) return "Database";
+        if (MANAGEMENT_PORTS.has(port)) return "Management";
+        if (DNS_PORTS.has(port)) return "DNS";
+        if (FTP_PORTS.has(port)) return "FTP";
+        return "Other";
       }
 
-      function buildDomainCountChart(httpxData) {
-        const domainCount = {};
-        httpxData.forEach(h => {
-          if (h.url && h.url !== "N/A") {
-            const domain = (h.input || "").split(":")[0];
-            domainCount[domain] = (domainCount[domain] || 0) + 1;
-          }
-        });
-        const sortedDomains = Object.keys(domainCount).sort((a, b) => domainCount[b] - domainCount[a]);
-        const top10 = sortedDomains.slice(0, 10);
-        const data = top10.map(d => domainCount[d]);
-        const ctx = document.getElementById("domainCountChart").getContext("2d");
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        domainCountChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: top10,
-            datasets: [{
-              label: "Top 10 Domains (Active URLs)",
-              data,
-              backgroundColor: "#38bdf8",
-              hoverBackgroundColor: "#0ea5e9",
-              borderRadius: 10,
-              maxBarThickness: 36
-            }]
-          },
-          options: {
-            responsive: true,
-            indexAxis: "x",
-            plugins: { legend: { display: false } },
-            scales: {
-              x: {
-                beginAtZero: true,
-                ticks: {
-                  color: chartText,
-                  font: { family: tokens.fontFamily, weight: "500" },
-                  stepSize: 1,
-                  maxRotation: 40,
-                  minRotation: 0
-                },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
-              },
-              y: {
-                beginAtZero: true,
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              }
-            }
-          }
-        });
-      }
-
-      function buildLoginBarChart(endpointsCount, loginFoundCount) {
-        const canvas = document.getElementById("loginBarChart");
-        if (!canvas) return;
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        loginChart = new Chart(canvas, {
-          type: "bar",
-          data: {
-            labels: ["Found", "Not Found"],
-            datasets: [{
-              data: [loginFoundCount, endpointsCount - loginFoundCount],
-              backgroundColor: ["#ef4444", "#22c55e"],
-              hoverBackgroundColor: ["#dc2626", "#16a34a"],
-              borderRadius: 10,
-              maxBarThickness: 42
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: {
-              x: {
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
-              },
-              y: {
-                beginAtZero: true,
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              }
-            }
-          }
-        });
-      }
-
-      function buildCertExpiryChart(secData) {
-        let now = new Date(), expired = 0, exp7 = 0, exp14 = 0, exp30 = 0;
-        secData.forEach(item => {
-          const expiryStr = item["Cert Expiry Date"];
-          if (expiryStr && expiryStr !== "N/A") {
-            let expiryDate = new Date(expiryStr);
-            if (!isNaN(expiryDate)) {
-              let diffDays = (expiryDate - now) / (1000 * 60 * 60 * 24);
-              if (diffDays < 0) expired++;
-              else if (diffDays <= 7) exp7++;
-              else if (diffDays <= 14) exp14++;
-              else if (diffDays <= 30) exp30++;
-            }
-          }
-        });
-        const ctx = document.getElementById("certExpiryChart").getContext("2d");
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        certExpiryChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: ["Expired", "Next 7 Days", "Next 14 Days", "Next 30 Days"],
-            datasets: [{
-              label: "Certs Expiring",
-              data: [expired, exp7, exp14, exp30],
-              backgroundColor: ["#f97316", "#fb7185", "#eab308", "#38bdf8"],
-              hoverBackgroundColor: ["#ea580c", "#f43f5e", "#ca8a04", "#0ea5e9"],
-              borderRadius: 10,
-              maxBarThickness: 36
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: {
-              x: {
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
-              },
-              y: {
-                beginAtZero: true,
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              }
-            }
-          }
-        });
-      }
-
-      function buildTLSUsageChart(secData) {
-        const tlsCounts = {};
-        secData.forEach(item => {
-          let ver = item["SSL/TLS Version"];
-          ver = ver ? ver.trim() : "Unknown";
-          tlsCounts[ver] = (tlsCounts[ver] || 0) + 1;
-        });
-        const labels = Object.keys(tlsCounts);
-        const data = labels.map(l => tlsCounts[l]);
-        const ctx = document.getElementById("tlsUsageChart").getContext("2d");
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        tlsUsageChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels,
-            datasets: [{
-              label: "TLS Version Usage",
-              data,
-              backgroundColor: "#22c55e",
-              hoverBackgroundColor: "#16a34a",
-              borderRadius: 10,
-              maxBarThickness: 36
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: {
-              x: {
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
-              },
-              y: {
-                beginAtZero: true,
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              }
-            }
-          }
-        });
-      }
-
-      function buildHeadersChart(httpxData, secMapUrlParam) {
-        let hstsPresent = 0, hstsMissing = 0, xfoPresent = 0, xfoMissing = 0,
-            cspPresent = 0, cspMissing = 0, xssPresent = 0, xssMissing = 0,
-            rpPresent = 0, rpMissing = 0, ppPresent = 0, ppMissing = 0;
-        httpxData.forEach(record => {
-          const sec = secMapUrlParam[record.url] || {};
-          const hsts = (sec["Strict-Transport-Security"] || "").trim();
-          hsts && hsts.toLowerCase() !== "n/a" && hsts.toLowerCase() !== "false" ? hstsPresent++ : hstsMissing++;
-          const xfo = (sec["X-Frame-Options"] || "").trim();
-          xfo && xfo.toLowerCase() !== "n/a" && xfo.toLowerCase() !== "false" ? xfoPresent++ : xfoMissing++;
-          const csp = (sec["Content-Security-Policy"] || "").trim();
-          csp && csp.toLowerCase() !== "n/a" && csp.toLowerCase() !== "false" ? cspPresent++ : cspMissing++;
-          const xss = (sec["X-XSS-Protection"] || "").trim();
-          xss && xss.toLowerCase() !== "n/a" && xss.toLowerCase() !== "false" ? xssPresent++ : xssMissing++;
-          const rp = (sec["Referrer-Policy"] || "").trim();
-          rp && rp.toLowerCase() !== "n/a" && rp.toLowerCase() !== "false" ? rpPresent++ : rpMissing++;
-          const pp = (sec["Permissions-Policy"] || "").trim();
-          pp && pp.toLowerCase() !== "n/a" && pp.toLowerCase() !== "false" ? ppPresent++ : ppMissing++;
-        });
-        const ctx = document.getElementById("headersChart").getContext("2d");
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        const ticks = () => ({ color: chartText, font: { family: tokens.fontFamily, weight: "500" } });
-        headersChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: ["HSTS", "X-Frame-Options", "CSP", "X-XSS-Protection", "Referrer-Policy", "Permissions-Policy"],
-            datasets: [
-              {
-                label: "Present",
-                data: [hstsPresent, xfoPresent, cspPresent, xssPresent, rpPresent, ppPresent],
-                backgroundColor: "#22c55e",
-                borderRadius: 8,
-                maxBarThickness: 30
-              },
-              {
-                label: "Missing",
-                data: [hstsMissing, xfoMissing, cspMissing, xssMissing, rpMissing, ppMissing],
-                backgroundColor: "#ef4444",
-                borderRadius: 8,
-                maxBarThickness: 30
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            indexAxis: "x",
-            plugins: {
-              legend: {
-                position: "bottom",
-                labels: {
-                  usePointStyle: true,
-                  boxWidth: 10,
-                  color: chartText,
-                  font: { family: tokens.fontFamily, weight: "500" }
-                }
-              },
-              tooltip: { mode: "index", intersect: false }
-            },
-            scales: {
-              x: {
-                stacked: true,
-                ticks: ticks(),
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
-              },
-              y: {
-                stacked: true,
-                beginAtZero: true,
-                ticks: ticks(),
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              }
-            }
-          }
-        });
-      }
-
-      function buildEmailSecChart(secData) {
-        let spfSet = 0, spfMissing = 0, dkimSet = 0, dkimMissing = 0, dmarcSet = 0, dmarcMissing = 0;
-        secData.forEach(item => {
-          const spf = item["SPF Record"] || "";
-          const dkim = item["DKIM Record"] || "";
-          const dmarc = item["DMARC Record"] || "";
-          spf.toLowerCase().includes("spf1") ? spfSet++ : spfMissing++;
-          dkim.toLowerCase().includes("dkim1") ? dkimSet++ : dkimMissing++;
-          dmarc.toLowerCase().includes("dmarc1") ? dmarcSet++ : dmarcMissing++;
-        });
-        const ctx = document.getElementById("emailSecChart").getContext("2d");
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        const ticks = () => ({ color: chartText, font: { family: tokens.fontFamily, weight: "500" } });
-        emailSecChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: ["SPF", "DKIM", "DMARC"],
-            datasets: [
-              {
-                label: "Present",
-                data: [spfSet, dkimSet, dmarcSet],
-                backgroundColor: "#22c55e",
-                borderRadius: 8,
-                maxBarThickness: 30
-              },
-              {
-                label: "Missing",
-                data: [spfMissing, dkimMissing, dmarcMissing],
-                backgroundColor: "#ef4444",
-                borderRadius: 8,
-                maxBarThickness: 30
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              legend: {
-                position: "bottom",
-                labels: {
-                  usePointStyle: true,
-                  boxWidth: 10,
-                  color: chartText,
-                  font: { family: tokens.fontFamily, weight: "500" }
-                }
-              },
-              tooltip: { mode: "index", intersect: false }
-            },
-            scales: {
-              x: {
-                stacked: true,
-                ticks: ticks(),
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
-              },
-              y: {
-                stacked: true,
-                beginAtZero: true,
-                ticks: ticks(),
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              }
-            }
-          }
-        });
-      }
-
-      function buildServiceChart(naabuData) {
+      function prepareNaabuInsights(naabuData) {
         const naabuMap = {};
-        const serviceCount = {};
-        naabuData.forEach(n => {
-          const domain = n.host;
-          const port = n.port;
-          let service = "Unknown";
-          const portServiceDB = {"7":"Echo","9":"Discard","13":"Daytime","21":"FTP","22":"SSH","23":"Telnet","25":"Simple Mail Transfer","26":"Unassigned","37":"Time","53":"Domain Name Server","66":"Oracle SQL*NET","79":"Finger","80":"HTTP","81":"Unassigned","88":"Kerberos","92":"Network Printing Protocol","99":"Metagram Relay","106":"3COM-TSMUX","110":"Post Office Protocol - Version 3","111":"SUN Remote Procedure Call","113":"Authentication Service","119":"Network News Transfer Protocol","135":"DCE endpoint resolution","139":"NETBIOS Session Service","143":"Reserved","144":"Universal Management Architecture","179":"BGP","199":"SMUX","443":"HTTPS","444":"Simple Network Paging Protocol","445":"Microsoft-DS","457":"scohelp","465":"IGMP over UDP for SSM","513":"maintains data bases showing who's logged in to machines on a local net and the load average of the machine","514":"rsh","515":"spooler","543":"Klogin","544":"krcmd","548":"AFP over TCP","554":"Real Time Streaming Protocol (RTSP)","587":"Message Submission","631":"Internet Printing Protocol over HTTPS","646":"LDP","6646":"IRC","873":"rsync","8880":"CDDBP","8888":"NewsEDGE server UDP (UDP 1)","990":"ftp protocol, control, over TLS/SSL","992":"telnet protocol over TLS/SSL","993":"Reserved","995":"pop3 protocol over TLS/SSL (was spop3)","1024":"Reserved","1025":"network blackjack","1026":"Calendar Access Protocol","1027":"Reserved","1028":"Deprecated","1029":"Solid Mux Server","1080":"Socks","1100":"MCTP","1110":"Client status info","1194":"OpenVPN","1241":"nessus","1352":"Lotus Note","1433":"Microsoft-SQL-Server","1434":"Microsoft-SQL-Monitor","1521":"nCube License Manager","1522":"Ricardo North America License Manager","15672":"RabbitMQ Mgmt","1720":"H.323 Call Control","1723":"pptp","1755":"ms-streaming","1900":"SSDP","1944":"close-combat","2000":"Cisco SCCp","2001":"curry","2049":"Network File System","2121":"SCIENTIA-SSDB","2222":"EtherNet/IP I/O","2301":"Compaq HTTP","2323":"3d-nfsd","2483":"Oracle TTC","2484":"Oracle TTC SSL","2638":"Sybase Anywhere","27017":"Reserved","27018":"MongoDB","27019":"MongoDB","2717":"PN REQUESTER","28015":"RethinkDB","3000":"RemoteWare Client","3050":"gds_db","3128":"Active API Server Port","32768":"Filenet TMS","3306":"MySQL","3389":"MS WBT Server","3986":"MAPPER workstation server","4000":"Terabase","4001":"NewOak","4002":"pxc-spvr-ft","4100":"IGo Incognito Data Port","4567":"TRAM","4899":"RAdmin Port","49152":"N/A","49153":"N/A","49154":"N/A","49155":"N/A","49156":"N/A","49157":"N/A","5000":"UPnP","5001":"N/A","5009":"Microsoft Windows Filesystem","5051":"ITA Agent","5060":"SIP","5101":"Talarian_UDP","5190":"America-Online","5357":"Web Services for Devices","5432":"PostgreSQL Database","5631":"pcANYWHEREdata","5666":"Reserved","5800":"VNC","5801":"VNC","5802":"VNC","5803":"VNC","5804":"VNC","5805":"VNC","5806":"VNC","5807":"VNC","5809":"VNC","5900":"Remote Framebuffer","5984":"CouchDB","5985":"WBEM WS-Management HTTP","5986":"WBEM WS-Management HTTP over TLS/SSL","6000":"X11","6001":"X11","6346":"gnutella-svc","6347":"gnutella-rtr","6379":"Reserved","6513":"Reserved","7000":"file server itself","7001":"callbacks to cache managers","7002":"users & groups database","7070":"ARCP","7170":"Adaptive Name/Service Resolution","7199":"Cassandra","7474":"Reserved","7647":"N/A","7687":"Reserved","7777":"cbt","8000":"iRDMI","8001":"VCOM Tunnel","8008":"HTTP Alternate","8009":"Reserved","8080":"HTTP Alternate (see port 80)","8081":"Sun Proxy Admin Service","8083":"Utilistor (Server)","8085":"Unassigned","8089":"Unassigned","8090":"Reserved","8181":"Reserved","8291":"MikroTik","8443":"PCsync HTTPS","9000":"CSlistener","9080":"Groove GLRPC","9090":"WebSM","9091":"xmltec-xmlmail","9092":"Xml-Ipc Server Reg","9100":"Printer PDL Data Stream","9200":"WAP connectionless session service","9443":"WSO2 Tungsten HTTPS","9990":"OSM Applet Server","9999":"distinct","10000":"Network Data Management Protocol","10080":"Amanda","10443":"Reserved","11211":"Memory cache service","20000":"Distributed Network Protocol","54321":"N/A","30821":"N/A","9042":"Cassandra CQL","9160":"apani1"};
-          if (portServiceDB[port]) service = portServiceDB[port];
-          if (!naabuMap[domain]) naabuMap[domain] = [];
-          naabuMap[domain].push({ port, service });
-          serviceCount[service] = (serviceCount[service] || 0) + 1;
+        const categoryCounts = {
+          "Web": 0,
+          "Email Transport": 0,
+          "Email Access": 0,
+          "Database": 0,
+          "Management": 0,
+          "DNS": 0,
+          "FTP": 0,
+          "Other": 0
+        };
+        naabuData.forEach(entry => {
+          const host = entry.host;
+          const port = Number(entry.port);
+          const service = entry.service || "";
+          if (!naabuMap[host]) naabuMap[host] = [];
+          naabuMap[host].push({ port, service });
+
+          const category = categorizePort(port);
+          categoryCounts[category] = (categoryCounts[category] || 0) + 1;
         });
-        window.naabuMap = naabuMap;
-        const ctx = document.getElementById("serviceChart").getContext("2d");
-        const sortedServices = Object.keys(serviceCount).sort((a, b) => serviceCount[b] - serviceCount[a]);
-        const top10Services = sortedServices.slice(0, 10);
-        const data = top10Services.map(service => serviceCount[service]);
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        serviceChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: top10Services,
-            datasets: [{
-              label: "Open Services",
-              data,
-              backgroundColor: "#6366f1",
-              hoverBackgroundColor: "#4f46e5",
-              borderRadius: 10,
-              maxBarThickness: 36
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: {
-              x: {
-                beginAtZero: true,
-                ticks: {
-                  color: chartText,
-                  font: { family: tokens.fontFamily, weight: "500" },
-                  maxRotation: 40,
-                  minRotation: 0
-                },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
-              },
-              y: {
-                beginAtZero: true,
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              }
-            }
-          }
-        });
+
+        return { naabuMap, categoryCounts };
       }
 
-      function buildColleagueChart(colleagueData) {
-        const countEmployee = colleagueData.filter(x => x.colleague_endpoint === "Yes").length;
-        const countCustomer = colleagueData.length - countEmployee;
-        const ctx = document.getElementById("colleagueEndpointChart").getContext("2d");
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        colleagueChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: ["Employee Intended", "Customer Intended"],
-            datasets: [{
-              label: "Purpose Count",
-              data: [countEmployee, countCustomer],
-              backgroundColor: ["#38bdf8", "#34d399"],
-              hoverBackgroundColor: ["#0ea5e9", "#22c55e"],
-              borderRadius: 10,
-              maxBarThickness: 42
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: {
-              x: {
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4], display: false }
-              },
-              y: {
-                beginAtZero: true,
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              }
-            }
-          }
-        });
+      function describeEndpoint(entry) {
+        if (!entry) return "";
+        const raw = typeof entry === "string" ? entry : entry.url || entry.domain || "";
+        if (!raw) return "";
+        try {
+          const parsed = new URL(raw.startsWith("http") ? raw : `http://${raw}`);
+          const protocol = parsed.protocol.replace(":", "").toUpperCase();
+          const port = parsed.port || (parsed.protocol === "https:" ? "443" : parsed.protocol === "http:" ? "80" : "");
+          const host = parsed.hostname || raw;
+          return port ? `${host}:${port} ${protocol}` : `${host} ${protocol}`;
+        } catch {
+          return raw;
+        }
       }
 
-      function buildNSChart(labels, data) {
-        const trimmedLabels = labels.map(label => {
-          const parts = label.split(".").filter(part => part.trim().length > 0);
-          return parts.length > 3 ? parts.slice(-3).join(".") : label;
-        });
-        const top5Labels = trimmedLabels.slice(0, 5);
-        const top5Data = data.slice(0, 5);
-        const bgColors = ["#3b82f6", "#22c55e", "#a855f7", "#facc15", "#fb7185"];
-        const ctx = document.getElementById("nsChart").getContext("2d");
-        const tokens = getDesignTokens();
-        const chartText = getChartTextColor(tokens);
-        nsChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: top5Labels,
-            datasets: [{
-              label: "Nameserver Summary",
-              data: top5Data,
-              backgroundColor: bgColors,
-              borderRadius: 12,
-              maxBarThickness: 32
-            }]
-          },
-          options: {
-            indexAxis: "y",
-            responsive: true,
-            plugins: {
-              tooltip: { enabled: true },
-              legend: { display: false }
-            },
-            scales: {
-              x: {
-                beginAtZero: true,
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, borderDash: [4, 4] }
-              },
-              y: {
-                ticks: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } },
-                grid: { color: tokens.grid, drawBorder: false, display: false }
-              }
-            }
-          }
-        });
+
+// Visualisation builder for charts
+function buildInsightsCharts({
+  pipeline,
+  riskLeaderboard,
+  dnsStats,
+  exposureMatrix,
+  headerCoverage,
+  emailCoverage,
+  statusBreakdown,
+  topTechnologies
+}) {
+  const tokens = getDesignTokens();
+  const chartText = getChartTextColor(tokens);
+  const createTicks = () => ({
+    color: chartText,
+    font: { family: tokens.fontFamily, weight: "500" }
+  });
+  const createGrid = (display = true) => ({
+    color: tokens.grid,
+    drawBorder: false,
+    borderDash: [4, 4],
+    display
+  });
+  const tooltipTheme = getTooltipTheme(tokens);
+
+  const replaceWithMessage = (canvas, message) => {
+    if (!canvas) return;
+    const parent = canvas.parentElement;
+    if (parent) {
+      parent.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    }
+  };
+
+  (function buildFunnel() {
+    const canvas = document.getElementById("funnelChart");
+    if (!canvas) return;
+    const labels = ["Discovered", "Resolvable", "Web Hosts"];
+    const data = [
+      Number(pipeline?.discovered) || 0,
+      Number(pipeline?.resolvable) || 0,
+      Number(pipeline?.webHosts) || 0
+    ];
+    if (!data.some(value => value > 0)) {
+      replaceWithMessage(canvas, "No asset discovery data available.");
+      funnelChart = undefined;
+      return;
+    }
+    if (funnelChart) funnelChart.destroy();
+    funnelChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Assets",
+          data,
+          backgroundColor: ["#3b82f6", "#8b5cf6", "#14b8a6"],
+          borderRadius: 12,
+          maxBarThickness: 48
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: tooltipTheme
+        },
+        scales: {
+          x: { ticks: createTicks(), grid: createGrid(false) },
+          y: { beginAtZero: true, ticks: createTicks(), grid: createGrid() }
+        }
       }
+    });
+  })();
+
+  (function buildRiskLeaderboard() {
+    const canvas = document.getElementById("riskLeaderboardChart");
+    if (!canvas) return;
+    const topEntries = Array.isArray(riskLeaderboard) ? riskLeaderboard.slice(0, 6) : [];
+    if (!topEntries.length) {
+      replaceWithMessage(canvas, "Risk scoring unavailable.");
+      riskLeaderboardChart = undefined;
+      return;
+    }
+    const labels = topEntries.map(entry => describeEndpoint(entry));
+    const data = topEntries.map(entry => Number(entry.score) || 0);
+    if (riskLeaderboardChart) riskLeaderboardChart.destroy();
+    riskLeaderboardChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Score",
+          data,
+          backgroundColor: "#ef4444",
+          borderRadius: 10,
+          maxBarThickness: 40
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: tooltipTheme
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: createTicks(), grid: createGrid() },
+          y: { ticks: createTicks(), grid: createGrid(false) }
+        }
+      }
+    });
+  })();
+
+  (function buildDnsHealth() {
+    const canvas = document.getElementById("dnsHealthChart");
+    if (!canvas) return;
+    const values = [
+      Number(dnsStats?.resolvable) || 0,
+      Number(dnsStats?.nxdomain) || 0,
+      Number(dnsStats?.other) || 0
+    ];
+    if (!values.some(value => value > 0)) {
+      replaceWithMessage(canvas, "No DNS health data available.");
+      dnsHealthChart = undefined;
+      return;
+    }
+    if (dnsHealthChart) dnsHealthChart.destroy();
+    dnsHealthChart = new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels: ["Resolvable", "NXDOMAIN", "Other"],
+        datasets: [{
+          data: values,
+          backgroundColor: ["#22c55e", "#ef4444", "#f97316"],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } }
+          },
+          tooltip: tooltipTheme
+        }
+      }
+    });
+  })();
+
+  (function buildTlsExposure() {
+    const canvas = document.getElementById("tlsLoginChart");
+    if (!canvas) return;
+    const httpEndpoints = Number(exposureMatrix?.endpoints?.http) || 0;
+    const httpsEndpoints = Number(exposureMatrix?.endpoints?.https) || 0;
+    const httpLogins = Number(exposureMatrix?.logins?.http) || 0;
+    const httpsLogins = Number(exposureMatrix?.logins?.https) || 0;
+    if (!(httpEndpoints || httpsEndpoints || httpLogins || httpsLogins)) {
+      replaceWithMessage(canvas, "No HTTP service coverage data available.");
+      tlsLoginChart = undefined;
+      return;
+    }
+    if (tlsLoginChart) tlsLoginChart.destroy();
+    tlsLoginChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: ["Endpoints", "Login Interfaces"],
+        datasets: [
+          {
+            label: "HTTP",
+            data: [httpEndpoints, httpLogins],
+            backgroundColor: "#ef4444",
+            borderRadius: 8,
+            maxBarThickness: 42
+          },
+          {
+            label: "HTTPS",
+            data: [httpsEndpoints, httpsLogins],
+            backgroundColor: "#22c55e",
+            borderRadius: 8,
+            maxBarThickness: 42
+          }
+        ]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } }
+          },
+          tooltip: tooltipTheme
+        },
+        scales: {
+          x: { stacked: true, beginAtZero: true, ticks: createTicks(), grid: createGrid() },
+          y: { stacked: true, ticks: createTicks(), grid: createGrid(false) }
+        }
+      }
+    });
+  })();
+
+  (function buildStatusCodeChart() {
+    const canvas = document.getElementById("statusCodeChart");
+    if (!canvas) return;
+    const entries = Array.isArray(statusBreakdown) ? statusBreakdown : [];
+    if (!entries.some(([, count]) => count > 0)) {
+      replaceWithMessage(canvas, "No HTTP status data available.");
+      statusCodeChart = undefined;
+      return;
+    }
+    const labels = entries.map(([code]) => code);
+    const data = entries.map(([, count]) => count);
+    if (statusCodeChart) statusCodeChart.destroy();
+    const palette = ["#22c55e", "#3b82f6", "#f97316", "#facc15", "#ef4444", "#a855f7", "#0ea5e9"];
+    statusCodeChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Responses",
+          data,
+          backgroundColor: labels.map((_, idx) => palette[idx % palette.length]),
+          borderRadius: 10,
+          maxBarThickness: 40
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: tooltipTheme
+        },
+        scales: {
+          x: { ticks: createTicks(), grid: createGrid(false) },
+          y: { beginAtZero: true, ticks: createTicks(), grid: createGrid() }
+        }
+      }
+    });
+  })();
+
+  (function buildTopTechChart() {
+    const canvas = document.getElementById("techChart");
+    if (!canvas) return;
+    const entries = Array.isArray(topTechnologies) ? topTechnologies : [];
+    if (!entries.some(([, count]) => count > 0)) {
+      replaceWithMessage(canvas, "No technology fingerprints collected.");
+      techChart = undefined;
+      return;
+    }
+    const labels = entries.map(([name]) => name);
+    const data = entries.map(([, count]) => count);
+    if (techChart) techChart.destroy();
+    techChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Occurrences",
+          data,
+          backgroundColor: "#3b82f6",
+          borderRadius: 10,
+          maxBarThickness: 40
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: tooltipTheme
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: createTicks(), grid: createGrid() },
+          y: { ticks: createTicks(), grid: createGrid(false) }
+        }
+      }
+    });
+  })();
+
+
+  (function buildHeaderCoverage() {
+    const canvas = document.getElementById("headerCoverageChart");
+    if (!canvas) return;
+    const labels = Object.keys(headerCoverage || {});
+    if (!labels.length) {
+      replaceWithMessage(canvas, "No security header data collected.");
+      headerCoverageChart = undefined;
+      return;
+    }
+    const present = labels.map(label => Number(headerCoverage[label]?.present) || 0);
+    const missing = labels.map(label => Number(headerCoverage[label]?.missing) || 0);
+    if (headerCoverageChart) headerCoverageChart.destroy();
+    headerCoverageChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Present",
+            data: present,
+            backgroundColor: "#22c55e",
+            borderRadius: 8,
+            maxBarThickness: 36
+          },
+          {
+            label: "Missing",
+            data: missing,
+            backgroundColor: "#ef4444",
+            borderRadius: 8,
+            maxBarThickness: 36
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } }
+          },
+          tooltip: tooltipTheme
+        },
+        scales: {
+          x: { stacked: true, ticks: createTicks(), grid: createGrid(false) },
+          y: { stacked: true, beginAtZero: true, ticks: createTicks(), grid: createGrid() }
+        }
+      }
+    });
+  })();
+
+  (function buildEmailCoverage() {
+    const canvas = document.getElementById("emailCoverageChart");
+    if (!canvas) return;
+    const labels = Object.keys(emailCoverage || {});
+    if (!labels.length) {
+      replaceWithMessage(canvas, "No email security data collected.");
+      emailCoverageChart = undefined;
+      return;
+    }
+    const configured = labels.map(label => Number(emailCoverage[label]?.configured) || 0);
+    const missing = labels.map(label => Number(emailCoverage[label]?.missing) || 0);
+    if (emailCoverageChart) emailCoverageChart.destroy();
+    emailCoverageChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Configured",
+            data: configured,
+            backgroundColor: "#3b82f6",
+            borderRadius: 8,
+            maxBarThickness: 36
+          },
+          {
+            label: "Missing",
+            data: missing,
+            backgroundColor: "#f97316",
+            borderRadius: 8,
+            maxBarThickness: 36
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } }
+          },
+          tooltip: tooltipTheme
+        },
+        scales: {
+          x: { stacked: true, ticks: createTicks(), grid: createGrid(false) },
+          y: { stacked: true, beginAtZero: true, ticks: createTicks(), grid: createGrid() }
+        }
+      }
+    });
+  })();
+
+  ;
+}
 
       // Global array to store table rows.
       let rowDataStore = [];
@@ -1304,6 +1684,7 @@
       function buildTableRows(combinedData, secMapDomain, secMapUrl, loginMap, apiMap, colleagueMap) {
         allTableRows = [];
         rowDataStore = [];
+        riskEntries = [];
         Object.keys(combinedData).forEach(domain => {
           const { dns, http } = combinedData[domain];
           const dnsResolvers = dns && dns.resolver ? dns.resolver : [];
@@ -1357,24 +1738,32 @@
               const techCount = sanitizedTech.length;
               const openPorts = (window.naabuMap && window.naabuMap[domain]) || [];
               const openPortsCount = openPorts.length;
-              // Initialize counts for all three port categories
               let dbPortsCount = 0;
               let managementPortsCount = 0;
-
+              const categoryCounts = {};
               openPorts.forEach(portObj => {
-                const port = Number(portObj.port);
-
-                // Database Ports (Expanded)
-                if ([1433, 1434, 1521, 1522, 2483, 2484, 2638, 3050, 3306, 3389, 5432, 5984, 6379, 7000, 7199, 7474, 7687, 9042, 9160, 27017, 27018, 27019, 28015].includes(port)) {
-                  dbPortsCount++;
-                }
-
-                // Management Ports (Expanded)
-                if ([8000, 8008, 8080, 8081, 8083, 8089, 8090, 8443, 8880, 8888, 9000, 9090, 9091, 9092, 9100, 9990, 10000, 10080, 10443, 11211, 15672, 3000, 5000, 54321, 7001, 7002, 7070, 8181, 8800, 9200, 9443, 22, 23, 2222, 2323, 3389, 5900, 5800, 4899, 5631, 5666, 5985, 5986, 8291, 1723, 1194, 992, 6513, 5801, 5802, 5803, 5804, 5805, 5806, 5807, 5809].includes(port)) {
-                  managementPortsCount++;
-                }
-
+                const numericPort = Number(portObj.port);
+                const category = categorizePort(numericPort);
+                categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+                if (DATABASE_PORTS.has(numericPort)) dbPortsCount++;
+                if (MANAGEMENT_PORTS.has(numericPort)) managementPortsCount++;
               });
+              const sortedCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]);
+              const chipTone = category => {
+                if (category === "Management" || category === "Database") return "chip--danger";
+                if (category.startsWith("Email")) return "chip--warning";
+                if (category === "DNS") return "chip--info";
+                return "";
+              };
+              const categoryChipsHtml = sortedCategories.map(([category, count]) => {
+                const toneClass = chipTone(category);
+                const countMarkup = count > 1 ? `<small>${count}</small>` : "";
+                return `<span class="chip ${toneClass}">${escapeHtml(category)}${countMarkup}</span>`;
+              }).join("");
+              const openPortsDetails = openPorts.length
+                ? openPorts.map(p => `${escapeHtml(String(p.port))} (${escapeHtml(p.service || "Unknown")})`).join("<br>")
+                : "N/A";
+              const chipsWrapper = categoryChipsHtml ? `<div class="chip-group">${categoryChipsHtml}</div>` : "";
 
               const linksForUrl = (window.linksMap && window.linksMap[h.url]) ? window.linksMap[h.url] : [];
               const linkCount = linksForUrl.length;
@@ -1404,6 +1793,18 @@
               if (score < minRiskScore) minRiskScore = score;
               if (score > maxRiskScore) maxRiskScore = score;
               riskScores[domain] = score;
+              riskEntries.push({
+                domain,
+                url: h.url,
+                score,
+                reasons: Array.isArray(debug) ? [...debug] : [],
+                loginFound: loginMap[h.url] === "Yes",
+                scheme: h.scheme || ((h.url || "").startsWith("https") ? "https" : "http"),
+                openPortsCount,
+                dbPortsCount,
+                managementPortsCount,
+                statusCode: h.status_code
+              });
               rowDataStore.push({ domain, prioScore: score });
               const row = document.createElement("tr");
               row.innerHTML = `
@@ -1443,16 +1844,18 @@
                 <td>${xssFlag ? "True" : "False"}</td>
                 <td>${rpFlag ? "True" : "False"}</td>
                 <td>${ppFlag ? "True" : "False"}</td>
-                <td>${
-                  (window.naabuMap && window.naabuMap[domain])
-                  ? window.naabuMap[domain].map(p => `${p.port} (${p.service})`).join("<br>")
-                  : "N/A"
-                }</td>
+                <td>${openPortsDetails}${chipsWrapper}</td>
                 <td>${linksCellHTML}</td>
               `;
               const scoreCell = row.getElementsByTagName("td")[0];
-              scoreCell.innerText = score;
-              scoreCell.title = debug.join("\n");
+              const reasonsText = Array.isArray(debug) ? debug.map(reason => String(reason || "")).join("\n") : "";
+              scoreCell.innerHTML = `<span class="score-badge" title="${escapeHtml(reasonsText)}">${score}</span>`;
+              scoreCell.title = reasonsText;
+              const emailAuthMissing = [spf, dkim, dmarc].some(value => typeof value === "string" && value.toLowerCase().includes("no "));
+              row.dataset.score = String(score);
+              row.dataset.httpLogin = (loginMap[h.url] === "Yes" && (h.url || "").startsWith("http://")) ? "1" : "0";
+              row.dataset.emailAuthMissing = emailAuthMissing ? "1" : "0";
+              row.dataset.nxdomain = dnsStatus === "NXDOMAIN" ? "1" : "0";
               prepareRowCells(row);
               allTableRows.push(row);
             });
@@ -1499,6 +1902,11 @@
               <td>N/A</td>
             `;
             prepareRowCells(row);
+            const emailAuthMissing = [spf, dkim, dmarc].some(value => typeof value === "string" && value.toLowerCase().includes("no "));
+            row.dataset.score = "0";
+            row.dataset.httpLogin = "0";
+            row.dataset.emailAuthMissing = emailAuthMissing ? "1" : "0";
+            row.dataset.nxdomain = dnsStatus === "NXDOMAIN" ? "1" : "0";
             allTableRows.push(row);
           }
         });
@@ -1506,13 +1914,30 @@
 
       function finalizeColors() {
         allTableRows.forEach(row => {
-          const cells = row.getElementsByTagName("td");
-          const scoreCell = cells[0];
-          if (scoreCell.innerText === "N/A") return;
-          const prioScore = parseInt(scoreCell.innerText, 10) || 0;
-          const color = getDynamicColor(prioScore, minRiskScore, maxRiskScore);
+          const scoreBadge = row.querySelector(".score-badge");
+          if (!scoreBadge) return;
+          const scoreValue = parseInt(scoreBadge.textContent, 10);
+          if (!Number.isFinite(scoreValue)) return;
+          const scoreCell = scoreBadge.closest("td");
+          if (!scoreCell) return;
+          const color = getDynamicColor(scoreValue, minRiskScore, maxRiskScore);
           scoreCell.style.backgroundColor = color;
           scoreCell.style.color = "#fff";
+          scoreCell.style.fontWeight = "700";
+          scoreCell.style.textAlign = "center";
+          scoreCell.style.verticalAlign = "middle";
+          scoreBadge.classList.remove("score-badge--critical", "score-badge--high", "score-badge--moderate", "score-badge--low");
+          if (scoreValue >= 100) {
+            scoreBadge.classList.add("score-badge--critical");
+          } else if (scoreValue >= 60) {
+            scoreBadge.classList.add("score-badge--high");
+          } else if (scoreValue >= 30) {
+            scoreBadge.classList.add("score-badge--moderate");
+          } else {
+            scoreBadge.classList.add("score-badge--low");
+          }
+          scoreBadge.style.background = "rgba(255, 255, 255, 0.18)";
+          scoreBadge.style.color = "#fff";
         });
       }
 
@@ -1762,7 +2187,6 @@
         this.textContent = (riskSortOrder === "asc") ? "▲" : "▼";
         renderTable(getFilteredRows());
       });
-
       // Async data loading and report building
       async function loadData() {
         try {
