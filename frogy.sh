@@ -227,17 +227,23 @@ run_subfinder() {
 # Purpose: Run Assetfinder for each primary domain and merge the results.
 ##############################################
 run_assetfinder() {
-	if [[ "$USE_ASSETFINDER" == "true" ]]; then
-		info "[2/15] Running Assetfinder..."
-		local assetfinder_output="$RUN_DIR/assetfinder.txt"
-		>"$assetfinder_output"
-		while IFS= read -r domain || [[ -n "$domain" ]]; do
-			domain=$(echo "$domain" | tr -d '\r' | xargs)
-			[[ -z "$domain" ]] && continue
-			assetfinder --subs-only "$domain" 2>/dev/null || true
-		done <"$PRIMARY_DOMAINS_FILE" | sort -u >>"$assetfinder_output"
-		merge_and_count "$assetfinder_output" "Assetfinder"
+	if [[ "$USE_ASSETFINDER" != "true" ]]; then
+		return 0
 	fi
+	info "[2/15] Running Assetfinder..."
+	local assetfinder_output="$RUN_DIR/assetfinder.txt"
+	>"$assetfinder_output"
+	local asset_status=0
+	if ! while IFS= read -r domain || [[ -n "$domain" ]]; do
+		domain=$(echo "$domain" | tr -d '\r' | xargs)
+		[[ -z "$domain" ]] && continue
+		assetfinder --subs-only "$domain" 2>/dev/null || true
+	done <"$PRIMARY_DOMAINS_FILE" | sort -u >>"$assetfinder_output"; then
+		warning "Assetfinder encountered an error; continuing without its results."
+		asset_status=1
+	fi
+	merge_and_count "$assetfinder_output" "Assetfinder"
+	return $asset_status
 }
 
 ##############################################
@@ -248,7 +254,8 @@ run_crtsh() {
 	info "[3/15] Running crt.sh..."
 	local crt_file="$RUN_DIR/whois.txt"
 	>"$crt_file"
-	while read -r domain; do
+	local crt_status=0
+	if ! while read -r domain; do
 		{
 			# Temporarily disable exit on error for this block
 			set +e
@@ -275,8 +282,12 @@ run_crtsh() {
 					>>"$crt_file"
 		} || true
 		set -e
-	done <"$PRIMARY_DOMAINS_FILE"
+	done <"$PRIMARY_DOMAINS_FILE"; then
+		warning "crt.sh lookups encountered an error; continuing."
+		crt_status=1
+	fi
 	merge_and_count "$crt_file" "Certificate"
+	return $crt_status
 }
 
 ##############################################
@@ -284,37 +295,49 @@ run_crtsh() {
 # Purpose: Use gau (wayback) to discover archived URLs, extract hostnames
 ##############################################
 run_gau() {
-	if [[ "$USE_GAU" == "true" ]]; then
-		info "[4/15] Running GAU…"
-
-		mkdir -p "$RUN_DIR/raw_output/gau"
-		local raw_urls="$RUN_DIR/raw_output/gau/urls.txt"
-		local hosts_extracted="$RUN_DIR/raw_output/gau/hosts_extracted.txt"
-		local out="$RUN_DIR/gau_subdomains.txt"
-
-		: >"$raw_urls"
-		: >"$hosts_extracted"
-		: >"$out"
-
-		while read -r domain; do
-			gau "$domain" \
-				--providers wayback \
-				--subs \
-				--threads 10 \
-				--timeout 60 \
-				--retries 2 \
-				>>"$raw_urls" 2>/dev/null || true
-		done <"$PRIMARY_DOMAINS_FILE"
-
-		awk -F/ 'NF>=3 {h=$3; sub(/:.*/,"",h); print tolower(h)}' "$raw_urls" |
-			sed 's/[[:space:]]//g' |
-			grep -E '^[A-Za-z0-9.-]+$' \
-				>"$hosts_extracted"
-
-		sort -u "$hosts_extracted" >"$out"
-
-		merge_and_count "$out" "GAU"
+	if [[ "$USE_GAU" != "true" ]]; then
+		return 0
 	fi
+	info "[4/15] Running GAU…"
+
+	mkdir -p "$RUN_DIR/raw_output/gau"
+	local raw_urls="$RUN_DIR/raw_output/gau/urls.txt"
+	local hosts_extracted="$RUN_DIR/raw_output/gau/hosts_extracted.txt"
+	local out="$RUN_DIR/gau_subdomains.txt"
+
+	: >"$raw_urls"
+	: >"$hosts_extracted"
+	: >"$out"
+
+	local gau_status=0
+	if ! while read -r domain; do
+		gau "$domain" \
+			--providers wayback \
+			--subs \
+			--threads 10 \
+			--timeout 60 \
+			--retries 2 \
+			>>"$raw_urls" 2>/dev/null || true
+	done <"$PRIMARY_DOMAINS_FILE"; then
+		warning "GAU encountered an error while fetching historical URLs; continuing."
+		gau_status=1
+	fi
+
+	if ! awk -F/ 'NF>=3 {h=$3; sub(/:.*/,"",h); print tolower(h)}' "$raw_urls" |
+		sed 's/[[:space:]]//g' |
+		grep -E '^[A-Za-z0-9.-]+$' \
+			>"$hosts_extracted"; then
+		warning "Failed to normalize GAU hostnames; continuing with available data."
+		gau_status=1
+	fi
+
+	if ! sort -u "$hosts_extracted" >"$out"; then
+		warning "Failed to deduplicate GAU results; continuing with raw data."
+		gau_status=1
+	fi
+
+	merge_and_count "$out" "GAU"
+	return $gau_status
 }
 
 ##############################################
@@ -1147,9 +1170,15 @@ main() {
 	check_dependencies
 	run_chaos
 	run_subfinder
-	run_assetfinder
-	run_crtsh
-	run_gau
+	if ! run_assetfinder; then
+		warning "Assetfinder step encountered an error and was skipped."
+	fi
+	if ! run_crtsh; then
+		warning "crt.sh lookup step encountered an error and was skipped."
+	fi
+	if ! run_gau; then
+		warning "GAU step encountered an error and was skipped."
+	fi
 	info "[5/15] Merging subdomains..."
 	# Append each primary domain and its www subdomain to ALL_TEMP.
 	while read -r domain; do
