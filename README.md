@@ -10,6 +10,19 @@
 
 <img src="https://chintangurjar.com/images/frogy.png"/>
 
+# Approx. Time Duration
+
+  - Assumes default project-discovery stack on a mid-tier VPS (8 vCPU, 16 GB RAM, decent bandwidth). Slower links, tight rate limits, or weaker hardware
+    stretch these numbers.
+  - Core contributors to runtime: naabu’s TCP sweeps, httpx screenshots & headless fetches, katana crawl, and TLS/banner enrichment (tlsx, curl).
+
+  | Approx. live hosts in scope | End-to-end duration | Why it takes that long |
+  |-----------------------------|---------------------|------------------------|
+  | 2-digit (≈50)               | ~15–25 minutes      | Tool start-up plus full DNS→port→HTTP cycle; even small sets run every stage (naabu, httpx, katana, login detection). |
+  | 3-digit (≈300)              | ~45–75 minutes      | Naabu/httpx queues grow; each host fans out across multiple ports, screenshots, TLS probes, and katana fetches. |
+  | 4-digit (≈2,000)            | ~3.5–5.5 hours      | Port scanning dominates; thousands of endpoints mean large response archives, more TLS handshakes, and heavier katana/link processing. |
+  | 5-digit (≈12,000)           | ~12–18 hours        | Parallelism hits external rate limits; sheer volume of screenshots, raw bodies, and crawl data becomes the bottleneck alongside network bandwidth. |
+
 # Features
 
 - **Comprehensive recon:**  
