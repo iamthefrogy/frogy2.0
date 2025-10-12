@@ -8,7 +8,7 @@
 
 **Frogy 2.0** is an automated external reconnaissance and Attack Surface Management (ASM) toolkit designed to map out an organization's entire internet presence. It identifies assets, IP addresses, web applications, and other metadata across the public internet and then smartly prioritizes them with highest (most attractive) to lowest (least attractive) from an attacker's playground perspective.
 
-<img src="https://chintangurjar.com/images/frogy.png" alt="graphviz"/>
+<img src="https://chintangurjar.com/images/frogy.png"/>
 
 # Features
 
@@ -36,10 +36,9 @@ In this tool, **risk scoring** is based on the notion of **asset attractiveness*
 ---
 # Screenshots
 
-<img src="https://chintangurjar.com/images/frogyasm_s1.png"/>
-<img src="https://chintangurjar.com/images/frogyasm_s2.png"/>
-<img src="https://chintangurjar.com/images/frogyasm_s3.png"/>
-<img src="https://chintangurjar.com/images/frogyasm_s4.png"/>
+<img src="https://chintangurjar.com/images/frogyss3.png"/>
+<img src="https://chintangurjar.com/images/frogyss2.png"/>
+<img src="https://chintangurjar.com/images/frogyss1.png"/>
 
 ---
 
