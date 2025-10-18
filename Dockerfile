@@ -14,6 +14,7 @@ ARG NAABU_VER=latest
 ARG HTTPX_VER=latest
 ARG GAU_VER=latest
 ARG KATANA_VER=latest
+ARG TLSX_VER=latest
 
 RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@${SUBFINDER_VER} \
  && go install github.com/tomnomnom/assetfinder@${ASSETFINDER_VER} \
@@ -21,7 +22,8 @@ RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@${SUBFINDE
  && go install github.com/projectdiscovery/naabu/v2/cmd/naabu@${NAABU_VER} \
  && go install github.com/projectdiscovery/httpx/cmd/httpx@${HTTPX_VER} \
  && go install github.com/lc/gau/v2/cmd/gau@${GAU_VER} \
- && go install github.com/projectdiscovery/katana/cmd/katana@${KATANA_VER}
+ && go install github.com/projectdiscovery/katana/cmd/katana@${KATANA_VER} \
+ && go install github.com/projectdiscovery/tlsx/cmd/tlsx@${TLSX_VER}
 
 FROM ubuntu:24.04
 
