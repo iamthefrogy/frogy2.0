@@ -52,6 +52,12 @@ GAU_COUNT=0
 # Block Detection - The script will exit if the percentage of live websites found by httpx is lower than this threshold. Set to "0" to disable.
 BLOCK_DETECTION_THRESHOLD="20" # (Exit if < 20% success rate)
 
+declare -A CLOUD_IP_ASN_CACHE=()
+declare -A CLOUD_IP_PROVIDER_CACHE=()
+declare -A CLOUD_IP_NETWORK_CACHE=()
+declare -A CLOUD_IP_PTR_CACHE=()
+declare -A CLOUD_CNAME_CACHE=()
+
 ##############################################
 # Function: check_dependencies
 # Purpose: Verify all required external tools are installed before starting.
@@ -60,7 +66,7 @@ check_dependencies() {
 	info "Verifying required tools..."
 	local missing_tools=()
 	# Add ALL external commands used in the script to this list
-	local required_tools=("subfinder" "assetfinder" "dnsx" "naabu" "httpx" "katana" "jq" "curl" "whois" "dig" "openssl" "xargs" "unzip" "grep" "sed" "awk")
+	local required_tools=("subfinder" "assetfinder" "dnsx" "naabu" "httpx" "katana" "jq" "curl" "whois" "dig" "openssl" "tlsx" "xargs" "unzip" "grep" "sed" "awk")
 
 	for tool in "${required_tools[@]}"; do
 		if ! command -v "$tool" &>/dev/null; then
@@ -140,6 +146,495 @@ USE_GAU="true"
 NAABU_SCAN_MODE="${NAABU_SCAN_MODE:-auto}"
 
 ##############################################
+# Port catalogue for Naabu scans (top ports + category coverage)
+##############################################
+PORT_SPEC_FILE="assets/port-spec.txt"
+
+generate_port_list() {
+	local outfile="$1"
+	local spec_file="$PORT_SPEC_FILE"
+	local tmp
+	tmp=$(mktemp)
+	: >"$tmp"
+	if [[ -f "$spec_file" ]]; then
+		while IFS= read -r raw_spec; do
+			local spec
+			spec=$(echo "$raw_spec" | tr -d '[:space:]')
+			[[ -z "$spec" || "$spec" == \#* ]] && continue
+			if [[ "$spec" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+				local start=${BASH_REMATCH[1]}
+				local end=${BASH_REMATCH[2]}
+				if ((start <= end)); then
+					for ((port=start; port<=end; port++)); do
+						echo "$port" >>"$tmp"
+					done
+				fi
+			elif [[ "$spec" =~ ^[0-9]+$ ]]; then
+				echo "$spec" >>"$tmp"
+			else
+				warning "Skipping invalid port specification '$raw_spec' in $spec_file"
+			fi
+		done <"$spec_file"
+	else
+		warning "Port specification file '$spec_file' not found. Falling back to default top ports."
+		local -a fallback_ports=("7" "9" "13" "21-23" "25-26" "37" "53" "79-81" "88" "106" "110-111" "113" "119" "135" "139" "143-144" "179" "199" "389" "427" "443-445" "465" "513-515" "543-544" "548" "554" "587" "631" "646" "873" "990" "993" "995" "1025-1029" "1110" "1433" "1720" "1723" "1755" "1900" "2000-2001" "2049" "2121" "2717" "3000" "3128" "3306" "3389" "3986" "4899" "5000" "5009" "5051" "5060" "5101" "5190" "5357" "5432" "5631" "5666" "5800" "5900" "6000-6001" "6646" "7070" "8000" "8008-8009" "8080-8081" "8443" "8888" "9100" "9999-10000" "32768" "49152-49157")
+		for f_spec in "${fallback_ports[@]}"; do
+			if [[ "$f_spec" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+				local start=${BASH_REMATCH[1]}
+				local end=${BASH_REMATCH[2]}
+				for ((port=start; port<=end; port++)); do
+					echo "$port" >>"$tmp"
+				done
+			else
+				echo "$f_spec" >>"$tmp"
+			fi
+		done
+	fi
+	sort -n "$tmp" | uniq >"$outfile"
+	rm -f "$tmp"
+}
+
+join_unique() {
+	local delimiter="$1"
+	shift
+	if (( $# == 0 )); then
+		echo ""
+		return
+	fi
+	local -A seen=()
+	local -a unique=()
+	local item trimmed
+	for item in "$@"; do
+		trimmed=$(echo "$item" | tr -d '\r' | xargs)
+		[[ -z "$trimmed" ]] && continue
+		if [[ -z "${seen[$trimmed]:-}" ]]; then
+			seen[$trimmed]=1
+			unique+=("$trimmed")
+		fi
+	done
+	if (( ${#unique[@]} == 0 )); then
+		echo ""
+		return
+	fi
+	local IFS="$delimiter"
+	printf '%s' "${unique[*]}"
+}
+
+normalize_hostname() {
+	local value="$1"
+	value=$(echo "$value" | tr -d '\r' | tr '[:upper:]' '[:lower:]')
+	value=${value%.}
+	echo "$value"
+}
+
+enrich_cloud_ip_metadata() {
+	local ip="$1"
+	[[ -z "$ip" ]] && return
+	if [[ -n "${CLOUD_IP_ASN_CACHE[$ip]:-}" ]]; then
+		return
+	fi
+	local ptr=""
+	ptr=$(dig +short -x "$ip" 2>/dev/null | sed 's/\.$//' | paste -sd ', ' -)
+	CLOUD_IP_PTR_CACHE[$ip]="${ptr:-}"
+
+	local cymru_line
+	cymru_line=$(whois -h whois.cymru.com " -v $ip" 2>/dev/null | awk -F'|' '
+		NR>1 && $1 ~ /[0-9]/ {
+			for(i=1;i<=NF;i++) gsub(/^[ \t]+|[ \t]+$/, "", $i);
+			printf "%s|%s|%s\n",$1,$3,$7;
+			exit
+		}')
+
+	local asn="" provider="" network=""
+	if [[ -n "$cymru_line" ]]; then
+		asn=$(echo "$cymru_line" | cut -d'|' -f1)
+		network=$(echo "$cymru_line" | cut -d'|' -f2)
+		provider=$(echo "$cymru_line" | cut -d'|' -f3)
+	fi
+
+	local whois_tmp
+	whois_tmp=$(mktemp)
+	whois "$ip" >"$whois_tmp" 2>/dev/null || true
+
+	if [[ -z "$network" ]]; then
+		network=$(awk -F: '/^[Cc][Ii][Dd][Rr]/ {print $2; exit}' "$whois_tmp" | xargs)
+		if [[ -z "$network" ]]; then
+			network=$(awk -F: '/^NetRange/ {print $2; exit}' "$whois_tmp" | xargs)
+		fi
+	fi
+	if [[ -z "$asn" ]]; then
+		asn=$(awk -F: '/^origin/ {print $2; exit}' "$whois_tmp" | xargs)
+	fi
+	if [[ -z "$provider" ]]; then
+		provider=$(awk -F: '/^(OrgName|Org-name|descr|owner)/ {print $2; exit}' "$whois_tmp" | xargs)
+	fi
+	rm -f "$whois_tmp"
+
+	if [[ -n "$asn" && "$asn" != AS* ]]; then
+		asn="AS${asn}"
+	fi
+
+	CLOUD_IP_ASN_CACHE[$ip]="${asn:-}"
+	CLOUD_IP_PROVIDER_CACHE[$ip]="${provider:-}"
+	CLOUD_IP_NETWORK_CACHE[$ip]="${network:-}"
+	if [[ -z "${CLOUD_IP_PTR_CACHE[$ip]:-}" ]]; then
+		CLOUD_IP_PTR_CACHE[$ip]=""
+	fi
+}
+
+get_cloud_cname_chain() {
+	local host="$1"
+	[[ -z "$host" ]] && return
+	local key
+	key=$(normalize_hostname "$host")
+	local cached="${CLOUD_CNAME_CACHE[$key]:-__missing__}"
+	if [[ "$cached" != "__missing__" ]]; then
+		if [[ -z "$cached" ]]; then
+			return
+		fi
+		IFS='|' read -r -a cached_parts <<<"$cached"
+		printf '%s\n' "${cached_parts[@]}"
+		return
+	fi
+	local current="$host"
+	local -a chain=()
+	local depth=0
+	while (( depth < 10 )); do
+		local next
+		next=$(dig +short CNAME "$current" 2>/dev/null | head -n 1 | tr -d '\r')
+		next=$(echo "$next" | tr -d '[:space:]')
+		next=${next%.}
+		if [[ -z "$next" ]]; then
+			break
+		fi
+		chain+=("$next")
+		if [[ "$(normalize_hostname "$next")" == "$(normalize_hostname "$current")" ]]; then
+			break
+		fi
+		current="$next"
+		depth=$((depth + 1))
+	done
+	if (( ${#chain[@]} )); then
+		local joined
+		joined=$(printf '%s|' "${chain[@]}")
+		joined=${joined%|}
+		CLOUD_CNAME_CACHE[$key]="$joined"
+	else
+		CLOUD_CNAME_CACHE[$key]=""
+	fi
+	printf '%s\n' "${chain[@]}"
+}
+
+classify_cloud_asset() {
+	local host="$1"
+	local target="$2"
+	local tech_blob="$3"
+	local cdn_blob="$4"
+	local asn_blob="$5"
+	local rdns_blob="$6"
+	local tls_blob="$7"
+
+	local resource_type="Other"
+	local cloud_provider="Unknown"
+	local service_family="Unknown"
+	local load_balancer="N/A"
+	local waf="Unknown"
+	local storage="N/A"
+
+	local lower_target lower_tech lower_cdn lower_asn lower_rdns lower_tls
+	lower_target=$(normalize_hostname "$target")
+	lower_tech=$(echo "$tech_blob" | tr '[:upper:]' '[:lower:]')
+	lower_cdn=$(echo "$cdn_blob" | tr '[:upper:]' '[:lower:]')
+	lower_asn=$(echo "$asn_blob" | tr '[:upper:]' '[:lower:]')
+	lower_rdns=$(echo "$rdns_blob" | tr '[:upper:]' '[:lower:]')
+	lower_tls=$(echo "$tls_blob" | tr '[:upper:]' '[:lower:]')
+
+	if [[ -n "$lower_target" ]]; then
+		case "$lower_target" in
+			*.cloudfront.net)
+				resource_type="CDN"
+				cloud_provider="AWS"
+				service_family="CloudFront"
+				waf="CloudFront Edge"
+				;;
+			*.s3.amazonaws.com|*.s3-website-*.amazonaws.com|*s3.*.amazonaws.com*)
+				resource_type="Object Storage"
+				cloud_provider="AWS"
+				service_family="S3"
+				storage="AWS S3"
+				;;
+			*.elb.amazonaws.com)
+				resource_type="Load Balancer"
+				cloud_provider="AWS"
+				service_family="Elastic Load Balancing"
+				load_balancer="AWS ELB | ${target:-Unknown}"
+				;;
+			*.execute-api.*.amazonaws.com)
+				resource_type="API Gateway/Serverless Edge"
+				cloud_provider="AWS"
+				service_family="API Gateway"
+				;;
+			*.blob.core.windows.net)
+				resource_type="Object Storage"
+				cloud_provider="Azure"
+				service_family="Blob Storage"
+				storage="Azure Blob Storage"
+				;;
+			*.azureedge.net|*.azurefd.net)
+				resource_type="CDN"
+				cloud_provider="Azure"
+				service_family="Azure Front Door"
+				waf="Azure Front Door"
+				;;
+			*.trafficmanager.net)
+				resource_type="Load Balancer"
+				cloud_provider="Azure"
+				service_family="Traffic Manager"
+				load_balancer="Azure Traffic Manager | ${target:-Unknown}"
+				;;
+			*.azurewebsites.net)
+				resource_type="PaaS Web App"
+				cloud_provider="Azure"
+				service_family="App Service"
+				;;
+			*.appspot.com|*.r.appspot.com)
+				resource_type="PaaS Web App"
+				cloud_provider="GCP"
+				service_family="App Engine"
+				;;
+			*.run.app|*.cloudfunctions.net)
+				resource_type="API Gateway/Serverless Edge"
+				cloud_provider="GCP"
+				service_family="Cloud Run"
+				;;
+			*.storage.googleapis.com)
+				resource_type="Object Storage"
+				cloud_provider="GCP"
+				service_family="Cloud Storage"
+				storage="GCP Cloud Storage"
+				;;
+			*.vercel.app)
+				resource_type="PaaS Web App"
+				cloud_provider="Vercel"
+				service_family="Vercel Hosting"
+				;;
+			*.netlify.app)
+				resource_type="PaaS Web App"
+				cloud_provider="Netlify"
+				service_family="Netlify Hosting"
+				;;
+			*.herokuapp.com)
+				resource_type="PaaS Web App"
+				cloud_provider="Heroku"
+				service_family="Heroku"
+				;;
+			*.fly.dev)
+				resource_type="PaaS Web App"
+				cloud_provider="Fly.io"
+				service_family="Fly.io Apps"
+				;;
+		*.fastly.net|*.fastlylb.net)
+			resource_type="CDN"
+			cloud_provider="Fastly"
+			service_family="Fastly CDN"
+			waf="Fastly"
+			;;
+		*akamaihd.net|*.edgekey.net|*.edgesuite.net|*.akamai.net)
+			resource_type="CDN"
+			cloud_provider="Akamai"
+			service_family="Akamai CDN"
+			waf="Akamai"
+			;;
+		*.cdn.cloudflare.net|*.cloudflare.net|*.cloudflare.com)
+			resource_type="CDN"
+			cloud_provider="Cloudflare"
+			service_family="Cloudflare CDN"
+			waf="Cloudflare"
+			;;
+		*.oraclecloud.com)
+				if [[ "$lower_target" == *"objectstorage"* ]]; then
+					resource_type="Object Storage"
+					cloud_provider="Oracle"
+					service_family="Oracle Object Storage"
+					storage="Oracle Object Storage"
+				else
+					resource_type="Other"
+					cloud_provider="Oracle"
+					service_family="Oracle Cloud"
+				fi
+				;;
+		esac
+	fi
+
+	if [[ "$resource_type" == "Other" ]]; then
+		if echo "$lower_tls" | grep -q "cloudfront.net"; then
+			resource_type="CDN"
+			cloud_provider="AWS"
+			service_family="CloudFront"
+			waf="CloudFront Edge"
+		elif echo "$lower_tls" | grep -q "azureedge.net"; then
+			resource_type="CDN"
+			cloud_provider="Azure"
+			service_family="Azure CDN"
+			waf="Azure Front Door"
+		elif echo "$lower_tls" | grep -q "fastly.net"; then
+			resource_type="CDN"
+			cloud_provider="Fastly"
+			service_family="Fastly CDN"
+			waf="Fastly"
+		elif echo "$lower_tls" | grep -q "cdn.cloudflare.net"; then
+			resource_type="CDN"
+			cloud_provider="Cloudflare"
+			service_family="Cloudflare CDN"
+			waf="Cloudflare"
+		fi
+	fi
+	if [[ "$resource_type" == "Other" ]]; then
+		if echo "$lower_rdns" | grep -q "cloudfront.net"; then
+			resource_type="CDN"
+			cloud_provider="AWS"
+			service_family="CloudFront"
+			waf="CloudFront Edge"
+		elif echo "$lower_rdns" | grep -q "akamai"; then
+			resource_type="CDN"
+			cloud_provider="Akamai"
+			service_family="Akamai CDN"
+			waf="Akamai"
+		elif echo "$lower_rdns" | grep -q "fastly"; then
+			resource_type="CDN"
+			cloud_provider="Fastly"
+			service_family="Fastly CDN"
+			waf="Fastly"
+		elif echo "$lower_rdns" | grep -q "cloudflare"; then
+			resource_type="CDN"
+			cloud_provider="Cloudflare"
+			service_family="Cloudflare CDN"
+			waf="Cloudflare"
+		fi
+	fi
+
+	if echo "$lower_cdn" | grep -q "cloudflare"; then
+		waf="Cloudflare"
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="Cloudflare"
+			service_family="Cloudflare CDN"
+		fi
+	elif echo "$lower_cdn" | grep -q "akamai"; then
+		waf="Akamai"
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="Akamai"
+			service_family="Akamai CDN"
+		fi
+	elif echo "$lower_cdn" | grep -q "fastly"; then
+		waf="Fastly"
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="Fastly"
+			service_family="Fastly CDN"
+		fi
+	elif echo "$lower_cdn" | grep -q "cloudfront"; then
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="AWS"
+			service_family="CloudFront"
+		fi
+		waf="CloudFront Edge"
+	elif echo "$lower_cdn" | grep -q "azure"; then
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="Azure"
+			service_family="Azure CDN"
+		fi
+	fi
+
+	if echo "$lower_tech" | grep -q "cloudflare"; then
+		waf="Cloudflare"
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="Cloudflare"
+			service_family="Cloudflare CDN"
+		fi
+	fi
+	if echo "$lower_tech" | grep -q "front door"; then
+		waf="Azure Front Door"
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="Azure"
+			service_family="Azure Front Door"
+		fi
+	fi
+	if echo "$lower_tech" | grep -q "cloudfront"; then
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="AWS"
+			service_family="CloudFront"
+		fi
+		waf="CloudFront Edge"
+	fi
+	if echo "$lower_tech" | grep -q "akamai"; then
+		waf="Akamai"
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="Akamai"
+			service_family="Akamai CDN"
+		fi
+	fi
+	if echo "$lower_tech" | grep -q "fastly"; then
+		waf="Fastly"
+		if [[ "$resource_type" == "Other" ]]; then
+			resource_type="CDN"
+			cloud_provider="Fastly"
+			service_family="Fastly CDN"
+		fi
+	fi
+
+	if [[ "$cloud_provider" == "Unknown" ]]; then
+		if echo "$lower_asn" | grep -qE "amazon|aws"; then
+			cloud_provider="AWS"
+		elif echo "$lower_asn" | grep -q "microsoft"; then
+			cloud_provider="Azure"
+		elif echo "$lower_asn" | grep -q "google"; then
+			cloud_provider="GCP"
+		elif echo "$lower_asn" | grep -q "cloudflare"; then
+			cloud_provider="Cloudflare"
+		elif echo "$lower_asn" | grep -q "fastly"; then
+			cloud_provider="Fastly"
+		elif echo "$lower_asn" | grep -q "akamai"; then
+			cloud_provider="Akamai"
+		elif echo "$lower_asn" | grep -q "digitalocean"; then
+			cloud_provider="DigitalOcean"
+		elif echo "$lower_asn" | grep -q "oracle"; then
+			cloud_provider="Oracle"
+		elif echo "$lower_asn" | grep -q "ibm"; then
+			cloud_provider="IBM"
+		elif echo "$lower_asn" | grep -q "hetzner"; then
+			cloud_provider="Hetzner"
+		fi
+	fi
+
+	if [[ "$resource_type" == "Other" && "$cloud_provider" != "Unknown" ]]; then
+		resource_type="Other"
+		service_family="${cloud_provider} Cloud"
+	fi
+
+	if [[ "$resource_type" == "CDN" && "$waf" == "Unknown" && "$cloud_provider" != "Unknown" ]]; then
+		waf="$cloud_provider"
+	fi
+
+	if [[ "$resource_type" == "Object Storage" && "$waf" == "Unknown" ]]; then
+		waf="Direct Origin"
+	fi
+
+	if [[ "$storage" == "N/A" && "$resource_type" == "Object Storage" ]]; then
+		storage="${cloud_provider} Object Storage"
+	fi
+
+	printf '%s|%s|%s|%s|%s|%s' "$resource_type" "$cloud_provider" "$service_family" "$load_balancer" "$waf" "$storage"
+}
+
+##############################################
 # Logging Functions (with timestamps)
 ##############################################
 # info: print informational messages
@@ -216,7 +711,7 @@ run_chaos() {
 ##############################################
 run_subfinder() {
 	if [[ "$USE_SUBFINDER" == "true" ]]; then
-		info "[1/15] Running Subfinder..."
+		info "[1/17] Running Subfinder..."
 		subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent -all -o "$RUN_DIR/subfinder.txt" >/dev/null 2>&1 || true
 		merge_and_count "$RUN_DIR/subfinder.txt" "Subfinder"
 	fi
@@ -230,7 +725,7 @@ run_assetfinder() {
 	if [[ "$USE_ASSETFINDER" != "true" ]]; then
 		return 0
 	fi
-	info "[2/15] Running Assetfinder..."
+info "[2/17] Running Assetfinder..."
 	local assetfinder_output="$RUN_DIR/assetfinder.txt"
 	>"$assetfinder_output"
 	local asset_status=0
@@ -251,7 +746,7 @@ run_assetfinder() {
 # Purpose: Query crt.sh for certificate data and extract subdomains.
 ##############################################
 run_crtsh() {
-	info "[3/15] Running crt.sh..."
+info "[3/17] Running crt.sh..."
 	local crt_file="$RUN_DIR/whois.txt"
 	>"$crt_file"
 	local crt_status=0
@@ -298,7 +793,7 @@ run_gau() {
 	if [[ "$USE_GAU" != "true" ]]; then
 		return 0
 	fi
-	info "[4/15] Running GAU…"
+info "[4/17] Running GAU…"
 
 	mkdir -p "$RUN_DIR/raw_output/gau"
 	local raw_urls="$RUN_DIR/raw_output/gau/urls.txt"
@@ -346,7 +841,7 @@ run_gau() {
 ##############################################
 run_dnsx() {
 	if [[ "$USE_DNSX" == "true" ]]; then
-		info "[6/15] Running dnsx..."
+		info "[6/17] Running dnsx..."
 		dnsx -silent \
 			-rl 50 \
 			-t 25 \
@@ -363,21 +858,28 @@ run_dnsx() {
 	fi
 }
 
-##############################################
 # Function: run_naabu
 # Purpose: Run naabu port scanner against discovered subdomains.
 ##############################################
 run_naabu() {
 	if [[ "$USE_NAABU" == "true" ]]; then
-		info "[7/15] Running naabu..."
+		info "[7/17] Running naabu..."
 		if [ ! -s "$MASTER_SUBS" ]; then
 			warning "Master subdomains file is empty. Skipping naabu."
 			return
 		fi
+		local port_file="$RUN_DIR/naabu_ports.txt"
+		generate_port_list "$port_file"
+        local port_list
+        port_list=$(paste -sd, "$port_file")
+		if [[ -z "$port_list" ]]; then
+			warning "Port list generation returned empty set; falling back to default top 100 set."
+			port_list="7,9,13,21,22,23,25,26,37,53,79,80,81,88,106,110,111,113,119,135,139,143,144,179,199,389,427,443,444,445,465,513,514,515,548,554,587,631,873,990,993,995,1025,1026,1027,1028,1029,1110,1433,1521,1723,1900,2000,2049,2121,2717,3000,3128,3306,3389,3986,4899,5000,5009,5051,5060,5101,5190,5357,5432,5631,5666,5800,5900,6000,6001,6646,7070,8000,8008,8009,8080,8081,8443,8888,9100,9999,10000,32768,49152,49153,49154,49155,49156,49157"
+		fi
 		local -a naabu_base_args=(
 			-silent
 			-l "$MASTER_SUBS"
-			-p "7,9,13,21,22,23,25,26,37,53,66,79,80,81,88,106,110,111,113,119,135,139,143,144,179,199,443,457,465,513,514,515,543,544,548,554,587,631,646,7647,8000,8001,8008,8080,8081,8085,8089,8090,873,8880,8888,9000,9080,9100,990,993,995,1024,1025,1026,1027,1028,1029,10443,1080,1100,1110,1241,1352,1433,1434,1521,1720,1723,1755,1900,1944,2000,2001,2049,2121,2301,2717,3000,3128,32768,3306,3389,3986,4000,4001,4002,4100,4567,4899,49152-49157,5000,5001,5009,5051,5060,5101,5190,5357,5432,5631,5666,5800,5801,5802,5900,5985,6000,6001,6346,6347,6646,7001,7002,7070,7170,7777,8800,9999,10000,20000,30821"
+			-p "$port_list"
 			-o "$RUN_DIR/naabu.json"
 			-json
 		)
@@ -413,6 +915,146 @@ run_naabu() {
 			> "$final_urls_ports"
 		fi
 	fi
+	generate_portscan_summary
+}
+
+##############################################
+# Function: generate_portscan_summary
+# Purpose: Consolidate raw naabu output into per-IP structures consumed by the report.
+##############################################
+generate_portscan_summary() {
+	local naabu_raw="$RUN_DIR/naabu.json"
+	local portscan_file="$RUN_DIR/portscan.json"
+	if [[ -s "$naabu_raw" ]]; then
+		if ! jq -s '
+			map(select((.ip // "") != "" and (.port // "") != "")) |
+			group_by(.ip) |
+			map({
+				ip: .[0].ip,
+				sources: (map(.host) | map(select(. != null and . != "")) | unique | sort),
+				services: (
+					group_by(.port) |
+					map({
+						port: (.[0].port | tonumber? // .[0].port),
+						protocol: (.[0].protocol // "tcp"),
+						hosts: (map(.host) | map(select(. != null and . != "")) | unique | sort)
+					}) | sort_by(.port)
+				)
+			}) | sort_by(.ip)
+		' "$naabu_raw" >"$portscan_file"; then
+			warning "Failed to consolidate naabu output; writing empty portscan dataset."
+			echo "[]" >"$portscan_file"
+		fi
+	else
+		echo "[]" >"$portscan_file"
+	fi
+}
+
+##############################################
+# Function: generate_ip_intel
+# Purpose: Build PTR, ASN, and network metadata for discovered IPs.
+##############################################
+generate_ip_intel() {
+	local intel_file="$RUN_DIR/ip_enrichment.json"
+	local ip_candidates="$RUN_DIR/ip_candidates.txt"
+	>"$ip_candidates"
+
+	if [[ -s "$RUN_DIR/dnsx.json" ]]; then
+		jq -r '.a[]?, .aaaa[]?' "$RUN_DIR/dnsx.json" 2>/dev/null >>"$ip_candidates"
+	fi
+	if [[ -s "$RUN_DIR/portscan.json" ]]; then
+		jq -r '.[].ip' "$RUN_DIR/portscan.json" 2>/dev/null >>"$ip_candidates"
+	fi
+	if [[ -s "$MASTER_SUBS" ]]; then
+		awk '/^([0-9]{1,3}\.){3}[0-9]{1,3}$/ || /:/' "$MASTER_SUBS" >>"$ip_candidates"
+	fi
+
+	if [[ ! -s "$ip_candidates" ]]; then
+		echo "[]" >"$intel_file"
+		return
+	fi
+
+	sort -u "$ip_candidates" | sed '/^$/d' >"$ip_candidates.sorted"
+	mv "$ip_candidates.sorted" "$ip_candidates"
+
+	echo "[" >"$intel_file"
+	local first_entry=true
+	while IFS= read -r ip; do
+		[[ -z "$ip" ]] && continue
+		local ptr_records
+		local ptr_raw
+		ptr_raw=$(dig +short -x "$ip" 2>/dev/null | sed 's/\.$//' || true)
+		if [[ -n "$ptr_raw" ]]; then
+			ptr_records=$(printf '%s\n' "$ptr_raw" | paste -sd ', ' -)
+		else
+			ptr_records=""
+		fi
+
+		local cymru_line=""
+		local cymru_output
+		cymru_output=$(whois -h whois.cymru.com " -v $ip" 2>/dev/null || true)
+		if [[ -n "$cymru_output" ]]; then
+			cymru_line=$(printf '%s\n' "$cymru_output" | awk -F'|' '
+				NR>1 && $1 ~ /[0-9]/ {
+					for(i=1;i<=NF;i++) gsub(/^[ \t]+|[ \t]+$/, "", $i);
+					printf "%s|%s|%s\n",$1,$3,$7;
+					exit
+				}' || true)
+		fi
+
+		local asn="" network="" provider=""
+		if [[ -n "$cymru_line" ]]; then
+			asn=$(echo "$cymru_line" | cut -d'|' -f1)
+			network=$(echo "$cymru_line" | cut -d'|' -f2)
+			provider=$(echo "$cymru_line" | cut -d'|' -f3)
+		fi
+
+		local whois_file
+		whois_file=$(mktemp)
+		whois "$ip" >"$whois_file" 2>/dev/null || true
+
+		if [[ -z "$network" ]]; then
+			network=$(awk -F: '/^[Cc][Ii][Dd][Rr]/ {print $2; exit}' "$whois_file" | xargs)
+			if [[ -z "$network" ]]; then
+				network=$(awk -F: '/^NetRange/ {print $2; exit}' "$whois_file" | xargs)
+			fi
+		fi
+		if [[ -z "$asn" ]]; then
+			asn=$(awk -F: '/^origin/ {print $2; exit}' "$whois_file" | xargs)
+		fi
+		if [[ -z "$provider" ]]; then
+			provider=$(awk -F: '/^(OrgName|Org-name|descr|owner)/ {print $2; exit}' "$whois_file" | xargs)
+		fi
+		rm -f "$whois_file"
+
+		if [[ -n "$asn" && "$asn" != AS* ]]; then
+			asn="AS${asn}"
+		fi
+
+		local json_entry
+		json_entry=$(jq -n \
+			--arg ip "$ip" \
+			--arg ptr "${ptr_records:-}" \
+			--arg asn "${asn:-}" \
+			--arg provider "${provider:-}" \
+			--arg network "${network:-}" \
+			'{
+				ip: $ip,
+				ptr: ($ptr | select(length>0)),
+				asn: ($asn | select(length>0)),
+				provider: ($provider | select(length>0)),
+				network: ($network | select(length>0))
+			}')
+
+		if [[ "$first_entry" == true ]]; then
+			first_entry=false
+		else
+			echo "," >>"$intel_file"
+		fi
+		echo "  $json_entry" >>"$intel_file"
+	done <"$ip_candidates"
+	echo "]" >>"$intel_file"
+	rm -f "$ip_candidates"
 }
 
 ##############################################
@@ -421,7 +1063,7 @@ run_naabu() {
 ##############################################
 run_httpx() {
 	if [[ "$USE_HTTPX" == "true" ]]; then
-		info "[8/15] Running httpx..."
+		info "[8/17] Running httpx..."
 		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 		local httpx_json_file="$RUN_DIR/httpx.json"
 
@@ -538,7 +1180,7 @@ gather_screenshots() {
 # Purpose: Crawl live URLs (from httpx.json) and save per-URL links into one JSON file.
 ##############################################
 run_katana() {
-	info "[9/15] Crawling links with Katana..."
+info "[9/17] Crawling links with Katana..."
 	local httpx_file="$RUN_DIR/httpx.json"
 	local output_file="$RUN_DIR/katana_links.json"
 
@@ -583,7 +1225,7 @@ run_katana() {
 #   4. Returns a JSON object indicating if login was found and lists the reasons.
 ##############################################
 run_login_detection() {
-	info "[10/15] Detecting Login panels..."
+info "[10/17] Detecting Login panels..."
 	local input_file="$RUN_DIR/httpx.json"
 	local output_file="$RUN_DIR/login.json"
 
@@ -760,54 +1402,210 @@ run_login_detection() {
 	rm -rf -- "$tmp_dir"
 }
 
+run_tls_inventory() {
+	info "[11/17] Building TLS certificate inventory..."
+	local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
+	local tls_json="$RUN_DIR/tls_inventory.json"
+	local tlsx_raw="$RUN_DIR/tls_inventory_raw.jsonl"
+	local tlsx_log="$RUN_DIR/logs/tlsx.log"
+
+	if [[ ! -s "$final_urls_ports" ]]; then
+		info "No open ports detected; TLS inventory will be empty."
+		echo "[]" >"$tls_json"
+		return
+	fi
+
+	if ! tlsx -l "$final_urls_ports" -j >"$tlsx_raw" 2>>"$tlsx_log"; then
+		warning "tlsx scan failed; TLS inventory will be empty. Check $tlsx_log for details."
+		echo "[]" >"$tls_json"
+		rm -f "$tlsx_raw"
+		return
+	fi
+
+	if ! jq -cs '
+		def normalize_port($raw):
+			($raw // "" | tostring) as $p
+			| if ($p | length) == 0 then "443" else $p end;
+		def bracket_host($h):
+			($h // "") as $host
+			| if ($host | length) == 0 then ""
+			  elif (($host | contains(":")) and (($host | startswith("[")) | not) and (($host | endswith("]")) | not))
+			  then "[" + $host + "]"
+			  else $host
+			  end;
+		def format_tls_version($v):
+			if $v == null or $v == "" then ""
+			elif $v == "tls13" then "TLS 1.3"
+			elif $v == "tls12" then "TLS 1.2"
+			elif $v == "tls11" then "TLS 1.1"
+			elif $v == "tls10" then "TLS 1.0"
+			elif $v == "ssl30" then "SSL 3.0"
+			else $v
+			end;
+		map(
+			{
+				Host: (.host // ""),
+				IP: (.ip // ""),
+				Port: normalize_port(.port),
+				Timestamp: (.timestamp // ""),
+				ProbeStatus: (.probe_status // false),
+				TLSVersion: format_tls_version(.tls_version // ""),
+				Cipher: (.cipher // ""),
+				NotBefore: (.not_before // ""),
+				NotAfter: (.not_after // ""),
+				SubjectDN: (.subject_dn // ""),
+				SubjectCN: (.subject_cn // ""),
+				SubjectAN: (.subject_an // [] | map(select(. != null and . != ""))),
+				Serial: (.serial // ""),
+				IssuerDN: (.issuer_dn // ""),
+				IssuerCN: (.issuer_cn // ""),
+				IssuerOrg: (.issuer_org // [] | map(select(. != null and . != ""))),
+				TLSConnection: (.tls_connection // ""),
+				SNI: (.sni // "")
+			}
+			| .EndpointURL = (
+				if .Host == "" then ""
+				else "https://" + bracket_host(.Host) + (if .Port == "443" then "" else ":" + .Port end)
+				end
+			)
+			| .DaysUntilExpiry = (
+				(.NotAfter // "") as $na
+				| if ($na | length) == 0 then null
+				  else
+					($na | fromdateiso8601? // null) as $exp
+					| if $exp then ((($exp - now) / 86400) | floor)
+					  else null
+					  end
+				  end
+			)
+			| .HighestVersion = (.TLSVersion // "")
+			| .VersionSummary = (.TLSVersion // "")
+			| .CertificateIssuer = (.IssuerDN // .IssuerCN // "")
+			| .ValidFrom = (.NotBefore // "")
+			| .ValidTo = (.NotAfter // "")
+			| .Domain = (.Host // "")
+			| .DeprecatedVersions = []
+			| .CertificateSubjectSummary = (.SubjectCN // "")
+			| .CertificateSubjectDN = (.SubjectDN // "")
+			| .CertificateCommonName = (.SubjectCN // "")
+			| .CertificateSANs = .SubjectAN
+			| .PerfectForwardSecrecy = ""
+			| .CipherStrength = ""
+			| .CertificateTransparency = ""
+			| .WeakCiphers = []
+			| .Notes = ""
+			| .HandshakeError = (if .ProbeStatus then "N/A" else "Handshake failed" end)
+			| .HostnameValidationSupported = ""
+			| .SANSummary = (if (.SubjectAN | length) > 0 then (.SubjectAN | join(", ")) else "" end)
+		)
+	' "$tlsx_raw" >"$tls_json"; then
+		warning "Failed to process tlsx output; TLS inventory will be empty."
+		echo "[]" >"$tls_json"
+	fi
+
+	rm -f "$tlsx_raw"
+}
+
 ##############################################
 # Security Compliance and Hygine Checks
 ##############################################
 run_security_compliance() {
-	info "[11/15] Analyzing security hygiene using..."
-	local output_file="$RUN_DIR/securitycompliance.json"
-	local sec_workers="${SEC_WORKERS:-6}"
-	if (( sec_workers < 1 )); then
-		sec_workers=1
-	fi
+	info "[12/17] Analyzing security hygiene using..."
+	local compliance_output="$RUN_DIR/securitycompliance.json"
+	local headers_output="$RUN_DIR/sec_headers.json"
+	local compliance_jsonl="$RUN_DIR/securitycompliance.jsonl"
+	local headers_jsonl="$RUN_DIR/sec_headers.jsonl"
+	: >"$compliance_jsonl"
+	: >"$headers_jsonl"
+
 	local dig_opts=("+time=3" "+tries=1")
 
-	# Ensure the MASTER_SUBS and httpx.json files exist.
 	if [ ! -f "$MASTER_SUBS" ]; then
 		echo "Error: MASTER_SUBS file not found!" >&2
 		return 1
 	fi
-	if [ ! -f "$RUN_DIR/httpx.json" ]; then
-		echo "Error: httpx.json not found!" >&2
-		return 1
+
+	local dns_map_file
+	dns_map_file=$(mktemp)
+	if [[ -s "$RUN_DIR/dnsx.json" ]]; then
+		jq -cs '
+			[ .[] | if type=="array" then .[] else . end | select(type=="object") ]
+			| group_by(((.host // "") | ascii_downcase)) |
+			map({
+				key: (.[0].host // "" | ascii_downcase),
+				value: {
+					host: (.[0].host // ""),
+					status: (.[0].status_code // ""),
+					a: (reduce .[] as $d ([]; . + ($d.a // []) + (($d.raw_resp.Answer // []) | map(select(.Hdr.Rrtype == 1) | .A)))) | unique | map(select(. != null and . != "")),
+					cname: (reduce .[] as $d ([]; . + ($d.cname // []) + (($d.raw_resp.Answer // []) | map(select(.Hdr.Rrtype == 5) | .Target)))) | unique | map(select(. != null and . != "")),
+					resolver: (reduce .[] as $d ([]; . + ($d.resolver // []))) | unique | map(select(. != null and . != ""))
+				}
+			}) |
+			map(select(.key != "")) |
+			from_entries
+		' "$RUN_DIR/dnsx.json" >"$dns_map_file" || echo "{}" >"$dns_map_file"
+	else
+		echo "{}" >"$dns_map_file"
 	fi
 
-	# Create a temporary directory to store intermediate JSON records.
-	local temp_dir
-	temp_dir=$(mktemp -d)
+	local tls_host_map_file
+	local tls_endpoint_map_file
+	tls_host_map_file=$(mktemp)
+	tls_endpoint_map_file=$(mktemp)
+	if [[ -s "$RUN_DIR/tls_inventory.json" ]]; then
+		jq -c '
+			group_by(((.Host // .host // "") | ascii_downcase)) |
+			map({ key: (.[0].Host // .[0].host // "" | ascii_downcase), value: . }) |
+			map(select(.key != "")) |
+			from_entries
+		' "$RUN_DIR/tls_inventory.json" >"$tls_host_map_file" || echo "{}" >"$tls_host_map_file"
+		jq -c '
+			map(select(((.Host // .host // "") | length) > 0 and ((.Port // .port // "") | tostring | length) > 0)) |
+			map({
+				key: (((.Host // .host // "") | ascii_downcase) + "|" + ((.Port // .port // "") | tostring)),
+				value: .
+			}) |
+			map(select(.key | length > 1)) |
+			from_entries
+		' "$RUN_DIR/tls_inventory.json" >"$tls_endpoint_map_file" || echo "{}" >"$tls_endpoint_map_file"
+	else
+		echo "{}" >"$tls_host_map_file"
+		echo "{}" >"$tls_endpoint_map_file"
+	fi
 
-	# Split httpx results by domain to avoid repeated jq scans.
 	local httpx_split_dir
 	httpx_split_dir=$(mktemp -d)
 	if [ -s "$RUN_DIR/httpx.json" ]; then
 		while IFS=$'\t' read -r dom record; do
+			dom=$(echo "$dom" | tr -d '\r' | xargs)
 			[[ -z "$dom" || -z "$record" ]] && continue
 			printf '%s\n' "$record" >>"$httpx_split_dir/${dom}.jsonl"
-		done < <(jq -rc '[(.input | split(":")[0]), tostring] | @tsv' "$RUN_DIR/httpx.json")
+		done < <(jq -rc '(if type=="array" then .[] else . end) | [((.input // .url // .host // "") | sub("^https?://"; "") | split("/")[0] | split(":")[0]), tostring] | @tsv' "$RUN_DIR/httpx.json")
 	fi
 
-	process_security_domain() {
-		local domain="$1"
-		local safe_domain="$2"
-		local records_file="$3"
-		local out_dir="$4"
+	while IFS= read -r domain || [[ -n "$domain" ]]; do
+		domain=$(echo "$domain" | tr -d '\r' | xargs)
+		[[ -z "$domain" ]] && continue
+		local domain_key
+		domain_key=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
 
-		[ -z "$domain" ] && return
-		local output_file_path="$out_dir/${safe_domain}.jsonl"
-		>"$output_file_path"
+		local dns_entry
+		dns_entry=$(jq -c --arg key "$domain_key" '.[$key] // null' "$dns_map_file")
+		local dns_status dns_resolvers dns_a dns_cname
+		if [[ "$dns_entry" != "null" ]]; then
+			dns_status=$(echo "$dns_entry" | jq -r '.status // ""')
+			dns_resolvers=$(echo "$dns_entry" | jq -r '(.resolver // []) | join("\n")')
+			dns_a=$(echo "$dns_entry" | jq -r '(.a // []) | join("\n")')
+			dns_cname=$(echo "$dns_entry" | jq -r '(.cname // []) | join("\n")')
+		else
+			dns_status=""
+			dns_resolvers=""
+			dns_a=""
+			dns_cname=""
+		fi
 
-		# --- Domain-level DNS Checks ---
 		local spf dkim dmarc dnskey dnssec ns txt srv ptr mx soa caa
+		local a_records aaaa_records cname_records zone_transfer whois_summary
 
 		spf=$(dig "${dig_opts[@]}" +short TXT "$domain" 2>/dev/null | grep -i "v=spf1" | head -n 1 || true)
 		[ -z "$spf" ] && spf="No SPF Record"
@@ -829,63 +1627,213 @@ run_security_compliance() {
 		[ -z "$ns" ] && ns="No NS records found"
 
 		txt=$(dig "${dig_opts[@]}" +short TXT "$domain" 2>/dev/null || true)
-		[ -z "$txt" ] && txt="No TXT records found"
+		[ -z "$txt" ] && txt=""
 
 		srv=$(dig "${dig_opts[@]}" +short SRV "$domain" 2>/dev/null || true)
-		[ -z "$srv" ] && srv="No SRV records found"
+		[ -z "$srv" ] && srv=""
 
-		local a_record ptr=""
-		a_record=$(dig "${dig_opts[@]}" +short A "$domain" 2>/dev/null | head -n 1)
+		a_records="$dns_a"
+		if [ -z "$a_records" ]; then
+			a_records=$(dig "${dig_opts[@]}" +short A "$domain" 2>/dev/null | sed '/^$/d' || true)
+		fi
+
+		local a_record=""
+		ptr=""
+		if [ -n "$a_records" ]; then
+			a_record=$(printf '%s\n' "$a_records" | head -n 1)
+		fi
 		if [ -n "$a_record" ]; then
 			ptr=$(dig "${dig_opts[@]}" +short -x "$a_record" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)
 		fi
-		[ -z "$ptr" ] && ptr="No PTR record found"
+		[ -z "$ptr" ] && ptr=""
+
+		aaaa_records=$(dig "${dig_opts[@]}" +short AAAA "$domain" 2>/dev/null | sed '/^$/d' || true)
+
+		cname_records="$dns_cname"
+		if [ -z "$cname_records" ]; then
+			cname_records=$(dig "${dig_opts[@]}" +short CNAME "$domain" 2>/dev/null | sed '/^$/d' || true)
+		fi
 
 		mx=$(dig "${dig_opts[@]}" +short MX "$domain" 2>/dev/null || true)
-		[ -z "$mx" ] && mx="No MX records found"
+		[ -z "$mx" ] && mx=""
 
 		soa=$(dig "${dig_opts[@]}" +short SOA "$domain" 2>/dev/null || true)
-		[ -z "$soa" ] && soa="No SOA record found"
+		[ -z "$soa" ] && soa=""
 
 		caa=$(dig "${dig_opts[@]}" +short CAA "$domain" 2>/dev/null || true)
-		[ -z "$caa" ] && caa="No CAA records found"
+		[ -z "$caa" ] && caa=""
 
-		local record_found=false
-		if [[ -f "$records_file" ]]; then
-			while IFS= read -r record_line || [ -n "$record_line" ]; do
+		zone_transfer="AXFR Not Permitted"
+		if [ -z "$ns" ] || [ "$ns" = "No NS records found" ]; then
+			zone_transfer="NS data unavailable"
+		else
+			while IFS= read -r ns_host || [ -n "$ns_host" ]; do
+				ns_host=$(echo "$ns_host" | tr -d '\r' | xargs)
+				[[ -z "$ns_host" ]] && continue
+				ns_host=${ns_host%.}
+				local axfr_output
+				axfr_output=$(timeout 6 dig +time=5 +tries=1 @"$ns_host" "$domain" AXFR 2>/dev/null | head -n 20 || true)
+				if [ -z "$axfr_output" ]; then
+					continue
+				fi
+				if echo "$axfr_output" | grep -qiE 'transfer failed|timed out|refused|denied|not implemented|connection refused|communications error|SERVFAIL'; then
+					continue
+				fi
+				if echo "$axfr_output" | grep -q $'\tIN\t'; then
+					zone_transfer="AXFR Permitted via $ns_host"
+					break
+				fi
+			done <<<"$ns"
+		fi
+
+		if ! command -v whois >/dev/null 2>&1; then
+			whois_summary="WHOIS client unavailable"
+		else
+			local whois_raw
+			whois_raw=$(whois "$domain" 2>/dev/null || true)
+			if echo "$whois_raw" | grep -qiE 'limit exceeded|quota exceeded|rate limit|exceeded the maximum number|WHOIS LIMIT'; then
+				whois_summary="WHOIS query cap reached"
+			elif [ -z "$whois_raw" ]; then
+				whois_summary="WHOIS data unavailable"
+			else
+				local registrar created updated expires registrant_org registrant_country
+				for pattern in "Registrar:" "Sponsoring Registrar:" "Registrar Name:"; do
+					registrar=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+					[ -n "$registrar" ] && break
+				done
+
+				for pattern in "Creation Date:" "Created On:" "Domain Registration Date:" "Domain Create Date:" "Registered On:"; do
+					created=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+					[ -n "$created" ] && break
+				done
+
+				for pattern in "Updated Date:" "Last Updated On:" "Domain Last Updated Date:" "Modified:"; do
+					updated=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+					[ -n "$updated" ] && break
+				done
+
+				for pattern in "Expiration Date:" "Expiry Date:" "Registry Expiry Date:" "Registrar Registration Expiration Date:" "Domain Expiration Date:"; do
+					expires=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+					[ -n "$expires" ] && break
+				done
+
+				for pattern in "Registrant Organization:" "OrgName:" "Organisation Name:"; do
+					registrant_org=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+					[ -n "$registrant_org" ] && break
+				done
+
+				for pattern in "Registrant Country:" "Country:"; do
+					registrant_country=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+					[ -n "$registrant_country" ] && break
+				done
+
+				whois_summary=$(printf "Registrar: %s\nCreated: %s\nUpdated: %s\nExpires: %s\nOrg: %s\nCountry: %s" \
+					"${registrar:-Unknown}" "${created:-Unknown}" "${updated:-Unknown}" "${expires:-Unknown}" \
+					"${registrant_org:-Unknown}" "${registrant_country:-Unknown}")
+			fi
+		fi
+
+		local tls_entry ssl_version ssl_issuer cert_expiry
+		tls_entry=$(jq -c --arg key "$domain_key" '.[$key] // []' "$tls_host_map_file")
+		if [[ "$tls_entry" != "[]" ]]; then
+			ssl_version=$(echo "$tls_entry" | jq -r '[.[]? | (.TLSVersion // .HighestVersion // .VersionSummary) | select(. != null and . != "")] | first? // "N/A"')
+			ssl_issuer=$(echo "$tls_entry" | jq -r '[.[]? | (.IssuerDN // .CertificateIssuer // .IssuerCN) | select(. != null and . != "")] | first? // "N/A"')
+			cert_expiry=$(echo "$tls_entry" | jq -r '[.[]? | (.NotAfter // .ValidTo) | select(. != null and . != "")] | first? // "N/A"')
+		else
+			ssl_version="N/A"
+			ssl_issuer="N/A"
+			cert_expiry="N/A"
+		fi
+
+		jq -n \
+			--arg domain "$domain" \
+			--arg url "N/A" \
+			--arg spf "$spf" \
+			--arg dkim "$dkim" \
+			--arg dmarc "$dmarc" \
+			--arg dnssec "$dnssec" \
+			--arg ns "$ns" \
+			--arg txt "$txt" \
+			--arg srv "$srv" \
+			--arg ptr "$ptr" \
+			--arg mx "$mx" \
+			--arg soa "$soa" \
+			--arg caa "$caa" \
+			--arg arecords "$a_records" \
+			--arg aaaarecords "$aaaa_records" \
+			--arg cname "$cname_records" \
+			--arg zonetransfer "$zone_transfer" \
+			--arg whois "$whois_summary" \
+			--arg ssl_version "$ssl_version" \
+			--arg ssl_issuer "$ssl_issuer" \
+			--arg cert_expiry "$cert_expiry" \
+			--arg dns_status "${dns_status:-}" \
+			--arg resolvers "${dns_resolvers:-}" \
+			'{
+        Domain: $domain,
+        URL: $url,
+        "SPF Record": $spf,
+        "DKIM Record": $dkim,
+        "DMARC Record": $dmarc,
+        "DNSSEC Status": $dnssec,
+        "NS Records": $ns,
+        "TXT Records": $txt,
+        "SRV Records": $srv,
+        "PTR Record": $ptr,
+        "MX Records": $mx,
+        "SOA Record": $soa,
+        "CAA Records": $caa,
+        "A Records": $arecords,
+        "AAAA Records": $aaaarecords,
+        "CNAME Records": $cname,
+        "Zone Transfer": $zonetransfer,
+        "WHOIS Summary": $whois,
+        "SSL/TLS Version": $ssl_version,
+        "SSL/TLS Issuer": $ssl_issuer,
+        "Cert Expiry Date": $cert_expiry,
+        "DNS Resolver": $resolvers,
+        "DNS Status": $dns_status
+      }' >>"$compliance_jsonl"
+
+		local domain_http_file="$httpx_split_dir/${domain}.jsonl"
+		if [[ -f "$domain_http_file" ]]; then
+			while IFS= read -r record_line || [[ -n "$record_line" ]]; do
 				[[ -z "$record_line" ]] && continue
-				record_found=true
 				local url host port
-				url=$(jq -r '.url' <<<"$record_line")
-				if [[ "$url" =~ ^https://([^:/]+):?([0-9]*) ]]; then
-					host="${BASH_REMATCH[1]}"
-					port="${BASH_REMATCH[2]:-443}"
+				url=$(jq -r '.url // ""' <<<"$record_line")
+				[[ -z "$url" ]] && continue
+				if [[ "$url" =~ ^https?://([^/:]+)(:([0-9]+))? ]]; then
+					host=${BASH_REMATCH[1]}
+					port=${BASH_REMATCH[3]}
 				else
 					host=""
 					port=""
 				fi
-
-				local ssl_version ssl_issuer cert_expiry
-				if [ -n "$host" ]; then
-					local ssl_output cert
-					ssl_output=$(echo | timeout 7 openssl s_client -connect "${host}:${port}" -servername "$host" 2>/dev/null || true)
-					cert=$(echo "$ssl_output" | sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' || true)
-					if [ -n "$cert" ]; then
-						ssl_version=$(echo "$ssl_output" | grep -i "Protocol:" | head -1 | awk -F": " '{print $2}' || true)
-						[ -z "$ssl_version" ] && ssl_version="Unknown"
-						ssl_issuer=$(echo "$cert" | openssl x509 -noout -issuer 2>/dev/null | sed 's/issuer= //' || true)
-						[ -z "$ssl_issuer" ] && ssl_issuer="N/A"
-						cert_expiry=$(echo "$cert" | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
-						[ -z "$cert_expiry" ] && cert_expiry="N/A"
+				if [ -z "$port" ]; then
+					if [[ "$url" =~ ^https:// ]]; then
+						port="443"
+					elif [[ "$url" =~ ^http:// ]]; then
+						port="80"
 					else
-						ssl_version="No SSL/TLS"
-						ssl_issuer="N/A"
-						cert_expiry="N/A"
+						port="443"
 					fi
+				fi
+
+				local ssl_version_ep ssl_issuer_ep cert_expiry_ep
+				local lookup_host
+				lookup_host=$(echo "$host" | tr '[:upper:]' '[:lower:]')
+				[[ -z "$lookup_host" ]] && lookup_host="$domain_key"
+				local endpoint_lookup="${lookup_host}|${port}"
+				local tls_endpoint
+				tls_endpoint=$(jq -c --arg key "$endpoint_lookup" '.[$key] // null' "$tls_endpoint_map_file")
+				if [[ "$tls_endpoint" != "null" ]]; then
+					ssl_version_ep=$(echo "$tls_endpoint" | jq -r '.TLSVersion // .HighestVersion // "Unknown"')
+					ssl_issuer_ep=$(echo "$tls_endpoint" | jq -r '.IssuerDN // .CertificateIssuer // .IssuerCN // "N/A"')
+					cert_expiry_ep=$(echo "$tls_endpoint" | jq -r '.NotAfter // .ValidTo // "N/A"')
 				else
-					ssl_version="No SSL/TLS"
-					ssl_issuer="N/A"
-					cert_expiry="N/A"
+					ssl_version_ep="No SSL/TLS"
+					ssl_issuer_ep="N/A"
+					cert_expiry_ep="N/A"
 				fi
 
 				local headers
@@ -899,110 +1847,45 @@ run_security_compliance() {
 				pp=$(echo "$headers" | grep -i "Permissions-Policy:" | cut -d':' -f2- | xargs || true)
 				acao=$(echo "$headers" | grep -i "Access-Control-Allow-Origin:" | cut -d':' -f2- | xargs || true)
 
-				jq -n --arg domain "$domain" --arg url "$url" \
-					--arg spf "$spf" --arg dkim "$dkim" --arg dmarc "$dmarc" --arg dnssec "$dnssec" \
-					--arg ns "$ns" --arg txt "$txt" --arg srv "$srv" --arg ptr "$ptr" --arg mx "$mx" --arg soa "$soa" --arg caa "$caa" \
-					--arg ssl_version "$ssl_version" --arg ssl_issuer "$ssl_issuer" --arg cert_expiry "$cert_expiry" \
-					--arg sts "$sts" --arg xfo "$xfo" --arg csp "$csp" --arg xss "$xss" --arg rp "$rp" --arg pp "$pp" --arg acao "$acao" \
+				jq -n \
+					--arg domain "$domain" \
+					--arg url "$url" \
+					--arg ssl_version "$ssl_version_ep" \
+					--arg ssl_issuer "$ssl_issuer_ep" \
+					--arg cert_expiry "$cert_expiry_ep" \
+					--arg sts "$sts" \
+					--arg xfo "$xfo" \
+					--arg csp "$csp" \
+					--arg xss "$xss" \
+					--arg rp "$rp" \
+					--arg pp "$pp" \
+					--arg acao "$acao" \
 					'{
-            Domain: $domain,
-            URL: $url,
-            "SPF Record": $spf,
-            "DKIM Record": $dkim,
-            "DMARC Record": $dmarc,
-            "DNSSEC Status": $dnssec,
-            "NS Records": $ns,
-            "TXT Records": $txt,
-            "SRV Records": $srv,
-            "PTR Record": $ptr,
-            "MX Records": $mx,
-            "SOA Record": $soa,
-            "CAA Records": $caa,
-            "SSL/TLS Version": $ssl_version,
-            "SSL/TLS Issuer": $ssl_issuer,
-            "Cert Expiry Date": $cert_expiry,
-            "Strict-Transport-Security": $sts,
-            "X-Frame-Options": $xfo,
-            "Content-Security-Policy": $csp,
-            "X-XSS-Protection": $xss,
-            "Referrer-Policy": $rp,
-            "Permissions-Policy": $pp,
-            "Access-Control-Allow-Origin": $acao
-          }' >>"$output_file_path"
-			done <"$records_file"
-		fi
-
-		if [ "$record_found" = false ]; then
-			jq -n --arg domain "$domain" --arg url "N/A" \
-				--arg spf "$spf" --arg dkim "$dkim" --arg dmarc "$dmarc" --arg dnssec "$dnssec" \
-				--arg ns "$ns" --arg txt "$txt" --arg srv "$srv" --arg ptr "$ptr" --arg mx "$mx" --arg soa "$soa" --arg caa "$caa" \
-				--arg ssl_version "No SSL/TLS" --arg ssl_issuer "N/A" --arg cert_expiry "N/A" \
-				--arg sts "" --arg xfo "" --arg csp "" --arg xss "" --arg rp "" --arg pp "" --arg acao "" \
-				'{
-          Domain: $domain,
-          URL: $url,
-          "SPF Record": $spf,
-          "DKIM Record": $dkim,
-          "DMARC Record": $dmarc,
-          "DNSSEC Status": $dnssec,
-          "NS Records": $ns,
-          "TXT Records": $txt,
-          "SRV Records": $srv,
-          "PTR Record": $ptr,
-          "MX Records": $mx,
-          "SOA Record": $soa,
-          "CAA Records": $caa,
-          "SSL/TLS Version": $ssl_version,
-          "SSL/TLS Issuer": $ssl_issuer,
-          "Cert Expiry Date": $cert_expiry,
-          "Strict-Transport-Security": $sts,
-          "X-Frame-Options": $xfo,
-          "Content-Security-Policy": $csp,
-          "X-XSS-Protection": $xss,
-          "Referrer-Policy": $rp,
-          "Permissions-Policy": $pp,
-          "Access-Control-Allow-Origin": $acao
-        }' >>"$output_file_path"
-		fi
-	}
-
-	local -a domain_order=()
-	while IFS= read -r domain || [ -n "$domain" ]; do
-		domain=$(echo "$domain" | tr -d '\r' | xargs)
-		[ -z "$domain" ] && continue
-		domain_order+=("$domain")
-
-		local safe_domain
-		safe_domain=$(echo "$domain" | sed 's/[^A-Za-z0-9._-]/_/g')
-		local record_file="$httpx_split_dir/${domain}.jsonl"
-
-		process_security_domain "$domain" "$safe_domain" "$record_file" "$temp_dir" &
-		while [ "$(jobs -pr | wc -l | tr -d ' ')" -ge "$sec_workers" ]; do
-			sleep 0.1
-		done
+        Domain: $domain,
+        URL: $url,
+        "SSL/TLS Version": $ssl_version,
+        "SSL/TLS Issuer": $ssl_issuer,
+        "Cert Expiry Date": $cert_expiry,
+        "Strict-Transport-Security": $sts,
+        "X-Frame-Options": $xfo,
+        "Content-Security-Policy": $csp,
+        "X-XSS-Protection": $xss,
+        "Referrer-Policy": $rp,
+        "Permissions-Policy": $pp,
+        "Access-Control-Allow-Origin": $acao
+      }' >>"$headers_jsonl"
+		done <"$domain_http_file"
+	fi
 	done <"$MASTER_SUBS"
-	wait
-
-	local records_file="$temp_dir/records.jsonl"
-	>"$records_file"
-	for domain in "${domain_order[@]}"; do
-		local safe_domain
-		safe_domain=$(echo "$domain" | sed 's/[^A-Za-z0-9._-]/_/g')
-		local part_file="$temp_dir/${safe_domain}.jsonl"
-		[ -f "$part_file" ] && cat "$part_file" >>"$records_file"
-	done
 
 	rm -rf "$httpx_split_dir"
+	rm -f "$dns_map_file" "$tls_host_map_file" "$tls_endpoint_map_file"
 
-	# Process each domain from MASTER_SUBS.
-	# Combine all JSON records into one JSON array and output to the security compliance file.
-	if [ ! -s "$records_file" ]; then
-		echo "[]" >"$output_file"
-	else
-		jq -s '.' "$records_file" >"$output_file"
-	fi
-	rm -r "$temp_dir"
+	combine_json "$compliance_jsonl" "$compliance_output"
+	combine_json "$headers_jsonl" "$headers_output"
+	rm -f "$compliance_jsonl" "$headers_jsonl"
 }
+
 
 ##############################################
 # Function: combine_json
@@ -1023,7 +1906,7 @@ combine_json() {
 # Purpose: Identify API endpoints based on simple pattern matching in domain names.
 ##############################################
 run_api_identification() {
-	info "[12/15] Identifying API endpoints..."
+info "[13/17] Identifying API endpoints..."
 	local api_file="$RUN_DIR/api_identification.json"
 	# Begin JSON array output
 	echo "[" >"$api_file"
@@ -1050,7 +1933,7 @@ run_api_identification() {
 # Purpose: Identify endpoints intended for internal/colleague use based on keywords in domain names.
 ##############################################
 run_colleague_identification() {
-	info "[13/15] Identifying colleague-facing endpoints..."
+info "[14/17] Identifying colleague-facing endpoints..."
 	local colleague_file="$RUN_DIR/colleague_identification.json"
 	local keywords_file="colleague_keywords.txt"
 
@@ -1059,8 +1942,14 @@ run_colleague_identification() {
 		echo "[]" >"$colleague_file"
 		return
 	fi
-	# Read all keywords from the file into the 'tokens' array
-	mapfile -t tokens <"$keywords_file"
+	# Read all keywords from the file into the 'tokens' array, trimming whitespace.
+	mapfile -t raw_tokens <"$keywords_file"
+	local -a tokens=()
+	for token in "${raw_tokens[@]}"; do
+		token=$(echo "$token" | tr -d '\r' | xargs)
+		[[ -z "$token" ]] && continue
+		tokens+=("$token")
+	done
 	echo "[" >"$colleague_file"
 	local first_entry=true
 	while read -r domain; do
@@ -1068,24 +1957,430 @@ run_colleague_identification() {
 		local lc_domain
 		lc_domain=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
 		local found="No"
-		# Split the domain into tokens using common delimiters.
-		local token
-		for token in $(echo "$lc_domain" | tr '.-_ ' ' '); do
-			for t in "${tokens[@]}"; do
-				if [ "$token" = "$t" ]; then
-					found="Yes"
-					break 2
+		declare -A match_seen=()
+		local -a matches=()
+		local t
+		for t in "${tokens[@]}"; do
+			local lt
+			lt=$(echo "$t" | tr '[:upper:]' '[:lower:]')
+			[[ -z "$lt" ]] && continue
+			if [[ "$lc_domain" == *"$lt"* ]]; then
+				found="Yes"
+				if [[ -z "${match_seen[$lt]:-}" ]]; then
+					match_seen[$lt]=1
+					matches+=("$t")
 				fi
-			done
+			fi
 		done
+		unset match_seen
+		local matches_json='[]'
+		if ((${#matches[@]})); then
+			matches_json=$(printf '%s\n' "${matches[@]}" | jq -Rc '[inputs | select(length>0)]')
+		fi
+		local entry
+		entry=$(jq -n --arg domain "$domain" --arg status "$found" --argjson matches "$matches_json" \
+			'{ domain: $domain, colleague_endpoint: $status, colleague_matches: $matches }')
 		if [ "$first_entry" = true ]; then
 			first_entry=false
 		else
 			echo "," >>"$colleague_file"
 		fi
-		echo "  { \"domain\": \"${domain}\", \"colleague_endpoint\": \"${found}\" }" >>"$colleague_file"
+		echo "  ${entry}" >>"$colleague_file"
 	done <"$MASTER_SUBS"
 	echo "]" >>"$colleague_file"
+}
+
+run_cloud_infrastructure_inventory() {
+	info "[15/17] Building cloud infrastructure inventory..."
+	local output_file="$RUN_DIR/cloud_infrastructure.json"
+	local dns_map_file httpx_map_file tls_map_file
+	dns_map_file=$(mktemp)
+	httpx_map_file=$(mktemp)
+	tls_map_file=$(mktemp)
+
+	if [[ -s "$RUN_DIR/dnsx.json" ]]; then
+		jq -cs '
+			[ .[] | if type=="array" then .[] else . end | select(type=="object") ]
+			| map({
+				raw: (.host // ""),
+				key: ((.host // "") | ascii_downcase),
+				value: {
+					host: (.host // ""),
+					a: (.a // []),
+					aaaa: (.aaaa // []),
+					cname: (.cname // []),
+					status: (.status_code // ""),
+					resolver: (.resolver // [])
+				}
+			})
+			| map(select(.key != ""))
+			| map({key: .key, value: .value})
+			| from_entries
+		' "$RUN_DIR/dnsx.json" >"$dns_map_file" || echo "{}" >"$dns_map_file"
+	else
+		echo "{}" >"$dns_map_file"
+	fi
+
+	if [[ -s "$RUN_DIR/httpx.json" ]]; then
+		jq -cs '
+			[ .[] | if type=="array" then .[] else . end | select(type=="object") ]
+			| group_by(((.input // .host // "") | split(":")[0] | ascii_downcase)) |
+			map({
+				raw: ((.[0].input // .[0].host // "") | split(":")[0]),
+				key: ((.[0].input // .[0].host // "") | split(":")[0] | ascii_downcase),
+				value: {
+					display: ((.[0].input // .[0].host // "") | split(":")[0]),
+					urls: (map(.url) | map(select(. != null and . != "")) | unique),
+					ports: (map(.port) | map(select(. != null and . != "")) | unique),
+					tech: (reduce .[] as $item ([]; . + ($item.tech // [])) | map(select(. != null and . != "")) | unique),
+					webservers: (map(.webserver) | map(select(. != null and . != "")) | unique),
+					cdn_names: (map(.cdn_name) | map(select(. != null and . != "")) | unique),
+					cdn_types: (map(.cdn_type) | map(select(. != null and . != "")) | unique),
+					ips: (reduce .[] as $item ([]; . + ($item.a // [])) | map(select(. != null and . != "")) | unique)
+				}
+			})
+			| map(select(.key != ""))
+			| map({key: .key, value: .value})
+			| from_entries
+		' "$RUN_DIR/httpx.json" >"$httpx_map_file" || echo "{}" >"$httpx_map_file"
+	else
+		echo "{}" >"$httpx_map_file"
+	fi
+
+	if [[ -s "$RUN_DIR/tls_inventory.json" ]]; then
+		jq -c '
+			group_by(((.Domain // .domain // "") | ascii_downcase)) |
+			map({
+				raw: (.[0].Domain // .[0].domain // ""),
+				key: ((.[0].Domain // .[0].domain // "") | ascii_downcase),
+				value: {
+					san: (reduce .[] as $item ([]; . + ($item.CertificateSANs // [])) | map(select(. != null and . != "")) | unique),
+					summary: (map(.SANSummary) | map(select(. != null and . != "")) | unique),
+					cn: (map(.CertificateCommonName) | map(select(. != null and . != "")) | unique)
+				}
+			})
+			| map(select(.key != ""))
+			| map({key: .key, value: .value})
+			| from_entries
+		' "$RUN_DIR/tls_inventory.json" >"$tls_map_file" || echo "{}" >"$tls_map_file"
+	else
+		echo "{}" >"$tls_map_file"
+	fi
+
+	mapfile -t assets < <(
+		{
+			jq -r 'keys[]' "$dns_map_file"
+			jq -r 'keys[]' "$httpx_map_file"
+			jq -r 'keys[]' "$tls_map_file"
+		} 2>/dev/null | tr -d '\r' | sed 's/^\s*//;s/\s*$//' | awk 'NF' | sort -u
+	)
+
+	echo "[" >"$output_file"
+	local first_entry=true
+	local asset
+	for asset in "${assets[@]}"; do
+		[[ -z "$asset" ]] && continue
+		local dns_info http_info tls_info
+		dns_info=$(jq -c --arg host "$asset" '.[$host] // {}' "$dns_map_file")
+		http_info=$(jq -c --arg host "$asset" '.[$host] // {}' "$httpx_map_file")
+		tls_info=$(jq -c --arg host "$asset" '.[$host] // {}' "$tls_map_file")
+
+		local display_asset
+		display_asset=$(jq -r '.display // ""' <<<"$http_info")
+		if [[ -z "$display_asset" || "$display_asset" == "null" ]]; then
+			display_asset=$(jq -r '.host // ""' <<<"$dns_info")
+		fi
+		if [[ -z "$display_asset" || "$display_asset" == "null" ]]; then
+			display_asset="$asset"
+		fi
+
+		local -a tech_array=()
+		local -a cdn_array=()
+		local -a cdn_type_array=()
+		local -a url_array=()
+		local -a http_ip_array=()
+		local -a dns_a_array=()
+		local -a dns_aaaa_array=()
+		local -a cname_chain=()
+
+		if [[ "$http_info" != "{}" ]]; then
+			mapfile -t tech_array < <(jq -r '.tech[]? | select(. != null and . != "")' <<<"$http_info")
+			mapfile -t cdn_array < <(jq -r '.cdn_names[]? | select(. != null and . != "")' <<<"$http_info")
+			mapfile -t cdn_type_array < <(jq -r '.cdn_types[]? | select(. != null and . != "")' <<<"$http_info")
+			mapfile -t url_array < <(jq -r '.urls[]? | select(. != null and . != "")' <<<"$http_info")
+			mapfile -t http_ip_array < <(jq -r '.ips[]? | select(. != null and . != "")' <<<"$http_info")
+		fi
+
+		if [[ "$dns_info" != "{}" ]]; then
+			mapfile -t dns_a_array < <(jq -r '.a[]? | select(. != null and . != "")' <<<"$dns_info")
+			mapfile -t dns_aaaa_array < <(jq -r '.aaaa[]? | select(. != null and . != "")' <<<"$dns_info")
+			mapfile -t cname_chain < <(jq -r '.cname[]? | select(. != null and . != "")' <<<"$dns_info")
+		fi
+
+		local host_for_lookup="$display_asset"
+		[[ -z "$host_for_lookup" ]] && host_for_lookup="$asset"
+		local -a cname_follow=()
+		mapfile -t cname_follow < <(get_cloud_cname_chain "$host_for_lookup")
+		if (( ${#cname_follow[@]} )); then
+			local cf
+			for cf in "${cname_follow[@]}"; do
+				local trimmed_cf="${cf%.}"
+				local match_found="false"
+				local existing
+				for existing in "${cname_chain[@]}"; do
+					if [[ "$(normalize_hostname "$existing")" == "$(normalize_hostname "$trimmed_cf")" ]]; then
+						match_found="true"
+						break
+					fi
+				done
+				if [[ "$match_found" == "false" ]]; then
+					cname_chain+=("$trimmed_cf")
+				fi
+			done
+		fi
+
+		local -a ip_list=()
+		declare -A seen_ips=()
+		local ip
+		for ip in "${http_ip_array[@]}" "${dns_a_array[@]}" "${dns_aaaa_array[@]}"; do
+			ip=$(echo "$ip" | tr -d '\r' | xargs)
+			[[ -z "$ip" ]] && continue
+			if [[ -z "${seen_ips[$ip]:-}" ]]; then
+				seen_ips[$ip]=1
+				ip_list+=("$ip")
+			fi
+		done
+		unset seen_ips
+
+		local -a rdns_list=()
+		local asn_display="" provider_display="" network_display=""
+		for ip in "${ip_list[@]}"; do
+			enrich_cloud_ip_metadata "$ip"
+			local asn="${CLOUD_IP_ASN_CACHE[$ip]:-}"
+			local provider="${CLOUD_IP_PROVIDER_CACHE[$ip]:-}"
+			local network="${CLOUD_IP_NETWORK_CACHE[$ip]:-}"
+			local ptrs="${CLOUD_IP_PTR_CACHE[$ip]:-}"
+			if [[ -z "$asn_display" && -n "$asn" ]]; then
+				asn_display="$asn"
+			fi
+			if [[ -z "$provider_display" && -n "$provider" ]]; then
+				provider_display="$provider"
+			fi
+			if [[ -z "$network_display" && -n "$network" ]]; then
+				network_display="$network"
+			fi
+			if [[ -n "$ptrs" ]]; then
+				IFS=', ' read -r -a ptr_array <<<"$ptrs"
+				local ptr_entry
+				for ptr_entry in "${ptr_array[@]}"; do
+					ptr_entry=$(echo "$ptr_entry" | xargs)
+					[[ -z "$ptr_entry" ]] && continue
+					rdns_list+=("$ptr_entry")
+				done
+			fi
+		done
+
+		local -a tls_name_array=()
+		local -a tls_summary_array=()
+		local -a tls_cn_array=()
+		if [[ "$tls_info" != "{}" ]]; then
+			mapfile -t tls_name_array < <(jq -r '.san[]? | select(. != null and . != "")' <<<"$tls_info")
+			mapfile -t tls_summary_array < <(jq -r '.summary[]? | select(. != null and . != "")' <<<"$tls_info")
+			mapfile -t tls_cn_array < <(jq -r '.cn[]? | select(. != null and . != "")' <<<"$tls_info")
+		fi
+
+		local primary_url=""
+		if (( ${#url_array[@]} )); then
+			primary_url="${url_array[0]}"
+		fi
+
+		local canonical_target=""
+		if (( ${#cname_chain[@]} )); then
+			canonical_target="${cname_chain[-1]}"
+		fi
+
+		local tech_blob=""
+		if (( ${#tech_array[@]} )); then
+			tech_blob=$(printf '%s\n' "${tech_array[@]}")
+		fi
+		local cdn_blob=""
+		local combined_cdn_array=("${cdn_array[@]}" "${cdn_type_array[@]}")
+		if (( ${#combined_cdn_array[@]} )); then
+			cdn_blob=$(printf '%s\n' "${combined_cdn_array[@]}")
+		fi
+		local asn_blob=""
+		if [[ -n "$asn_display" || -n "$provider_display" ]]; then
+			if [[ -n "$asn_display" && -n "$provider_display" ]]; then
+				asn_blob="$asn_display $provider_display"
+			else
+				asn_blob="${asn_display:-$provider_display}"
+			fi
+		fi
+		local rdns_blob=""
+		if (( ${#rdns_list[@]} )); then
+			rdns_blob=$(printf '%s\n' "${rdns_list[@]}")
+		fi
+		local tls_blob=""
+		local combined_tls_array=("${tls_name_array[@]}" "${tls_summary_array[@]}" "${tls_cn_array[@]}")
+		if (( ${#combined_tls_array[@]} )); then
+			tls_blob=$(printf '%s\n' "${combined_tls_array[@]}")
+		fi
+
+		local classification
+		classification=$(classify_cloud_asset "$display_asset" "$canonical_target" "$tech_blob" "$cdn_blob" "$asn_blob" "$rdns_blob" "$tls_blob")
+		local resource_type cloud_provider service_family load_balancer waf_shielding storage_value
+		IFS='|' read -r resource_type cloud_provider service_family load_balancer waf_shielding storage_value <<<"$classification"
+
+		local resource_identifier="$canonical_target"
+		if [[ -z "$resource_identifier" ]]; then
+			if (( ${#ip_list[@]} )); then
+				resource_identifier="${ip_list[0]}"
+			fi
+		fi
+		if [[ -z "$resource_identifier" ]]; then
+			resource_identifier="$display_asset"
+		fi
+
+		local cname_display=""
+		if (( ${#cname_chain[@]} )); then
+			cname_display=$(join_unique " → " "${cname_chain[@]}")
+		fi
+		local ip_display=""
+		if (( ${#ip_list[@]} )); then
+			ip_display=$(join_unique ", " "${ip_list[@]}")
+		fi
+		local rdns_display=""
+		if (( ${#rdns_list[@]} )); then
+			rdns_display=$(join_unique ", " "${rdns_list[@]}")
+		fi
+		local tech_display=""
+		if (( ${#tech_array[@]} )); then
+			tech_display=$(join_unique ", " "${tech_array[@]}")
+		fi
+		local cdn_display=""
+		if (( ${#combined_cdn_array[@]} )); then
+			cdn_display=$(join_unique ", " "${combined_cdn_array[@]}")
+		fi
+		local tls_display=""
+		if (( ${#combined_tls_array[@]} )); then
+			tls_display=$(join_unique ", " "${combined_tls_array[@]}")
+		fi
+		local asn_summary=""
+		if [[ -n "$asn_display" || -n "$provider_display" ]]; then
+			if [[ -n "$asn_display" && -n "$provider_display" ]]; then
+				asn_summary="$asn_display – $provider_display"
+			else
+				asn_summary="${asn_display:-$provider_display}"
+			fi
+		fi
+		local network_summary=""
+		if [[ -n "$network_display" ]]; then
+			network_summary="$network_display"
+		fi
+
+		local -a evidence=()
+		if [[ -n "$primary_url" ]]; then
+			evidence+=("Primary URL: $primary_url")
+		fi
+		if [[ -n "$cname_display" ]]; then
+			evidence+=("DNS CNAME Chain: $cname_display")
+		fi
+		if [[ -n "$ip_display" ]]; then
+			evidence+=("Resolved IPs: $ip_display")
+		fi
+		if [[ -n "$asn_summary" ]]; then
+			evidence+=("ASN / Provider: $asn_summary")
+		fi
+		if [[ -n "$network_summary" ]]; then
+			evidence+=("Network: $network_summary")
+		fi
+		if [[ -n "$rdns_display" ]]; then
+			evidence+=("rDNS: $rdns_display")
+		fi
+		if [[ -n "$tech_display" ]]; then
+			evidence+=("HTTP Technologies: $tech_display")
+		fi
+		if [[ -n "$cdn_display" ]]; then
+			evidence+=("HTTP CDN/WAF Signals: $cdn_display")
+		fi
+		if [[ -n "$tls_display" ]]; then
+			evidence+=("TLS SAN/CN: $tls_display")
+		fi
+
+		if [[ -z "$primary_url" && -z "$resource_identifier" && ${#evidence[@]} -eq 0 ]]; then
+			continue
+		fi
+
+		local evidence_json='[]'
+		if (( ${#evidence[@]} )); then
+			local evidence_tmp
+			evidence_tmp=$(printf '%s\n' "${evidence[@]}" | jq -Rs 'split("\n") | map(select(length>0))' 2>/dev/null || true)
+			if [[ -n "$evidence_tmp" ]]; then
+				evidence_json="$evidence_tmp"
+			fi
+		fi
+
+		local ip_json='[]'
+		if (( ${#ip_list[@]} )); then
+			local ip_tmp
+			ip_tmp=$(printf '%s\n' "${ip_list[@]}" | jq -Rs 'split("\n") | map(select(length>0))' 2>/dev/null || true)
+			if [[ -n "$ip_tmp" ]]; then
+				ip_json="$ip_tmp"
+			fi
+		fi
+
+		local cname_json='[]'
+		if (( ${#cname_chain[@]} )); then
+			local cname_tmp
+			cname_tmp=$(printf '%s\n' "${cname_chain[@]}" | jq -Rs 'split("\n") | map(select(length>0))' 2>/dev/null || true)
+			if [[ -n "$cname_tmp" ]]; then
+				cname_json="$cname_tmp"
+			fi
+		fi
+
+		local json_entry
+		json_entry=$(jq -n \
+			--arg asset "$display_asset" \
+			--arg primaryUrl "$primary_url" \
+			--arg resourceType "$resource_type" \
+			--arg cloudProvider "$cloud_provider" \
+			--arg serviceFamily "$service_family" \
+			--arg resourceIdentifier "$resource_identifier" \
+			--arg loadBalancer "$load_balancer" \
+			--arg wafShielding "$waf_shielding" \
+			--arg storage "$storage_value" \
+			--arg asn "$asn_summary" \
+			--arg network "$network_summary" \
+			--argjson evidence "$evidence_json" \
+			--argjson ips "$ip_json" \
+			--argjson cname "$cname_json" \
+			'{
+				Asset: ($asset // "N/A"),
+				PrimaryURL: ($primaryUrl // ""),
+				ResourceType: ($resourceType // "Other"),
+				CloudProvider: ($cloudProvider // "Unknown"),
+				ServiceFamily: ($serviceFamily // "Unknown"),
+				ResourceIdentifier: ($resourceIdentifier // "N/A"),
+				LoadBalancer: ($loadBalancer // "N/A"),
+				WafShielding: ($wafShielding // "Direct Origin"),
+				Storage: ($storage // "N/A"),
+				ASN: ($asn // ""),
+				Network: ($network // ""),
+				IPs: $ips,
+				CnameChain: $cname,
+				Evidence: $evidence
+			}')
+
+		if [[ "$first_entry" == true ]]; then
+			first_entry=false
+		else
+			echo "," >>"$output_file"
+		fi
+		printf '  %s\n' "$json_entry" >>"$output_file"
+	done
+	echo "]" >>"$output_file"
+
+	rm -f "$dns_map_file" "$httpx_map_file" "$tls_map_file"
 }
 
 ##############################################
@@ -1098,7 +2393,7 @@ run_colleague_identification() {
 ##############################################
 
 build_html_report() {
-	info "[14/15] Building HTML report with analytics..."
+info "[16/17] Building HTML report with analytics..."
 	combine_json "$RUN_DIR/dnsx.json" "$RUN_DIR/dnsx_merged.json"
 	combine_json "$RUN_DIR/naabu.json" "$RUN_DIR/naabu_merged.json"
 	combine_json "$RUN_DIR/httpx.json" "$RUN_DIR/httpx_merged.json"
@@ -1107,29 +2402,44 @@ build_html_report() {
 	mv "$RUN_DIR/httpx_merged.json" "$RUN_DIR/httpx.json"
 
 	cat header.html >report.html
-	echo -n "const dnsxData = " >>report.html
+	echo -n "const rawDnsxData = " >>report.html
 	cat $RUN_DIR/dnsx.json | tr -d "\n" >>report.html
 	echo "" >>report.html
-	echo -n "const naabuData = " >>report.html
+	echo -n "const rawNaabuData = " >>report.html
 	cat $RUN_DIR/naabu.json | tr -d "\n" >>report.html
 	echo "" >>report.html
-	echo -n "const httpxData = " >>report.html
+	echo -n "const portscanData = " >>report.html
+	cat $RUN_DIR/portscan.json | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const rawHttpxData = " >>report.html
 	cat $RUN_DIR/httpx.json | tr -d "\n" >>report.html
 	echo "" >>report.html
-	echo -n "const loginData = " >>report.html
+	echo -n "const rawLoginData = " >>report.html
 	cat $RUN_DIR/login.json | tr -d "\n" >>report.html
 	echo "" >>report.html
 	echo -n "const secData = " >>report.html
 	echo "" >>report.html
 	cat $RUN_DIR/securitycompliance.json | tr -d "\n" >>report.html
 	echo "" >>report.html
-	echo -n "const apiData = " >>report.html
+	echo -n "const rawSecHeadersData = " >>report.html
+	cat $RUN_DIR/sec_headers.json | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const rawTlsInventoryData = " >>report.html
+	cat $RUN_DIR/tls_inventory.json | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const rawApiData = " >>report.html
 	cat $RUN_DIR/api_identification.json | tr -d "\n" >>report.html
 	echo "" >>report.html
-	echo -n "const colleagueData = " >>report.html
+	echo -n "const rawColleagueData = " >>report.html
 	cat $RUN_DIR/colleague_identification.json | tr -d "\n" >>report.html
 	echo "" >>report.html
-	echo -n "const katanaData = " >>report.html
+	echo -n "const rawCloudInfraData = " >>report.html
+	cat $RUN_DIR/cloud_infrastructure.json | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const ipIntelData = " >>report.html
+	cat $RUN_DIR/ip_enrichment.json | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const rawKatanaData = " >>report.html
 	cat $RUN_DIR/katana_links.json | tr -d "\n" >>report.html
 	echo "" >>report.html
 
@@ -1144,7 +2454,7 @@ build_html_report() {
 
 	mv report.html $RUN_DIR/
 
-	info "[15/15] Report generated at $RUN_DIR/report.html"
+	info "[17/17] Report generated at $RUN_DIR/report.html"
 }
 
 ##############################################
@@ -1179,7 +2489,7 @@ main() {
 	if ! run_gau; then
 		warning "GAU step encountered an error and was skipped."
 	fi
-	info "[5/15] Merging subdomains..."
+info "[5/17] Merging subdomains..."
 	# Append each primary domain and its www subdomain to ALL_TEMP.
 	while read -r domain; do
 		echo "$domain" >>"$ALL_TEMP"
@@ -1189,15 +2499,18 @@ main() {
 	rm -f "$ALL_TEMP"
 	run_dnsx
 	run_naabu
+	generate_ip_intel
 	run_httpx
 	run_katana
 	[[ -d output/response ]] && mv output/response "$RUN_DIR/"
 	[[ -d output/screenshot ]] && mv output/screenshot "$RUN_DIR/"
 	gather_screenshots
 	run_login_detection
+	run_tls_inventory
 	run_security_compliance
 	run_api_identification
 	run_colleague_identification
+	run_cloud_infrastructure_inventory
 	build_html_report
 	show_summary
 }
