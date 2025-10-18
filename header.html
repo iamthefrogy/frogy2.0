@@ -10,6 +10,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="assets/report.css" />
     <style>
+      :root {
+        --report-table-header-bg: rgba(37, 99, 235, 0.1);
+        --report-table-header-secondary-bg: rgba(37, 99, 235, 0.06);
+        --table-header-sticky-offset: 48px;
+      }
+      body[data-theme="dark"] {
+        --report-table-header-bg: rgba(96, 165, 250, 0.18);
+        --report-table-header-secondary-bg: rgba(96, 165, 250, 0.12);
+      }
       .summary-card {
         background: var(--color-surface);
         border-radius: var(--radius-lg);
@@ -68,6 +77,17 @@
         font-size: 14px;
         font-weight: 500;
         color: var(--color-text-muted);
+      }
+      .summary-card__highlights {
+        margin: 12px 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 4px;
+        font-size: 13px;
+        color: var(--color-text);
+      }
+      .summary-card__highlights li {
+        margin: 0;
       }
       .summary-card__actions {
         display: flex;
@@ -203,6 +223,68 @@
         color: #1d4ed8;
         border-color: rgba(59, 130, 246, 0.32);
       }
+      .port-tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        background: var(--color-surface-muted);
+        color: var(--color-text);
+        border: 1px solid var(--color-border);
+        margin-bottom: 4px;
+        margin-right: 4px;
+        white-space: nowrap;
+        cursor: default;
+      }
+      .port-tag--database,
+      .port-tag--remote-administration {
+        background: rgba(239, 68, 68, 0.15);
+        color: var(--color-danger);
+        border-color: rgba(239, 68, 68, 0.35);
+      }
+      .port-tag--management,
+      .port-tag--vpn-tunnel {
+        background: rgba(249, 115, 22, 0.16);
+        color: #c2410c;
+        border-color: rgba(249, 115, 22, 0.35);
+      }
+      .port-tag--web-app-delivery,
+      .port-tag--proxies,
+      .port-tag--dns {
+        background: rgba(37, 99, 235, 0.12);
+        color: var(--color-primary);
+        border-color: rgba(37, 99, 235, 0.28);
+      }
+      .port-tag--email,
+      .port-tag--messaging,
+      .port-tag--monitoring {
+        background: rgba(16, 185, 129, 0.14);
+        color: var(--color-accent);
+        border-color: rgba(16, 185, 129, 0.28);
+      }
+      .port-tag--containers,
+      .port-tag--devops {
+        background: rgba(14, 165, 233, 0.16);
+        color: #0ea5e9;
+        border-color: rgba(14, 165, 233, 0.32);
+      }
+      .port-tag--industrial-iot,
+      .port-tag--voice-rtc,
+      .port-tag--network-infra {
+        background: rgba(129, 140, 248, 0.16);
+        color: #6366f1;
+        border-color: rgba(99, 102, 241, 0.32);
+      }
+      .port-category-label {
+        display: inline-block;
+        margin-left: 6px;
+        font-size: 11px;
+        font-style: italic;
+        color: var(--color-text-muted);
+      }
       .table-top-controls {
         display: flex;
         flex-wrap: wrap;
@@ -211,7 +293,7 @@
         padding: 8px 0;
       }
       .table-top-controls input[type="text"] {
-        min-width: 420px;
+        min-width: 220px;
         padding: 10px 12px;
         border-radius: var(--radius-sm);
         border: 1px solid var(--color-border);
@@ -236,11 +318,267 @@
         align-items: center;
         gap: 8px;
       }
+      .container {
+        width: 100%;
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 2% 2%;
+        box-sizing: border-box;
+      }
+      .report-layout {
+        display: grid;
+        grid-template-columns: minmax(220px, 260px) 1fr;
+        gap: 32px;
+        align-items: start;
+      }
+      .table-scroll-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      .table-scroll-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--color-border);
+        background: var(--color-surface-muted);
+        color: var(--color-text);
+        padding: 6px 10px;
+        border-radius: var(--radius-sm);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        min-width: 36px;
+      }
+      .table-scroll-button:hover,
+      .table-scroll-button:focus-visible {
+        outline: none;
+        background: var(--color-primary-soft);
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+      }
+      .report-nav {
+        position: sticky;
+        top: 32px;
+        align-self: start;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 24px 20px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--color-border);
+        background: var(--color-surface);
+        box-shadow: var(--shadow-soft);
+      }
+      .report-nav__label {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+      }
+      .report-nav__item {
+        border: none;
+        background: transparent;
+        color: var(--color-text-muted);
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        padding: 12px 14px;
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        display: flex;
+        justify-content: flex-start;
+        cursor: pointer;
+        transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+      }
+      .report-nav__item:hover,
+      .report-nav__item:focus-visible {
+        outline: none;
+        color: var(--color-text);
+        background: var(--color-surface-muted);
+        border-color: var(--color-border-strong, var(--color-border));
+      }
+      .report-nav__item.is-active {
+        color: var(--color-text);
+        background: var(--color-surface-muted);
+        border-color: var(--color-primary-soft, var(--color-border));
+        box-shadow: inset 0 0 0 1px var(--color-primary-soft, rgba(59, 130, 246, 0.35));
+      }
+      .report-content {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+        min-width: 0;
+      }
+      .view-block[hidden] {
+        display: none !important;
+      }
+      .view-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: var(--color-surface-muted);
+        border: 1px solid var(--color-border);
+        font-size: 30px;
+        font-weight: 1000;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+      }
+      .focus-header {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .focus-title {
+        margin: 0;
+        font-size: clamp(22px, 2.6vw, 28px);
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--color-text);
+      }
+      .focus-description {
+        margin: 0;
+        font-size: 13px;
+        color: var(--color-text-muted);
+      }
+      .focus-table {
+        width: 100% !important;
+        min-width: 0;
+        table-layout: auto;
+      }
+      .table-container table thead th {
+        background: var(--report-table-header-secondary-bg, var(--color-surface-muted));
+        color: var(--color-text);
+        box-shadow: inset 0 -1px 0 var(--color-border);
+      }
+      .table-filter-row select {
+        width: 100%;
+        padding: 6px 8px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--color-border);
+        background: var(--color-surface);
+        color: var(--color-text);
+        font-size: 12px;
+      }
+      .table-filter-row select:focus {
+        outline: none;
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 2px var(--color-primary-soft);
+      }
+      .table-container table thead tr:first-child th {
+        background: var(--report-table-header-bg, var(--color-surface-muted));
+        font-weight: 600;
+      }
+      .focus-table td {
+        padding-bottom: 16px;
+      }
+      .focus-table tbody td {
+        min-height: auto;
+      }
+      .table-container.table-view > table {
+        width: max(1600px, 100%);
+        min-width: 1600px;
+        table-layout: auto;
+      }
+      .table-container.table-view--domain th:not(.col-core):not(.col-domain),
+      .table-container.table-view--domain td:not(.col-core):not(.col-domain) {
+        display: none;
+      }
+      .table-container.table-view--web th:not(.col-core):not(.col-web),
+      .table-container.table-view--web td:not(.col-core):not(.col-web) {
+        display: none;
+      }
+      .table-container.table-view--cloud th:not(.col-core):not(.col-cloud),
+      .table-container.table-view--cloud td:not(.col-core):not(.col-cloud) {
+        display: none;
+      }
+      @media (max-width: 1024px) {
+        .report-layout {
+          grid-template-columns: 1fr;
+          gap: 24px;
+        }
+        .report-nav {
+          position: static;
+          flex-direction: row;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 10px;
+        }
+        .report-nav__item {
+          flex: 1 1 160px;
+          justify-content: center;
+        }
+        .table-top-controls input[type="text"] {
+          min-width: 280px;
+          flex: 1 1 220px;
+        }
+        .table-top-controls .hint {
+          min-width: 260px;
+        }
+      }
     </style>
     <script>
       const screenshotMap =
       %%SCREENSHOT_MAP%%
       ;
+      const VIEW_LABELS = Object.freeze({
+        overview: "Overview",
+        domain: "Domain Intelligence",
+        endpoints: "Application Endpoints",
+        ips: "IP Addresses",
+        tls: "TLS Certificates",
+        cloud: "Cloud Infrastructure"
+      });
+      const TABLE_VIEW_CLASSNAMES = Object.freeze(Object.keys(VIEW_LABELS).map(view => `table-view--${view}`));
+      const COLUMN_CLASS_MAP = Object.freeze([
+        ["col-core"],
+        ["col-core"],
+        ["col-core"],
+        ["col-domain"],
+        ["col-domain"],
+        ["col-domain"],
+        ["col-domain", "col-cloud"],
+        ["col-domain"],
+        ["col-domain"],
+        ["col-domain"],
+        ["col-domain"],
+        ["col-domain", "col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-domain", "col-web"],
+        ["col-cloud"],
+        ["col-cloud"],
+        ["col-cloud"],
+        ["col-domain", "col-cloud"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-web"],
+        ["col-domain"],
+        ["col-web"]
+      ]);
     </script>
   </head>
   <body>
@@ -258,35 +596,216 @@
     </header>
 
     <main class="container">
-      <section class="scoreboard" id="scoreboard"></section>
+      <div class="report-layout">
+        <aside class="report-sidebar">
+          <nav class="report-nav" id="reportNav" aria-label="Intelligence views">
+            <div class="report-nav__header">
+              <span class="report-nav__label">Focus Areas</span>
+              <button type="button" id="sidebarCollapseButton" class="report-nav__toggle report-nav__toggle--collapse" aria-controls="reportNav" aria-expanded="true" aria-label="Hide focus areas">
+                <span aria-hidden="true" class="report-nav__toggle-icon"></span>
+              </button>
+            </div>
+            <div class="report-nav__items">
+              <button type="button" class="report-nav__item is-active" data-view="overview" aria-pressed="true">Overview</button>
+              <button type="button" class="report-nav__item" data-view="domain" aria-pressed="false">Domain Intelligence</button>
+              <button type="button" class="report-nav__item" data-view="endpoints" aria-pressed="false">Application Endpoints</button>
+              <button type="button" class="report-nav__item" data-view="ips" aria-pressed="false">IP Addresses</button>
+              <button type="button" class="report-nav__item" data-view="tls" aria-pressed="false">TLS Certificates</button>
+              <button type="button" class="report-nav__item" data-view="cloud" aria-pressed="false">Cloud Infrastructure</button>
+            </div>
+          </nav>
+        </aside>
+        <button type="button" id="sidebarExpandButton" class="report-nav__toggle report-nav__toggle--expand" aria-controls="reportNav" aria-expanded="false" aria-label="Show focus areas" hidden>
+          <span aria-hidden="true" class="report-nav__toggle-icon"></span>
+        </button>
+        <div class="report-content">
+          <section class="scoreboard view-block" data-view-group="overview" id="scoreboard"></section>
 
-      <section class="charts-grid">
-        <div class="chart-container"><h3>Discovery Summary</h3><canvas id="funnelChart"></canvas></div>
-        <div class="chart-container"><h3>Risk Leaderboard</h3><canvas id="riskLeaderboardChart"></canvas></div>
-        <div class="chart-container"><h3>DNS Health</h3><canvas id="dnsHealthChart"></canvas></div>
-        <div class="chart-container"><h3>Endpoint vs Login Exposure</h3><canvas id="tlsLoginChart"></canvas></div>
-        <div class="chart-container"><h3>HTTP Status Distribution</h3><canvas id="statusCodeChart"></canvas></div>
-        <div class="chart-container"><h3>Security Header Coverage</h3><canvas id="headerCoverageChart"></canvas></div>
-        <div class="chart-container"><h3>Email Authentication</h3><canvas id="emailCoverageChart"></canvas></div>
-        <div class="chart-container"><h3>Top 10 Technologies Observed</h3><canvas id="techChart"></canvas></div>
-      </section>
+          <section class="charts-grid view-block" data-view-group="overview">
+            <div class="chart-container"><h3>Discovery Summary</h3><canvas id="funnelChart"></canvas></div>
+            <div class="chart-container"><h3>Risk Leaderboard</h3><canvas id="riskLeaderboardChart"></canvas></div>
+            <div class="chart-container"><h3>DNS Health</h3><canvas id="dnsHealthChart"></canvas></div>
+            <div class="chart-container"><h3>Endpoint vs Login Exposure</h3><canvas id="tlsLoginChart"></canvas></div>
+            <div class="chart-container"><h3>HTTP Status Distribution</h3><canvas id="statusCodeChart"></canvas></div>
+            <div class="chart-container"><h3>Security Header Coverage</h3><canvas id="headerCoverageChart"></canvas></div>
+            <div class="chart-container"><h3>Email Authentication</h3><canvas id="emailCoverageChart"></canvas></div>
+            <div class="chart-container"><h3>Port Distribution Category</h3><canvas id="portCategoryChart"></canvas></div>
+          </section>
 
-      <section class="table-top-controls">
-        <input type="text" id="searchBox" placeholder="Filter results (domain, status code, technology…)" />
-        <div class="hint">Hover the Attack Surface Score to review the contextual risk factors.</div>
-        <div class="table-controls">
-          <label for="rowsPerPageSelect">Rows per page</label>
-          <select id="rowsPerPageSelect">
-            <option value="20">20</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-            <option value="all">ALL</option>
-          </select>
+          <section class="table-top-controls view-block" data-view-group="overview">
+            <input type="text" id="searchBox" placeholder="Search anything here...)" />
+            <div class="hint">Hover the Attack Surface Score to review the contextual risk factors.</div>
+            <div class="table-controls">
+              <label for="rowsPerPageSelect">Rows per page</label>
+              <select id="rowsPerPageSelect">
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="all">ALL</option>
+              </select>
+            </div>
+          </section>
+
+          <section class="focus-header view-block" data-view-group="domain">
+            <span class="view-indicator">Domain Intelligence</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Aggregate visibility into discovery health, mail authentication, and exposed services across observed domains.</p>
+          </section>
+
+        <div class="table-scroll-controls view-block" data-view-group="domain" role="group" aria-label="Domain intelligence table scroll controls">
+          <button type="button" class="table-scroll-button" data-direction="left">◀</button>
+          <button type="button" class="table-scroll-button" data-direction="right">▶</button>
         </div>
-      </section>
+        <div class="table-container view-block" data-view-group="domain">
+          <table id="domain-table" class="focus-table focus-table--domains">
+              <thead>
+                <tr>
+                  <th>Domain Name</th>
+                  <th>Resolution Status</th>
+                  <th>A Record</th>
+                  <th>AAAA Record</th>
+                  <th>NS Records</th>
+                  <th>MX Records</th>
+                  <th>CNAME Records</th>
+                  <th>TXT Records (SPF/DMARC)</th>
+                  <th>SOA Record</th>
+                  <th>SRV Records</th>
+                  <th>CAA Records</th>
+                  <th>Zone Transfer</th>
+                  <th>WHOIS Registrar &amp; Dates</th>
+                  <th>Subdomain Category/Keyword</th>
+                </tr>
+              </thead>
+              <tbody id="domain-table-body"></tbody>
+            </table>
+          </div>
 
-      <div class="table-container">
-        <table id="report-table">
+          <section class="focus-header view-block" data-view-group="endpoints">
+            <span class="view-indicator">Application Endpoints</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Inventory of reachable web surfaces, response characteristics, and technology fingerprints.</p>
+          </section>
+
+        <div class="table-scroll-controls view-block" data-view-group="endpoints" role="group" aria-label="Application endpoints table scroll controls">
+          <button type="button" class="table-scroll-button" data-direction="left">◀</button>
+          <button type="button" class="table-scroll-button" data-direction="right">▶</button>
+        </div>
+        <div class="table-container view-block" data-view-group="endpoints">
+          <table id="endpoints-table" class="focus-table focus-table--endpoints">
+              <thead>
+                <tr>
+                  <th>Domain / Subdomain</th>
+                  <th>Endpoint URL</th>
+                  <th>HTTP Status</th>
+                  <th>Final Redirect URL</th>
+                  <th>Homepage Title</th>
+                  <th>Screenshot</th>
+                  <th>Web Server</th>
+                  <th>Technology Stack</th>
+                  <th>Content Length</th>
+                  <th>Login Interface</th>
+                  <th>API Detected</th>
+                  <th>Colleague Facing Portal</th>
+                  <th>Security Headers</th>
+                  <th>WAF / CDN Presence</th>
+                  <th>Crawled Links Count</th>
+                </tr>
+              </thead>
+              <tbody id="endpoints-table-body"></tbody>
+            </table>
+          </div>
+
+          <section class="focus-header view-block" data-view-group="ips">
+            <span class="view-indicator">IP Addresses</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Mapping of discovered hosts to resolved IP space alongside observed services.</p>
+          </section>
+
+        <div class="table-scroll-controls view-block" data-view-group="ips" role="group" aria-label="IP addresses table scroll controls">
+          <button type="button" class="table-scroll-button" data-direction="left">◀</button>
+          <button type="button" class="table-scroll-button" data-direction="right">▶</button>
+        </div>
+        <div class="table-container view-block" data-view-group="ips">
+          <table id="ip-table" class="focus-table focus-table--ips">
+              <thead>
+                <tr>
+                  <th>IP Address</th>
+                  <th>Hostnames on IP</th>
+                  <th>Reverse DNS (PTR)</th>
+                  <th>ASN / Provider</th>
+                  <th>Network Block</th>
+                  <th>Open Ports / Services</th>
+                  <th>Notable Ports / Services</th>
+                </tr>
+              </thead>
+              <tbody id="ip-table-body"></tbody>
+            </table>
+          </div>
+
+          <section class="focus-header view-block" data-view-group="tls">
+            <span class="view-indicator">TLS Certificates</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Summary of TLS implementations, certificate issuers, and expiration timelines.</p>
+          </section>
+
+        <div class="table-scroll-controls view-block" data-view-group="tls" role="group" aria-label="TLS certificates table scroll controls">
+          <button type="button" class="table-scroll-button" data-direction="left">◀</button>
+          <button type="button" class="table-scroll-button" data-direction="right">▶</button>
+        </div>
+        <div class="table-container view-block" data-view-group="tls">
+          <table id="tls-table" class="focus-table focus-table--tls">
+              <thead>
+                <tr>
+                  <th>Asset</th>
+                  <th>IP Address</th>
+                  <th>Port</th>
+                  <th>TLS Version</th>
+                  <th>Cipher</th>
+                  <th>Not After</th>
+                  <th>Days Until Expiry</th>
+                  <th>Subject DN</th>
+                  <th>Subject CN</th>
+                  <th>Subject AN</th>
+                  <th>Serial</th>
+                  <th>Issuer DN</th>
+                  <th>Issuer CN</th>
+                  <th>Issuer Org</th>
+                </tr>
+              </thead>
+              <tbody id="tls-table-body"></tbody>
+            </table>
+          </div>
+
+          <section class="focus-header view-block" data-view-group="cloud">
+            <span class="view-indicator">Cloud Infrastructure</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Cloud asset classifications, provider coverage, and supporting evidence across discovered hosts.</p>
+          </section>
+
+        <div class="table-scroll-controls view-block" data-view-group="cloud" role="group" aria-label="Cloud infrastructure table scroll controls">
+          <button type="button" class="table-scroll-button" data-direction="left">◀</button>
+          <button type="button" class="table-scroll-button" data-direction="right">▶</button>
+        </div>
+        <div class="table-container view-block" data-view-group="cloud">
+          <table id="cloud-table" class="focus-table focus-table--cloud">
+              <thead>
+                <tr>
+                  <th>Asset</th>
+                  <th>Resource Type</th>
+                  <th>Cloud Provider</th>
+                  <th>Service Family</th>
+                  <th>Resource Identifier</th>
+                  <th>Load Balancer / Traffic Manager</th>
+                  <th>WAF / CDN Shielding</th>
+                  <th>Storage</th>
+                  <th>Evidence</th>
+                </tr>
+              </thead>
+              <tbody id="cloud-table-body"></tbody>
+            </table>
+          </div>
+
+          <div class="table-scroll-controls view-block" data-view-group="overview" role="group" aria-label="Overview table scroll controls">
+            <button type="button" class="table-scroll-button" data-direction="left">◀</button>
+            <button type="button" class="table-scroll-button" data-direction="right">▶</button>
+          </div>
+          <div class="table-container view-block table-view table-view--overview" data-view-group="overview">
+            <table id="report-table">
           <thead>
             <tr>
               <th id="riskScoreHeader">Attack Surface Score<span id="riskSortToggle">▼</span></th>
@@ -376,9 +895,11 @@
             </tr>
           </thead>
           <tbody id="report-table-body"></tbody>
-        </table>
+            </table>
+          </div>
+          <div id="paginationControls" class="view-block" data-view-group="overview"></div>
+        </div>
       </div>
-      <div id="paginationControls"></div>
 
       <div id="screenshotModal">
         <div id="screenshotModalContent">
@@ -434,13 +955,304 @@
       };
       Chart.register(barLabelPlugin);
 
-      const DATABASE_PORTS = new Set([1433, 1434, 1521, 1522, 2483, 2484, 2638, 3050, 3306, 3389, 5432, 5984, 6379, 7000, 7199, 7474, 7687, 9042, 9160, 27017, 27018, 27019, 28015]);
-      const MANAGEMENT_PORTS = new Set([8000, 8008, 8080, 8081, 8083, 8089, 8090, 8443, 8880, 8888, 9000, 9090, 9091, 9092, 9100, 9990, 10000, 10080, 10443, 11211, 15672, 3000, 5000, 54321, 7001, 7002, 7070, 8181, 8800, 9200, 9443, 22, 23, 2222, 2323, 3389, 5900, 5800, 4899, 5631, 5666, 5985, 5986, 8291, 1723, 1194, 992, 6513, 5801, 5802, 5803, 5804, 5805, 5806, 5807, 5809]);
-      const WEB_PORTS = new Set([80, 443, 8000, 8008, 8080, 8081, 8083, 8089, 8090, 8443, 8880, 8888, 9200, 9443]);
-      const EMAIL_TRANSPORT_PORTS = new Set([25, 26, 465, 587]);
-      const EMAIL_ACCESS_PORTS = new Set([110, 143, 993, 995]);
-      const DNS_PORTS = new Set([53]);
-      const FTP_PORTS = new Set([20, 21]);
+      function expandPortSpecString(token) {
+        if (typeof token !== "string") return [];
+        if (token.includes("-")) {
+          const [startStr, endStr] = token.split("-");
+          const start = Number(startStr);
+          const end = Number(endStr);
+          if (Number.isFinite(start) && Number.isFinite(end) && start <= end) {
+            const ports = [];
+            for (let port = start; port <= end; port++) ports.push(port);
+            return ports;
+          }
+          return [];
+        }
+        const value = Number(token);
+        return Number.isFinite(value) ? [value] : [];
+      }
+
+      function expandPortSpecList(specs) {
+        const result = [];
+        (specs || []).forEach(spec => {
+          expandPortSpecString(String(spec)).forEach(port => result.push(port));
+        });
+        return result;
+      }
+
+      function slugifyLabel(label) {
+        return String(label || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "port";
+      }
+
+      const PORT_CATEGORY_DEFINITIONS = Object.freeze([
+        { label: "Web & App Delivery", highlight: "Web & App Delivery", specs: ["80", "81", "443", "8080", "8081", "8083", "8000", "8008", "8443", "8888", "3000", "5000", "9000", "9090", "9443", "10443", "5601", "15672"] },
+        { label: "Remote Admin & Desktop Access", highlight: "Remote Administration", specs: ["22", "23", "3389", "5900-5905", "5985-5986", "1494", "2598", "6000-6010", "8291", "992"] },
+        { label: "Email Transport & Access", highlight: "Email", specs: ["25", "26", "465", "587", "110", "143", "993", "995", "4190", "2525"] },
+        { label: "DNS & Name Services", highlight: "DNS", specs: ["53", "853", "5353", "5355", "953"] },
+        { label: "File Transfer & Storage Sharing", highlight: "File Transfer", specs: ["20", "21", "69", "990", "989", "445", "137-139", "2049", "111", "873", "548", "3260"] },
+        { label: "Directory Services & Authentication", highlight: "Directory/Auth", specs: ["389", "636", "88", "464", "1812", "1813", "1645-1646", "49"] },
+        { label: "VPNs & Remote Tunnels", highlight: "VPN/Tunnel", specs: ["500", "4500", "1701", "1723", "1194", "51820", "5555"] },
+        { label: "Proxies & Caches (HTTP/SOCKS/Tor)", highlight: "Proxies", specs: ["3128", "8080", "8000", "8888", "8081", "1080", "8118", "9050-9051"] },
+        { label: "Relational Databases", highlight: "Database", specs: ["3306", "33060", "5432", "1433", "1434", "1521", "50000", "3050", "2638", "26257", "28015"] },
+        { label: "NoSQL / Caches / Search", highlight: "Database", specs: ["27017-27019", "6379", "6380", "9200", "9300", "9042", "7000-7001", "7199", "11211", "5984", "6984", "8983", "7474", "7687", "8529"] },
+        { label: "Message Brokers & Streaming", highlight: "Messaging", specs: ["5672", "5671", "15672", "9092", "9093", "2181", "1883", "8883", "61616", "61613", "8161", "4222", "6222", "6650"] },
+        { label: "App Servers & Middleware (Java/.NET etc.)", highlight: "App Middleware", specs: ["8009", "9990", "7001", "7002", "9060", "9043", "4848", "1099", "9010", "5005"] },
+        { label: "Containers, Orchestration & Registries", highlight: "Containers", specs: ["2375-2377", "7946", "4789", "6443", "10250", "10255", "2379-2380", "8500", "8600", "4646", "8200", "5000", "8081", "4443"] },
+        { label: "Observability (Monitoring/Logging/Metrics)", highlight: "Monitoring", specs: ["161-162", "514", "6514", "9090", "9100", "9093", "10050", "10051", "5666", "5044", "5601", "9200", "9300"] },
+        { label: "Source Control & Dev Tooling", highlight: "DevOps", specs: ["22", "2222", "29418", "3690", "1666", "8080", "8443", "9000"] },
+        { label: "Load Balancers, Reverse Proxies & ADCs (incl. mgmt)", highlight: "Management", specs: ["1936", "443", "8443", "9443", "10443", "8080"] },
+        { label: "Network Infrastructure & Control-Plane", highlight: "Network Infra", specs: ["179", "830", "7547", "22", "23"] },
+        { label: "Time, Boot & Config Services", highlight: "Infrastructure", specs: ["123", "67-68", "4011", "69"] },
+        { label: "Voice/Video/RTC & VDI", highlight: "Voice/RTC", specs: ["5060", "5061", "3478", "5349", "10000", "4172", "8443"] },
+        { label: "Industrial / IoT / OT Protocols", highlight: "Industrial/IoT", specs: ["502", "20000", "47808", "102", "44818", "4840", "5683-5684"] }
+      ]);
+
+      const CATEGORY_HIGHLIGHT_LABELS = new Map(PORT_CATEGORY_DEFINITIONS.map(def => [def.label, def.highlight]));
+      const PORT_CATEGORY_MAP = new Map();
+      PORT_CATEGORY_DEFINITIONS.forEach(def => {
+        const ports = expandPortSpecList(def.specs);
+        def.resolvedPorts = ports;
+        ports.forEach(port => {
+          if (!PORT_CATEGORY_MAP.has(port)) PORT_CATEGORY_MAP.set(port, new Set());
+          PORT_CATEGORY_MAP.get(port).add(def.label);
+        });
+      });
+
+      const COMMON_PORT_SERVICES = new Map();
+      function registerService(specs, name) {
+        expandPortSpecList(specs).forEach(port => {
+          if (!COMMON_PORT_SERVICES.has(port)) {
+            COMMON_PORT_SERVICES.set(port, name);
+          }
+        });
+      }
+
+      registerService(["7"], "Echo");
+      registerService(["9"], "Discard");
+      registerService(["13"], "Daytime");
+      registerService(["20"], "FTP Data");
+      registerService(["21"], "FTP");
+      registerService(["22"], "SSH");
+      registerService(["23"], "Telnet");
+      registerService(["25"], "SMTP");
+      registerService(["26"], "SMTP");
+      registerService(["37"], "Time");
+      registerService(["49"], "TACACS+");
+      registerService(["53"], "DNS");
+      registerService(["67-68"], "DHCP");
+      registerService(["69"], "TFTP");
+      registerService(["79"], "Finger");
+      registerService(["80", "81", "8080", "8081", "8083", "8000", "8008", "8443", "8888", "3000", "5000", "9000", "9090", "9443", "10443"], "HTTP");
+      registerService(["443"], "HTTPS");
+      registerService(["88"], "Kerberos");
+      registerService(["102"], "Siemens S7");
+      registerService(["106"], "POP3PW");
+      registerService(["110"], "POP3");
+      registerService(["111"], "RPCbind");
+      registerService(["113"], "Ident");
+      registerService(["119"], "NNTP");
+      registerService(["123"], "NTP");
+      registerService(["135"], "MS RPC");
+      registerService(["137-139"], "NetBIOS");
+      registerService(["143"], "IMAP");
+      registerService(["144"], "IMAP Alt");
+      registerService(["1494"], "Citrix ICA");
+      registerService(["161"], "SNMP");
+      registerService(["162"], "SNMP Trap");
+      registerService(["1701"], "L2TP");
+      registerService(["1720"], "H.323");
+      registerService(["1723"], "PPTP");
+      registerService(["1755"], "MMS");
+      registerService(["179"], "BGP");
+      registerService(["1812"], "RADIUS Auth");
+      registerService(["1813"], "RADIUS Accounting");
+      registerService(["1883"], "MQTT");
+      registerService(["1900"], "SSDP");
+      registerService(["1935"], "RTMP");
+      registerService(["1936"], "HAProxy Stats");
+      registerService(["199"], "SMUX");
+      registerService(["389"], "LDAP");
+      registerService(["4190"], "Sieve");
+      registerService(["427"], "SLP");
+      registerService(["445"], "SMB");
+      registerService(["4500"], "IPsec NAT-T");
+      registerService(["464"], "Kerberos kpasswd");
+      registerService(["465"], "SMTPS");
+      registerService(["500"], "ISAKMP");
+      registerService(["502"], "Modbus/TCP");
+      registerService(["5044"], "Logstash Beats");
+      registerService(["5051"], "WebLogic Node Manager");
+      registerService(["5060"], "SIP");
+      registerService(["5061"], "SIP TLS");
+      registerService(["5080"], "Web Admin");
+      registerService(["5101"], "Citrix ICA Mgmt");
+      registerService(["513"], "Rlogin");
+      registerService(["514"], "Syslog");
+      registerService(["515"], "LPR");
+      registerService(["51820"], "WireGuard");
+      registerService(["5190"], "AOL Messenger");
+      registerService(["5353"], "mDNS");
+      registerService(["5355"], "LLMNR");
+      registerService(["5357"], "WS-Discovery");
+      registerService(["543"], "Kerberos");
+      registerService(["544"], "Kerberos");
+      registerService(["5432"], "PostgreSQL");
+      registerService(["548"], "AFP");
+      registerService(["554"], "RTSP");
+      registerService(["5555"], "SoftEther");
+      registerService(["5601"], "Kibana");
+      registerService(["5631"], "PCAnywhere");
+      registerService(["5666"], "NRPE");
+      registerService(["5671"], "AMQP TLS");
+      registerService(["5672"], "AMQP");
+      registerService(["5683"], "CoAP");
+      registerService(["5684"], "CoAP DTLS");
+      registerService(["587"], "SMTP Submission");
+      registerService(["5984"], "CouchDB");
+      registerService(["5985"], "WinRM HTTP");
+      registerService(["5986"], "WinRM HTTPS");
+      registerService(["6000-6010"], "X11");
+      registerService(["61613"], "ActiveMQ STOMP");
+      registerService(["61616"], "ActiveMQ");
+      registerService(["6222"], "NATS Cluster");
+      registerService(["631"], "IPP");
+      registerService(["636"], "LDAPS");
+      registerService(["646"], "LDP");
+      registerService(["6514"], "Syslog TLS");
+      registerService(["6646"], "Oracle GoldenGate");
+      registerService(["6650"], "Pulsar");
+      registerService(["6697"], "IRC TLS");
+      registerService(["7000"], "Cassandra Inter-node");
+      registerService(["7001"], "Cassandra TLS");
+      registerService(["7002"], "WebLogic Secure");
+      registerService(["7070"], "RealServer");
+      registerService(["7199"], "Cassandra JMX");
+      registerService(["7306"], "MySQL Alt");
+      registerService(["7443"], "HTTPS Alt");
+      registerService(["7474"], "Neo4j HTTP");
+      registerService(["7547"], "TR-069");
+      registerService(["7687"], "Neo4j Bolt");
+      registerService(["7946"], "Docker Swarm Gossip");
+      registerService(["8009"], "AJP");
+      registerService(["8118"], "Privoxy");
+      registerService(["8161"], "ActiveMQ Admin");
+      registerService(["8200"], "HashiCorp Vault");
+      registerService(["830"], "NETCONF");
+      registerService(["8529"], "ArangoDB");
+      registerService(["853"], "DNS over TLS");
+      registerService(["8600"], "Consul DNS");
+      registerService(["873"], "rsync");
+      registerService(["8883"], "MQTT TLS");
+      registerService(["8888"], "HTTP Alt");
+      registerService(["8983"], "Apache Solr");
+      registerService(["9000"], "HTTP Alt");
+      registerService(["9010"], "WebSphere");
+      registerService(["9042"], "Cassandra CQL");
+      registerService(["9043"], "WebSphere HTTPS");
+      registerService(["9050"], "Tor SOCKS");
+      registerService(["9051"], "Tor Control");
+      registerService(["9060"], "WebSphere Admin");
+      registerService(["9090"], "Prometheus");
+      registerService(["9092"], "Kafka");
+      registerService(["9093"], "Alertmanager");
+      registerService(["9100"], "Node Exporter");
+      registerService(["9200"], "Elasticsearch HTTP");
+      registerService(["9300"], "Elasticsearch Transport");
+      registerService(["9443"], "HTTPS Alt");
+      registerService(["953"], "BIND RNDC");
+      registerService(["969"], "Trivial File Transfer");
+      registerService(["990"], "FTPS");
+      registerService(["992"], "Telnet TLS");
+      registerService(["993"], "IMAPS");
+      registerService(["995"], "POP3S");
+      registerService(["9990"], "WildFly Management");
+      registerService(["9999"], "App Service");
+      registerService(["10000"], "Webmin");
+      registerService(["10050"], "Zabbix Agent");
+      registerService(["10051"], "Zabbix Server");
+      registerService(["1025-1029"], "Ephemeral Service");
+      registerService(["10250"], "Kubelet");
+      registerService(["10255"], "Kubelet (RO)");
+      registerService(["10443"], "HTTPS Alt");
+      registerService(["1080"], "SOCKS Proxy");
+      registerService(["1099"], "Java RMI");
+      registerService(["1110"], "POP3 Alt");
+      registerService(["11211"], "Memcached");
+      registerService(["1194"], "OpenVPN");
+      registerService(["12345"], "NetBus");
+      registerService(["1433"], "SQL Server");
+      registerService(["1434"], "SQL Server Browser");
+      registerService(["1521"], "Oracle TNS");
+      registerService(["15672"], "RabbitMQ Admin");
+      registerService(["1666"], "Perforce");
+      registerService(["1883"], "MQTT");
+      registerService(["1935"], "RTMP");
+      registerService(["2000"], "Cisco SCCP");
+      registerService(["2001"], "Cisco MGCP");
+      registerService(["20000"], "DNP3");
+      registerService(["2049"], "NFS");
+      registerService(["2082-2083"], "cPanel");
+      registerService(["2086-2087"], "WHM");
+      registerService(["2121"], "FTP Alt");
+      registerService(["2179"], "VMware CRTL");
+      registerService(["2181"], "Zookeeper");
+      registerService(["2222"], "SSH Alt");
+      registerService(["2375"], "Docker API");
+      registerService(["2376"], "Docker API TLS");
+      registerService(["2377"], "Docker Swarm");
+      registerService(["2379"], "etcd");
+      registerService(["2380"], "etcd Peer");
+      registerService(["2433"], "Oracle DB Control");
+      registerService(["2480"], "OrientDB HTTP");
+      registerService(["2525"], "Alt SMTP");
+      registerService(["2580"], "ClearCase");
+      registerService(["2598"], "Citrix Session Reliability");
+      registerService(["26257"], "CockroachDB");
+      registerService(["2638"], "Sybase SQL Anywhere");
+      registerService(["27017-27019"], "MongoDB");
+      registerService(["2717"], "PNRP");
+      registerService(["28015"], "RethinkDB");
+      registerService(["3000"], "Node.js App");
+      registerService(["3050"], "Firebird");
+      registerService(["3128"], "HTTP Proxy");
+      registerService(["3260"], "iSCSI");
+      registerService(["32768"], "rpc.statd");
+      registerService(["3306"], "MySQL");
+      registerService(["33060"], "MySQL X Plugin");
+      registerService(["3389"], "RDP");
+      registerService(["3478"], "STUN/TURN");
+      registerService(["3632"], "DistCCD");
+      registerService(["3690"], "Subversion");
+      registerService(["3697"], "SMTP");
+      registerService(["3986"], "MSSQL");
+      registerService(["4011"], "PXE");
+      registerService(["4172"], "PCoIP");
+      registerService(["4222"], "NATS");
+      registerService(["4333"], "mSQL");
+      registerService(["4443"], "HTTPS Alt");
+      registerService(["44818"], "EtherNet/IP");
+      registerService(["4567"], "HTCP");
+      registerService(["4646"], "Hashicorp Nomad");
+      registerService(["4789"], "VXLAN");
+      registerService(["4840"], "OPC UA");
+      registerService(["4848"], "GlassFish Admin");
+      registerService(["4899"], "Radmin");
+      registerService(["49152-49157"], "Reserved Ephemeral");
+      registerService(["5683-5684"], "CoAP");
+      registerService(["5800"], "VNC Web");
+      registerService(["5900-5905"], "VNC");
+      registerService(["6443"], "Kubernetes API");
+
+      function getPortServiceName(port) {
+        return COMMON_PORT_SERVICES.get(port) || "unknown/custom";
+      }
+
+      function getPortCategories(port) {
+        return Array.from(PORT_CATEGORY_MAP.get(port) || []);
+      }
 
       const THEME_STORAGE_KEY = "report-theme-preference";
       const themeToggleButton = document.getElementById("themeToggleButton");
@@ -530,6 +1342,45 @@
 
       applyChartDefaults();
 
+      const pieValueLabelsPlugin = {
+        id: "pieValueLabels",
+        afterDatasetsDraw(chart) {
+          const datasets = chart.data?.datasets || [];
+          const { ctx } = chart;
+          datasets.forEach((dataset, datasetIndex) => {
+            if (!dataset || !dataset.valueLabels) return;
+            const meta = chart.getDatasetMeta(datasetIndex);
+            if (!meta || (meta.type !== "doughnut" && meta.type !== "pie")) return;
+            const dataPoints = dataset.data || [];
+            meta.data.forEach((element, index) => {
+              const rawValue = dataPoints[index];
+              const numericValue = Number(rawValue);
+              if (!element || !Number.isFinite(numericValue) || numericValue === 0) return;
+              const { x, y } = element.tooltipPosition();
+              ctx.save();
+              const formattedValue = typeof dataset.valueLabelFormatter === "function"
+                ? dataset.valueLabelFormatter(rawValue, index, dataPoints)
+                : numericValue.toLocaleString();
+              const fontSize = dataset.valueLabelFontSize || 12;
+              const fontFamily = dataset.valueLabelFontFamily || "Inter, system-ui, sans-serif";
+              const fontWeight = dataset.valueLabelFontWeight || "600";
+              ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+              ctx.fillStyle = dataset.valueLabelColor || "#ffffff";
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              if (dataset.valueLabelShadow !== false) {
+                ctx.shadowColor = dataset.valueLabelShadowColor || "rgba(15, 23, 42, 0.35)";
+                ctx.shadowBlur = dataset.valueLabelShadowBlur || 6;
+              }
+              ctx.fillText(formattedValue, x, y);
+              ctx.restore();
+            });
+          });
+        }
+      };
+
+      Chart.register(pieValueLabelsPlugin);
+
       function refreshThemeTokens() {
         const tokens = applyChartDefaults();
         [
@@ -540,7 +1391,7 @@
           statusCodeChart,
           headerCoverageChart,
           emailCoverageChart,
-          techChart
+          portCategoryChart
         ].filter(Boolean).forEach(chart => updateChartAppearance(chart, tokens));
       }
 
@@ -593,7 +1444,7 @@
       }
 
       // Global variables for charts and table data.
-      let funnelChart, riskLeaderboardChart, dnsHealthChart, tlsLoginChart, statusCodeChart, headerCoverageChart, emailCoverageChart, techChart;
+      let funnelChart, riskLeaderboardChart, dnsHealthChart, tlsLoginChart, statusCodeChart, headerCoverageChart, emailCoverageChart, portCategoryChart;
       let allTableRows = [];
       let currentPage = 1;
       let rowsPerPage = 20;
@@ -647,6 +1498,8 @@
       function prepareRowCells(row) {
         const cells = Array.from(row.cells);
         cells.forEach((cell, index) => {
+          const classNames = COLUMN_CLASS_MAP[index] || [];
+          classNames.forEach(cls => cell.classList.add(cls));
           if (index === 0) return;
           if (cell.dataset.clampPrepared === "true") return;
           if (cell.querySelector("img")) {
@@ -701,6 +1554,16 @@
         }
       }
 
+      function applyColumnClassesToHeaders() {
+        const headerRows = document.querySelectorAll("#report-table thead tr");
+        headerRows.forEach(row => {
+          Array.from(row.cells).forEach((cell, index) => {
+            const classNames = COLUMN_CLASS_MAP[index] || [];
+            classNames.forEach(cls => cell.classList.add(cls));
+          });
+        });
+      }
+
       function updateClampStates(rows) {
         rows.forEach(row => {
           const cells = Array.from(row.cells);
@@ -713,102 +1576,407 @@
         });
       }
 
+      function initializeSidebarToggle() {
+        const layout = document.querySelector(".report-layout");
+        const sidebar = document.querySelector(".report-sidebar");
+        const nav = document.getElementById("reportNav");
+        const collapseButton = document.getElementById("sidebarCollapseButton");
+        const expandButton = document.getElementById("sidebarExpandButton");
+        if (!layout || !sidebar || !nav || !collapseButton || !expandButton) return;
+
+        const STORAGE_KEY = "frogyReportSidebarCollapsed";
+        let userCollapsed = false;
+        let togglesLocked = false;
+
+        const getLabelText = (collapsed) => collapsed ? "Show focus areas" : "Hide focus areas";
+
+        const updateCollapseButton = (collapsed) => {
+          const label = getLabelText(collapsed);
+          collapseButton.setAttribute("aria-label", label);
+          collapseButton.setAttribute("aria-expanded", collapsed ? "false" : "true");
+          collapseButton.classList.toggle("is-collapsed", collapsed);
+          collapseButton.hidden = collapsed || togglesLocked;
+          collapseButton.disabled = togglesLocked;
+        };
+
+        const updateExpandButton = (collapsed) => {
+          const label = getLabelText(true);
+          expandButton.setAttribute("aria-label", label);
+          expandButton.setAttribute("aria-expanded", collapsed ? "false" : "true");
+          expandButton.hidden = !collapsed || togglesLocked;
+          expandButton.disabled = togglesLocked;
+        };
+
+        const applyState = (collapsed, { persist = true, force = false } = {}) => {
+          const next = (togglesLocked && !force) ? false : collapsed;
+          sidebar.classList.toggle("report-sidebar--collapsed", next);
+          layout.classList.toggle("report-layout--collapsed", next);
+          nav.setAttribute("aria-hidden", next ? "true" : "false");
+          if (next) {
+            nav.setAttribute("inert", "");
+          } else {
+            nav.removeAttribute("inert");
+          }
+          updateCollapseButton(next);
+          updateExpandButton(next);
+          if (persist && !togglesLocked) {
+            try {
+              localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
+            } catch (error) {
+              /* localStorage may be unavailable, ignore */
+            }
+          }
+          return next;
+        };
+
+        try {
+          userCollapsed = localStorage.getItem(STORAGE_KEY) === "1";
+        } catch (error) {
+          userCollapsed = false;
+        }
+
+        const focusActiveNavItem = () => {
+          window.setTimeout(() => {
+            const activeNavButton = nav.querySelector(".report-nav__item.is-active") || nav.querySelector(".report-nav__item");
+            if (activeNavButton) {
+              activeNavButton.focus({ preventScroll: true });
+            }
+          }, 200);
+        };
+
+        collapseButton.addEventListener("click", () => {
+          userCollapsed = true;
+          applyState(true);
+          window.requestAnimationFrame(() => {
+            expandButton.focus({ preventScroll: true });
+          });
+        });
+
+        expandButton.addEventListener("click", () => {
+          userCollapsed = false;
+          applyState(false);
+          focusActiveNavItem();
+        });
+
+        const breakpoint = window.matchMedia("(max-width: 1024px)");
+        const handleBreakpointChange = () => {
+          togglesLocked = breakpoint.matches;
+          if (togglesLocked) {
+            userCollapsed = false;
+            applyState(false, { persist: false, force: true });
+          } else {
+            applyState(userCollapsed, { persist: false, force: true });
+          }
+        };
+
+        if (typeof breakpoint.addEventListener === "function") {
+          breakpoint.addEventListener("change", handleBreakpointChange);
+        } else if (typeof breakpoint.addListener === "function") {
+          breakpoint.addListener(handleBreakpointChange);
+        }
+
+        applyState(userCollapsed, { persist: false, force: true });
+        handleBreakpointChange();
+      }
+
+      function initializeViewControls() {
+        const navButtons = Array.from(document.querySelectorAll(".report-nav__item"));
+        if (!navButtons.length) return;
+        const viewTargets = Array.from(document.querySelectorAll(".view-block"));
+        const tableContainer = document.querySelector(".table-container.table-view");
+        const viewLabel = document.getElementById("activeViewLabel");
+        let currentView = document.body.dataset.activeView || "overview";
+        if (!VIEW_LABELS[currentView]) currentView = "overview";
+
+        const applyView = (view) => {
+          const nextView = VIEW_LABELS[view] ? view : "overview";
+          currentView = nextView;
+          document.body.dataset.activeView = nextView;
+          navButtons.forEach(btn => {
+            const isActive = btn.dataset.view === nextView;
+            btn.classList.toggle("is-active", isActive);
+            btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+          });
+          viewTargets.forEach(target => {
+            const groups = (target.dataset.viewGroup || "").split(/\s+/).filter(Boolean);
+            const shouldShow = !groups.length || groups.includes(nextView) || groups.includes("all");
+            if (shouldShow) {
+              target.removeAttribute("hidden");
+            } else {
+              target.setAttribute("hidden", "true");
+            }
+          });
+          if (tableContainer) {
+            TABLE_VIEW_CLASSNAMES.forEach(cls => tableContainer.classList.remove(cls));
+            tableContainer.classList.add(`table-view--${nextView}`);
+          }
+          if (viewLabel) {
+            viewLabel.textContent = VIEW_LABELS[nextView];
+          }
+          const tableRowSelectors = {
+            overview: "#report-table-body tr",
+            domain: "#domain-table-body tr",
+            endpoints: "#endpoints-table-body tr",
+            ips: "#ip-table-body tr",
+            tls: "#tls-table-body tr",
+            cloud: "#cloud-table-body tr"
+          };
+          const selector = tableRowSelectors[nextView];
+          if (selector) {
+            window.requestAnimationFrame(() => {
+              const rows = Array.from(document.querySelectorAll(selector));
+              if (rows.length) {
+                updateClampStates(rows);
+              }
+            });
+          }
+        };
+
+        navButtons.forEach(btn => {
+          btn.addEventListener("click", () => {
+            if (btn.dataset.view === currentView) return;
+            applyView(btn.dataset.view);
+          });
+        });
+
+        applyView(currentView);
+      }
+
       // Theme-aware rendering relies on the active CSS custom properties.
+
+      function initializeTableScrollButtons() {
+        const SCROLL_STEP = 320;
+        const controlGroups = Array.from(document.querySelectorAll(".table-scroll-controls"));
+        controlGroups.forEach(group => {
+          const container = group.nextElementSibling;
+          if (!container || !container.classList.contains("table-container")) return;
+          const buttons = group.querySelectorAll(".table-scroll-button");
+          buttons.forEach(button => {
+            button.addEventListener("click", () => {
+              const direction = button.dataset.direction === "left" ? -1 : 1;
+              container.scrollBy({ left: direction * SCROLL_STEP, behavior: "smooth" });
+            });
+          });
+        });
+      }
 
       // Utility function
       function formatCell(arr) {
         return (arr && arr.length) ? arr.join("<br>") : "N/A";
       }
 
+      function normalizeTlsVersion(version) {
+        if (!version || typeof version !== "string") return "";
+        let cleaned = version.replace(/\(.*?\)/g, " ");
+        cleaned = cleaned.replace(/[^A-Za-z0-9.]/g, "").toUpperCase();
+        if (!cleaned) return "";
+        if (cleaned.startsWith("TLSV")) return `TLSv${cleaned.slice(4)}`;
+        if (cleaned.startsWith("TLS")) return `TLSv${cleaned.slice(3)}`;
+        if (cleaned.startsWith("SSLV")) return `SSLv${cleaned.slice(4)}`;
+        if (cleaned.startsWith("SSL")) return `SSLv${cleaned.slice(3)}`;
+        return "";
+      }
+
+      function computeDaysUntil(dateString) {
+        if (!dateString || typeof dateString !== "string") return null;
+        const parsed = Date.parse(dateString);
+        if (Number.isNaN(parsed)) return null;
+        const diffMs = parsed - Date.now();
+        return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      }
+
+      function describeValidityWindow(validFrom, validTo) {
+        const fromValue = (typeof validFrom === "string" && validFrom.trim()) ? validFrom.trim() : "N/A";
+        const toValue = (typeof validTo === "string" && validTo.trim()) ? validTo.trim() : "N/A";
+        const summary = `${fromValue} → ${toValue}`;
+        const days = computeDaysUntil(toValue);
+        let badge = "";
+        let status = "unknown";
+        if (days === null) {
+          status = "unknown";
+        } else if (days < 0) {
+          status = "expired";
+          badge = `Expired ${Math.abs(days)} day(s) ago`;
+        } else if (days <= 7) {
+          status = "critical";
+          badge = `Expires in ${days} day(s)`;
+        } else if (days <= 14) {
+          status = "warning";
+          badge = `Expires in ${days} day(s)`;
+        } else if (days <= 30) {
+          status = "soon";
+          badge = `Expires in ${days} day(s)`;
+        } else {
+          status = "ok";
+          badge = `Expires in ${days} day(s)`;
+        }
+        return { summary, badge, status, days };
+      }
+
       // Compute risk score
       function computePriority({
-        purpose, url, loginFound, statusCode, sslVersion, certExpiry,
-        sts, xfo, csp, xss, rp, pp, openPortsCount, dbPortsCount, managementPortsCount, techCount, linkCount
+        purpose,
+        url,
+        loginFound,
+        statusCode,
+        sslVersion,
+        tlsDeprecated,
+        certExpiry,
+        scheme,
+        securityHeadersMissing,
+        hasSpf,
+        hasDkim,
+        hasDmarc,
+        hasDnssec,
+        openPortsCount,
+        dbPortsCount,
+        managementPortsCount,
+        techCount,
+        linkCount,
+        isApiSurface,
+        isEmployeeAsset,
+        cloudProfile
       }) {
+        const bucketCaps = { exposure: 45, hygiene: 35, sensitivity: 20 };
+        const bucketScores = { exposure: 0, hygiene: 0, sensitivity: 0 };
+        const contributions = [];
+        const addContribution = (bucket, points, reason) => {
+          if (!points || points <= 0 || !reason) return;
+          const remaining = bucketCaps[bucket] - bucketScores[bucket];
+          if (remaining <= 0) return;
+          const applied = Math.min(points, remaining);
+          if (applied <= 0) return;
+          bucketScores[bucket] += applied;
+          contributions.push({ bucket, points: applied, reason });
+        };
 
-        let score = 0;
-        const reasons = [];
-        if (purpose && purpose.toLowerCase().includes("employee")) {
-          score += 1;
-          reasons.push("+1 (Potential employee-intended domain found)");
+        // Exposure factors
+        const loginDetected = (loginFound || "").toString().toLowerCase() === "yes";
+        const requestScheme = (scheme || "").toLowerCase();
+        if (loginDetected && requestScheme === "http") {
+          addContribution("exposure", 20, "Login interface served over HTTP");
+        } else if (loginDetected) {
+          addContribution("exposure", 12, "Authenticated surface exposed");
         }
-        if (url && url !== "N/A") {
-          score += 1;
-          reasons.push("+1 (Domain has live application)");
+        if (Number(statusCode) >= 500) {
+          addContribution("exposure", 4, `Application returning ${statusCode} status`);
         }
-        if (loginFound === "Yes") {
-          score += 1;
-          reasons.push("+1 (Login interface found on application)");
+        if (Number.isFinite(openPortsCount) && openPortsCount > 0) {
+          addContribution("exposure", Math.min(14, openPortsCount * 2), `${openPortsCount} internet services reachable`);
         }
-        if (statusCode === 200) {
-          score += 1;
-          reasons.push("+1 (Application has 200 status code)");
+        if (Number.isFinite(managementPortsCount) && managementPortsCount > 0) {
+          addContribution(
+            "exposure",
+            Math.min(15, managementPortsCount * 5),
+            `${managementPortsCount} management port${managementPortsCount === 1 ? "" : "s"} exposed`
+          );
         }
-        if (sslVersion) {
-          const cleanVersion = sslVersion.replace(/\s+/g, '');
-          if (/^TLSv(1\.2|1\.3)$/i.test(cleanVersion)) {
-            reasons.push("+0 (Version of TLS is latest)");
-          } else if (/^TLSv(1\.0|1\.1)$/i.test(cleanVersion)) {
-            score += 2;
-            reasons.push("+1 (TLSv1.0 or TLSv1.1)");
-          } else if (/^SSLv(1\.0|2\.0|3\.0)$/i.test(cleanVersion)) {
-            score += 5;
-            reasons.push("+5 (SSLv1/2/3)");
+        if (Number.isFinite(dbPortsCount) && dbPortsCount > 0) {
+          addContribution(
+            "exposure",
+            Math.min(12, dbPortsCount * 6),
+            `${dbPortsCount} database port${dbPortsCount === 1 ? "" : "s"} exposed`
+          );
+        }
+        if (Number.isFinite(linkCount) && linkCount > 0) {
+          const linkScore = Math.min(6, Math.round(Math.log10(linkCount + 1) * 4));
+          if (linkScore > 0) {
+            addContribution("exposure", linkScore, `${linkCount} crawlable links discovered`);
           }
-        } else {
-          score += 1;
-          reasons.push("+1 (no sslVersion reported)");
         }
-        if (certExpiry && certExpiry !== "N/A") {
-          const expiryDate = new Date(certExpiry);
-          const now = new Date();
-          const diffDays = (expiryDate - now) / (1000 * 60 * 60 * 24);
-          if (!isNaN(diffDays)) {
-            if (diffDays < 0) {
-              score += 20;
-              reasons.push("+20 (certificate expired)");
-            } else if (diffDays <= 7) {
-              score += 10;
-              reasons.push("+10 (cert expires in ≤7 days)");
-            } else if (diffDays <= 14) {
-              score += 5;
-              reasons.push("+5 (cert expires in ≤14 days)");
-            } else if (diffDays <= 30) {
-              score += 2;
-              reasons.push("+2 (cert expires in ≤30 days)");
+        if (cloudProfile) {
+          const resourceType = (cloudProfile.ResourceType || "").toLowerCase();
+          const shielding = (cloudProfile.WafShielding || "").toLowerCase();
+          const storageLabel = (cloudProfile.Storage || "").toLowerCase();
+          if (shielding.includes("direct origin")) {
+            if (/cdn|edge|load balancer|traffic manager/.test(resourceType)) {
+              addContribution("exposure", 12, `${cloudProfile.ResourceType || "Edge service"} without shielding`);
+            } else {
+              addContribution("exposure", 8, "Cloud workload exposed without shielding");
             }
           }
+          if (resourceType.includes("object storage") || storageLabel.includes("object storage")) {
+            addContribution("sensitivity", 8, "Object storage endpoint exposed");
+            if (shielding.includes("direct origin")) {
+              addContribution("exposure", 6, "Object storage origin accessible");
+            }
+          }
+          if (resourceType.includes("api") || resourceType.includes("serverless")) {
+            addContribution("sensitivity", 5, `${cloudProfile.ResourceType || "API surface"} detected`);
+          }
+          if (resourceType.includes("managed db")) {
+            addContribution("sensitivity", 7, "Managed database footprint reachable");
+          }
         }
-        function missingHeader(val) {
-          return !val || val.trim() === "" || val.trim().toLowerCase() === "false";
+
+        // Hygiene factors
+        const normalizedVersion = normalizeTlsVersion(sslVersion);
+        if (!normalizedVersion || normalizedVersion === "N/A") {
+          addContribution("hygiene", 6, "TLS version unknown");
+        } else if (/^tlsv1\.0|tlsv1\.1$/i.test(normalizedVersion)) {
+          addContribution("hygiene", 12, `Legacy TLS (${normalizedVersion})`);
+        } else if (/^sslv/i.test(normalizedVersion)) {
+          addContribution("hygiene", 18, `Deprecated SSL protocol (${normalizedVersion})`);
         }
-        if (missingHeader(sts)) { score += 1; reasons.push("+1 (Missing HSTS)"); }
-        if (missingHeader(xfo)) { score += 1; reasons.push("+1 (Missing X-Frame-Options)"); }
-        if (missingHeader(csp)) { score += 1; reasons.push("+1 (missing CSP)"); }
-        if (missingHeader(xss)) { score += 1; reasons.push("+1 (Missing X-XSS-Protection)"); }
-        if (missingHeader(rp)) { score += 1; reasons.push("+1 (Missing Referrer-Policy)"); }
-        if (missingHeader(pp)) { score += 1; reasons.push("+1 (Missing Permissions-Policy)"); }
-        if (openPortsCount && Number.isFinite(openPortsCount)) {
-          score += openPortsCount;
-          reasons.push(`+${openPortsCount} (Each Open ports)`);
+        const deprecatedProtocols = Array.isArray(tlsDeprecated) ? tlsDeprecated.filter(Boolean) : [];
+        if (deprecatedProtocols.length) {
+          addContribution("hygiene", 8, `Legacy protocol support (${deprecatedProtocols.join(", ")})`);
         }
-        if (dbPortsCount && Number.isFinite(dbPortsCount)) {
-          score += dbPortsCount;
-          reasons.push(`+${dbPortsCount} (Database ports)`);
+        if (certExpiry && certExpiry !== "N/A") {
+          const days = computeDaysUntil(certExpiry);
+          if (days !== null) {
+            if (days < 0) {
+              addContribution("hygiene", 20, "TLS certificate expired");
+            } else if (days <= 7) {
+              addContribution("hygiene", 12, "TLS certificate expires within 7 days");
+            } else if (days <= 30) {
+              addContribution("hygiene", 6, "TLS certificate expires within 30 days");
+            }
+          }
+        } else {
+          addContribution("hygiene", 4, "Certificate validity unknown");
         }
-        if (managementPortsCount && Number.isFinite(managementPortsCount)) {
-          score += managementPortsCount;
-          reasons.push(`+${managementPortsCount} (Management ports)`);
+        const missingHeaders = Array.isArray(securityHeadersMissing) ? securityHeadersMissing : [];
+        if (missingHeaders.length) {
+          addContribution(
+            "hygiene",
+            Math.min(12, missingHeaders.length * 2),
+            `Missing security headers (${missingHeaders.join(", ")})`
+          );
         }
-        if (techCount && Number.isFinite(techCount)) {
-          score += techCount;
-          reasons.push(`+${techCount} (Tech stack count)`);
+        if (!hasDmarc) addContribution("hygiene", 6, "DMARC not published");
+        if (!hasSpf) addContribution("hygiene", 4, "SPF not published");
+        if (!hasDkim) addContribution("hygiene", 3, "DKIM not published");
+        if (!hasDnssec) addContribution("hygiene", 2, "DNSSEC not enabled");
+
+        // Sensitivity factors
+        if (isEmployeeAsset || (purpose && purpose.toLowerCase().includes("employee"))) {
+          addContribution("sensitivity", 12, "Employee-facing asset");
         }
-        if (linkCount && Number.isFinite(linkCount) && linkCount > 0) {
-          score += linkCount;
-          reasons.push(`+${linkCount} (Crawled links discovered)`);
+        if (isApiSurface) {
+          addContribution("sensitivity", 6, "API surface detected");
         }
-        return { score, debug: reasons };
+        if (techCount && Number.isFinite(techCount) && techCount > 6) {
+          addContribution("sensitivity", 4, `${techCount} technologies fingerprinted`);
+        }
+        if (cloudProfile && cloudProfile.CloudProvider) {
+          addContribution("sensitivity", 3, `${cloudProfile.CloudProvider} managed surface`);
+        }
+
+        const totalScore = Math.min(
+          100,
+          bucketScores.exposure + bucketScores.hygiene + bucketScores.sensitivity
+        );
+        const reasons = contributions
+          .sort((a, b) => b.points - a.points)
+          .map(item => `${item.reason}${item.points ? ` (+${item.points})` : ""}`)
+          .slice(0, 5);
+
+        return {
+          score: totalScore,
+          reasons,
+          breakdown: { exposure: bucketScores.exposure, hygiene: bucketScores.hygiene, sensitivity: bucketScores.sensitivity }
+        };
       }
 
       function getDynamicColor(score, minScore, maxScore) {
@@ -1027,57 +2195,51 @@
           .slice(0, 3);
       }
 
-      function buildNarrative(summary, posture, footprint) {
-        if (!summary) return "";
-        const sentences = [];
-        const footprintSnippet = footprint?.descriptor
-          ? `${footprint.label} footprint (${footprint.descriptor})`
-          : `${footprint?.label || "Minimal"} footprint`;
-        sentences.push(`${footprintSnippet.charAt(0).toUpperCase()}${footprintSnippet.slice(1)}.`);
-
-        if (posture?.posture) {
-          const reason = posture.reason ? ` because ${posture.reason}` : "";
-          sentences.push(`Overall posture is ${posture.posture}${reason}.`);
-        }
-
-        const positives = [];
-        const httpLogins = Number(summary?.httpLogin?.count) || 0;
-        const totalLogins = Number(summary?.totalLoginSurfaces) || 0;
-        if (httpLogins === 0 && totalLogins > 0) positives.push("All login flows enforce HTTPS.");
-
-        const emailTotal = Number(summary?.emailCoverage?.total) || 0;
-        if (emailTotal && summary.emailCoverage?.dmarcCovered === emailTotal) positives.push("DMARC is enforced across every monitored domain.");
-
-        if (Number(summary?.totalOpenPorts) === 0) positives.push("No unexpected services were detected beyond the primary web stack.");
-
-        if (Number(summary?.katanaTotal) && Number(summary.katanaTotal) <= 200) {
-          positives.push(`${formatNumber(summary.katanaTotal)} crawlable URLs surfaced, manageable for manual review.`);
-        }
-
-        if (positives.length) sentences.push(positives.slice(0, 2).join(" "));
-
-        return sentences.join(" ").replace(/\s+/g, " ").trim();
-      }
-
-      function generateExecutiveSummary({ summarySignals, actions, topRisk }) {
+function generateExecutiveSummary({ summarySignals, actions, topRisk }) {
         const footprint = describeFootprint(summarySignals?.pipeline || {});
         const posture = assessRiskPosture(summarySignals || {});
         const keyDrivers = buildKeyDrivers(summarySignals || {}, topRisk);
-        const narrative = buildNarrative(summarySignals || {}, posture, footprint);
 
         const actionList = Array.isArray(actions) && actions.length
-          ? actions.slice(0, 3)
+          ? actions.slice(0, 2)
           : ["Maintain current controls and monitor upcoming scans for emerging trends."];
 
+        const highlights = [];
+        const discovered = Number(summarySignals?.pipeline?.discovered) || 0;
+        const resolvable = Number(summarySignals?.pipeline?.resolvable) || 0;
+        const webHosts = Number(summarySignals?.pipeline?.webHosts) || 0;
+        if (discovered || resolvable || webHosts) {
+          highlights.push(`Footprint: ${formatNumber(discovered)} discovered / ${formatNumber(resolvable)} live / ${formatNumber(webHosts)} web`);
+        }
+        const totalLogins = Number(summarySignals?.totalLoginSurfaces) || 0;
+        const httpsLogins = Number(summarySignals?.httpsLoginCount) || 0;
+        if (totalLogins) {
+          const httpsRatio = Math.round((httpsLogins / totalLogins) * 100);
+          highlights.push(`${httpsRatio}% of ${formatNumber(totalLogins)} login flows enforce HTTPS`);
+        }
+        if (topRisk?.label || summarySignals?.topRiskLabel) {
+          const riskLabel = topRisk?.label || summarySignals?.topRiskLabel;
+          const riskScore = Number(topRisk?.score ?? summarySignals?.topRiskScore);
+          const suffix = Number.isFinite(riskScore) && riskScore > 0 ? ` (score ${riskScore})` : "";
+          highlights.push(`Risk hotspot: ${riskLabel}${suffix}`);
+        }
+        const cloudStats = summarySignals?.cloudStats;
+        if (cloudStats?.total) {
+          const unshielded = cloudStats.unshielded || 0;
+          highlights.push(`Cloud: ${formatNumber(unshielded)}/${formatNumber(cloudStats.total)} assets lack shielding`);
+        }
+        if (!highlights.length && keyDrivers.length) {
+          highlights.push(keyDrivers[0]);
+        }
+
         return {
-          heading: `Executive Summary - ${posture.posture || "Low"}`,
+          heading: `Executive Summary`,
           postureLabel: "Overall posture",
           postureValue: posture.posture || "Low",
           footprintText: footprint.descriptor
             ? `${footprint.label} footprint - ${footprint.descriptor}`
             : `${footprint.label} footprint`,
-          narrative,
-          keyDrivers,
+          highlights: highlights.slice(0, 3),
           actionList
         };
       }
@@ -1093,7 +2255,6 @@
           exposure,
           authentication,
           controls,
-          infrastructure,
           metadata,
           summary
         } = metrics;
@@ -1103,14 +2264,14 @@
           topRisk
         });
         const contextMap = {
-          "Discovered Subdomains": "Total internet-facing domains discovered this run.",
-          "DNS Resolvable": "Shows which domains still resolve publicly and are reachable.",
-          "Active Web Hosts": "Live hosts serving HTTP/S content attackers can reach.",
-          "NXDOMAIN Findings": "Dormant names still owned but no longer resolving.",
-          "Login Interfaces": "Applications presenting an authentication flow to users.",
+          "Total Assets": "Total internet-facing domains discovered this run.",
+          "Live Assets": "Shows which domains still resolve publicly and are reachable.",
+          "Application Endpoints": "Live hosts serving HTTP/S content attackers can reach.",
+          "Possible Dormant Assets": "Dormant names still owned but no longer resolving.",
+          "Login Portals": "Applications presenting an authentication flow to users.",
           "HTTP Login Pages": "Plaintext logins that can be intercepted or modified.",
           "HTTPS Login Pages": "Login flows already protected by TLS.",
-          "Employee-Facing Assets": "Assets intended for staff that warrant extra scrutiny.",
+          "Employee-Intended Assets": "Assets intended for staff that warrant extra scrutiny.",
           "SPF Coverage": "Domains publishing SPF to curb sender spoofing.",
           "DMARC Coverage": "Domains enforcing DMARC for phishing resilience.",
           "DKIM Coverage": "Domains signing outbound mail with DKIM.",
@@ -1159,15 +2320,14 @@
           ? `${pipeline.discovered.toLocaleString()} discovered -> ${pipeline.resolvable.toLocaleString()} resolvable -> ${pipeline.webHosts.toLocaleString()} web hosts`
           : "No footprint data available";
         const footprintText = summaryData.footprintText || defaultFootprint;
-        const keyDrivers = Array.isArray(summaryData.keyDrivers) ? summaryData.keyDrivers : [];
-        const riskContext = keyDrivers.length
-          ? `<p class="summary-card__meta">Key drivers: ${escapeHtml(keyDrivers.join(" | "))}</p>`
+        const highlightItems = Array.isArray(summaryData.highlights) ? summaryData.highlights : [];
+        const highlightMarkup = highlightItems.length
+          ? `<ul class="summary-card__highlights">${highlightItems.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
           : "";
-        const narrativeCopy = summaryData.narrative || defaultFootprint;
         const actionsList = (Array.isArray(summaryData.actionList) && summaryData.actionList.length
           ? summaryData.actionList
           : (Array.isArray(actions) && actions.length ? actions : ["Maintain current controls and monitor upcoming scans for emerging trends."]))
-          .slice(0, 3);
+          .slice(0, 2);
         const summaryActions = actionsList
           .map(item => `<li>${escapeHtml(item)}</li>`)
           .join("");
@@ -1185,8 +2345,7 @@
               <span class="summary-card__risk-score">${escapeHtml(postureValue)}</span>
               <span class="summary-card__risk-asset">${escapeHtml(footprintText)}</span>
             </div>
-            ${riskContext}
-            ${narrativeCopy ? `<p class="summary-card__pipeline">${escapeHtml(narrativeCopy)}</p>` : ""}
+            ${highlightMarkup}
             <div class="summary-card__actions">
               <span>Immediate actions</span>
               <ul>${summaryActions}</ul>
@@ -1196,7 +2355,6 @@
           ${renderSection("Exposure", exposure)}
           ${renderSection("Authentication", authentication)}
           ${renderSection("Controls", controls)}
-          ${renderSection("Infrastructure", infrastructure)}
         `;
       }
 
@@ -1240,41 +2398,106 @@
         }
       }
 
-      function categorizePort(port) {
-        if (WEB_PORTS.has(port)) return "Web";
-        if (EMAIL_TRANSPORT_PORTS.has(port)) return "Email Transport";
-        if (EMAIL_ACCESS_PORTS.has(port)) return "Email Access";
-        if (DATABASE_PORTS.has(port)) return "Database";
-        if (MANAGEMENT_PORTS.has(port)) return "Management";
-        if (DNS_PORTS.has(port)) return "DNS";
-        if (FTP_PORTS.has(port)) return "FTP";
-        return "Other";
+      function buildIpIntelIndex(ipIntelData) {
+        const index = {};
+        if (!Array.isArray(ipIntelData)) return index;
+        ipIntelData.forEach(entry => {
+          if (!entry || !entry.ip) return;
+          index[entry.ip] = entry;
+        });
+        return index;
       }
 
-      function prepareNaabuInsights(naabuData) {
-        const naabuMap = {};
-        const categoryCounts = {
-          "Web": 0,
-          "Email Transport": 0,
-          "Email Access": 0,
-          "Database": 0,
-          "Management": 0,
-          "DNS": 0,
-          "FTP": 0,
-          "Other": 0
-        };
-        naabuData.forEach(entry => {
-          const host = entry.host;
-          const port = Number(entry.port);
-          const service = entry.service || "";
-          if (!naabuMap[host]) naabuMap[host] = [];
-          naabuMap[host].push({ port, service });
+      function preparePortscanInsights(portscanData) {
+        const byHost = {};
+        const byIp = {};
+        const highlightTotals = {};
+        const categoryTotals = {};
+        let totalPorts = 0;
 
-          const category = categorizePort(port);
-          categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+        const records = Array.isArray(portscanData) ? portscanData : [];
+        records.forEach(ipRecord => {
+          const ip = ipRecord && ipRecord.ip;
+          if (!ip) return;
+          const sources = Array.isArray(ipRecord.sources) ? ipRecord.sources.filter(Boolean) : [];
+          const services = Array.isArray(ipRecord.services) ? ipRecord.services : [];
+          const bundle = {
+            ip,
+            sources,
+            entries: [],
+            highlightCounts: {},
+            categoryCounts: {}
+          };
+
+          services.forEach(service => {
+            const port = Number(service.port);
+            if (!Number.isFinite(port)) return;
+            const protocol = (service.protocol || "tcp").toString().toLowerCase();
+            const hosts = Array.isArray(service.hosts) ? service.hosts.filter(Boolean) : [];
+            const serviceName = getPortServiceName(port);
+            const categories = getPortCategories(port);
+            const highlightLabels = categories.length
+              ? Array.from(new Set(categories.map(label => CATEGORY_HIGHLIGHT_LABELS.get(label) || label)))
+              : ["Unclassified"];
+
+            const entry = {
+              port,
+              protocol,
+              service: serviceName,
+              categories,
+              highlightCategories: highlightLabels,
+              hosts
+            };
+            bundle.entries.push(entry);
+            totalPorts += 1;
+
+            categories.forEach(category => {
+              bundle.categoryCounts[category] = (bundle.categoryCounts[category] || 0) + 1;
+              categoryTotals[category] = (categoryTotals[category] || 0) + 1;
+            });
+            highlightLabels.forEach(label => {
+              bundle.highlightCounts[label] = (bundle.highlightCounts[label] || 0) + 1;
+              highlightTotals[label] = (highlightTotals[label] || 0) + 1;
+            });
+
+            hosts.forEach(host => {
+              const key = (host || "").toLowerCase();
+              if (!key) return;
+              if (!byHost[key]) {
+                byHost[key] = { entries: [], highlightCounts: {}, categoryCounts: {} };
+              }
+              byHost[key].entries.push({
+                port,
+                protocol,
+                service: serviceName,
+                categories,
+                highlightCategories: highlightLabels,
+                ip
+              });
+              categories.forEach(category => {
+                byHost[key].categoryCounts[category] = (byHost[key].categoryCounts[category] || 0) + 1;
+              });
+              highlightLabels.forEach(label => {
+                byHost[key].highlightCounts[label] = (byHost[key].highlightCounts[label] || 0) + 1;
+              });
+            });
+          });
+
+          bundle.entries.sort((a, b) => a.port - b.port);
+          byIp[ip] = bundle;
         });
 
-        return { naabuMap, categoryCounts };
+        Object.values(byHost).forEach(hostBundle => {
+          hostBundle.entries.sort((a, b) => a.port - b.port);
+        });
+
+        return {
+          byHost,
+          byIp,
+          highlightTotals,
+          categoryTotals,
+          totalPorts
+        };
       }
 
       function describeEndpoint(entry) {
@@ -1302,7 +2525,7 @@ function buildInsightsCharts({
   headerCoverage,
   emailCoverage,
   statusBreakdown,
-  topTechnologies
+  portCategoryTotals
 }) {
   const tokens = getDesignTokens();
   const chartText = getChartTextColor(tokens);
@@ -1329,7 +2552,7 @@ function buildInsightsCharts({
   (function buildFunnel() {
     const canvas = document.getElementById("funnelChart");
     if (!canvas) return;
-    const labels = ["Discovered", "Resolvable", "Web Hosts"];
+    const labels = ["Discovered", "Live Assets", "Web Hosts"];
     const data = [
       Number(pipeline?.discovered) || 0,
       Number(pipeline?.resolvable) || 0,
@@ -1427,7 +2650,11 @@ function buildInsightsCharts({
         datasets: [{
           data: values,
           backgroundColor: ["#22c55e", "#ef4444", "#f97316"],
-          borderWidth: 0
+          borderWidth: 0,
+          valueLabels: true,
+          valueLabelColor: "#ffffff",
+          valueLabelFontSize: 12,
+          valueLabelFontWeight: "600"
         }]
       },
       options: {
@@ -1459,7 +2686,7 @@ function buildInsightsCharts({
     tlsLoginChart = new Chart(canvas, {
       type: "bar",
       data: {
-        labels: ["Endpoints", "Login Interfaces"],
+        labels: ["Endpoint", "Login Panel"],
         datasets: [
           {
             label: "HTTP",
@@ -1478,7 +2705,7 @@ function buildInsightsCharts({
         ]
       },
       options: {
-        indexAxis: "y",
+        indexAxis: "x",
         responsive: true,
         plugins: {
           legend: {
@@ -1534,45 +2761,43 @@ function buildInsightsCharts({
     });
   })();
 
-  (function buildTopTechChart() {
-    const canvas = document.getElementById("techChart");
+  (function buildPortCategoryChart() {
+    const canvas = document.getElementById("portCategoryChart");
     if (!canvas) return;
-    const entries = Array.isArray(topTechnologies) ? topTechnologies : [];
-    if (!entries.some(([, count]) => count > 0)) {
-      replaceWithMessage(canvas, "No technology fingerprints collected.");
-      techChart = undefined;
+    const totals = (portCategoryTotals && typeof portCategoryTotals === "object") ? portCategoryTotals : {};
+    const entries = Object.entries(totals).filter(([, count]) => Number(count) > 0);
+    if (!entries.length) {
+      replaceWithMessage(canvas, "No open port categories detected.");
+      portCategoryChart = undefined;
       return;
     }
-    const labels = entries.map(([name]) => name);
+    if (portCategoryChart) portCategoryChart.destroy();
+    const labels = entries.map(([label]) => label);
     const data = entries.map(([, count]) => count);
-    if (techChart) techChart.destroy();
-    techChart = new Chart(canvas, {
-      type: "bar",
+    const palette = ["#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#f97316", "#22c55e", "#eab308", "#14b8a6", "#facc15"];
+    portCategoryChart = new Chart(canvas, {
+      type: "pie",
       data: {
         labels,
         datasets: [{
-          label: "Occurrences",
           data,
-          backgroundColor: "#3b82f6",
-          borderRadius: 10,
-          maxBarThickness: 40
+          backgroundColor: labels.map((_, idx) => palette[idx % palette.length]),
+          borderWidth: 0,
+          valueLabels: true,
+          valueLabelColor: "#ffffff",
+          valueLabelFontSize: 12,
+          valueLabelFontWeight: "600"
         }]
       },
       options: {
-        indexAxis: "y",
         responsive: true,
         plugins: {
           legend: { display: false },
           tooltip: tooltipTheme
-        },
-        scales: {
-          x: { beginAtZero: true, ticks: createTicks(), grid: createGrid() },
-          y: { ticks: createTicks(), grid: createGrid(false) }
         }
       }
     });
   })();
-
 
   (function buildHeaderCoverage() {
     const canvas = document.getElementById("headerCoverageChart");
@@ -1627,7 +2852,7 @@ function buildInsightsCharts({
   (function buildEmailCoverage() {
     const canvas = document.getElementById("emailCoverageChart");
     if (!canvas) return;
-    const labels = Object.keys(emailCoverage || {});
+    const labels = Object.keys(emailCoverage || {}).filter(label => label !== "total");
     if (!labels.length) {
       replaceWithMessage(canvas, "No email security data collected.");
       emailCoverageChart = undefined;
@@ -1679,25 +2904,277 @@ function buildInsightsCharts({
 
       // Global array to store table rows.
       let rowDataStore = [];
+      let domainTableRows = [];
+      let endpointTableRows = [];
+      let ipTableRows = [];
+      let tlsTableRows = [];
+      let cloudInfraTableRows = [];
+      const tableFilterControllers = {};
 
       // Build table rows
-      function buildTableRows(combinedData, secMapDomain, secMapUrl, loginMap, apiMap, colleagueMap) {
+      function buildTableRows(combinedData, secMapDomain, secMapUrl, loginMap, apiMap, colleagueMap, portscanInsights, ipIntelMap, cloudInfraRecords) {
         allTableRows = [];
         rowDataStore = [];
+        domainTableRows = [];
+        endpointTableRows = [];
+        ipTableRows = [];
+        tlsTableRows = [];
+        cloudInfraTableRows = [];
         riskEntries = [];
+        const portscanByHost = (portscanInsights && portscanInsights.byHost) || {};
+        const portscanByIp = (portscanInsights && portscanInsights.byIp) || {};
+        const ipAggregation = {};
+        ipIntelMap = ipIntelMap || {};
+        const seenTlsKeys = new Set();
+        const tlsInventoryRecords = Array.isArray(window.tlsInventoryData) ? window.tlsInventoryData : [];
+        const lower = value => (typeof value === "string") ? value.toLowerCase() : "";
+        const tlsByEndpoint = new Map();
+        const tlsByDomainPort = new Map();
+        const tlsByDomain = new Map();
+        const normalizeCloudString = value => (typeof value === "string" ? value.trim() : "");
+        const cloudRecords = Array.isArray(cloudInfraRecords) ? cloudInfraRecords : [];
+        const cloudRows = [];
+        const normalizeHostValue = value => {
+          if (!value || typeof value !== "string") return "";
+          try {
+            if (value.startsWith("http://") || value.startsWith("https://")) {
+              const parsed = new URL(value);
+              return parsed.hostname.toLowerCase();
+            }
+          } catch {
+            /* ignore URL parsing errors */
+          }
+          return value.trim().toLowerCase().replace(/\.$/, "");
+        };
+        const buildCloudProfileIndex = records => {
+          const index = new Map();
+          const register = (key, record) => {
+            const normalized = normalizeHostValue(key);
+            if (!normalized) return;
+            if (!index.has(normalized)) index.set(normalized, record);
+          };
+          records.forEach(record => {
+            if (!record || typeof record !== "object") return;
+            register(record.Asset, record);
+            register(record.ResourceIdentifier, record);
+            register(record.PrimaryURL || record.PrimaryUrl, record);
+            if (Array.isArray(record.CnameChain)) {
+              record.CnameChain.forEach(item => register(item, record));
+            }
+            if (Array.isArray(record.IPs)) {
+              record.IPs.forEach(ip => {
+                if (typeof ip === "string" && ip.trim()) {
+                  register(ip.trim(), record);
+                }
+              });
+            }
+          });
+          return host => {
+            const normalized = normalizeHostValue(host);
+            if (!normalized) return null;
+            return index.get(normalized) || null;
+          };
+        };
+        const cloudProfileIndex = buildCloudProfileIndex(cloudRecords);
+        tlsInventoryRecords.forEach(record => {
+          if (!record) return;
+          const domainKey = lower(record.Domain || record.domain || "");
+          const portValueRaw = (record.Port !== undefined && record.Port !== null) ? String(record.Port).trim() : "";
+          const endpointKey = lower(record.EndpointURL || record.EndpointUrl || "");
+          if (endpointKey) {
+            tlsByEndpoint.set(endpointKey, record);
+          }
+          if (domainKey && portValueRaw) {
+            tlsByDomainPort.set(`${domainKey}|${portValueRaw}`, record);
+          }
+          if (domainKey) {
+            if (!tlsByDomain.has(domainKey)) {
+              tlsByDomain.set(domainKey, []);
+            }
+            tlsByDomain.get(domainKey).push(record);
+          }
+        });
+        const parseUrlComponents = rawUrl => {
+          if (!rawUrl || typeof rawUrl !== "string") return null;
+          try {
+            const parsedUrl = new URL(rawUrl);
+            const host = lower(parsedUrl.hostname || "");
+            const port = parsedUrl.port
+              ? parsedUrl.port
+              : (parsedUrl.protocol === "https:" ? "443" : (parsedUrl.protocol === "http:" ? "80" : ""));
+            return { host, port };
+          } catch (err) {
+            const match = String(rawUrl).match(/^https?:\/\/([^/:]+)(?::(\d+))?/i);
+            if (match) {
+              const host = lower(match[1]);
+              const port = match[2] || (rawUrl.toLowerCase().startsWith("https") ? "443" : "80");
+              return { host, port };
+            }
+            return null;
+          }
+        };
+        const getTlsRecord = (rawUrl, domainName) => {
+          const endpointKey = lower(rawUrl || "");
+          if (endpointKey && tlsByEndpoint.has(endpointKey)) {
+            return tlsByEndpoint.get(endpointKey);
+          }
+          const parsed = parseUrlComponents(rawUrl || "");
+          const parsedHost = parsed && parsed.host ? parsed.host : "";
+          const parsedPort = parsed && parsed.port ? parsed.port : "";
+          const domainKey = lower(domainName || parsedHost || "");
+          if (parsedHost && parsedPort) {
+            const composite = `${parsedHost}|${parsedPort}`;
+            if (tlsByDomainPort.has(composite)) {
+              return tlsByDomainPort.get(composite);
+            }
+          }
+          if (parsedHost && tlsByDomainPort.has(`${parsedHost}|443`)) {
+            return tlsByDomainPort.get(`${parsedHost}|443`);
+          }
+          if (domainKey && parsedPort && tlsByDomainPort.has(`${domainKey}|${parsedPort}`)) {
+            return tlsByDomainPort.get(`${domainKey}|${parsedPort}`);
+          }
+          if (domainKey && tlsByDomainPort.has(`${domainKey}|443`)) {
+            return tlsByDomainPort.get(`${domainKey}|443`);
+          }
+          if (domainKey && tlsByDomain.has(domainKey)) {
+            const domainRecords = tlsByDomain.get(domainKey);
+            if (domainRecords && domainRecords.length) {
+              return domainRecords[0];
+            }
+          }
+          return null;
+        };
+        const buildEndpointUrl = (domainName, port) => {
+          if (!domainName) return "";
+          const trimmed = domainName.trim();
+          const isIpv6 = trimmed.includes(":") && !trimmed.startsWith("[");
+          const hostPart = isIpv6 ? `[${trimmed}]` : trimmed;
+          const portPart = port && port !== "443" ? `:${port}` : "";
+          return `https://${hostPart}${portPart}`;
+        };
+        const dedupeRecords = arr => {
+          if (!Array.isArray(arr)) return [];
+          const sanitized = arr
+            .map(item => (item === null || item === undefined) ? "" : String(item).trim())
+            .filter(item => item && !/^no\s/i.test(item));
+          return Array.from(new Set(sanitized));
+        };
+        const sanitizeRecordList = raw => {
+          if (!raw || typeof raw !== "string") return [];
+          return raw
+            .split(/\n/)
+            .map(item => item.trim())
+            .filter(item => item && !/^no\s/i.test(item));
+        };
+        const toHtmlList = list => list.length ? list.map(item => escapeHtml(item)).join("<br>") : "N/A";
+        const isMeaningfulString = value => {
+          if (typeof value !== "string") return false;
+          const trimmed = value.trim();
+          if (!trimmed) return false;
+          return !/^no\s/i.test(trimmed) && trimmed.toLowerCase() !== "n/a";
+        };
+        const renderHighlightChips = counts => {
+          const entries = Object.entries(counts || {}).filter(([label]) => label !== "Unclassified");
+          if (!entries.length) return "";
+          entries.sort((a, b) => {
+            if (b[1] === a[1]) return a[0].localeCompare(b[0]);
+            return b[1] - a[1];
+          });
+          const tone = label => {
+            const key = label.toLowerCase();
+            if (key.includes("database")) return "chip--danger";
+            if (key.includes("remote") || key.includes("management")) return "chip--danger";
+            if (key.includes("vpn") || key.includes("email")) return "chip--warning";
+            if (key.includes("web")) return "chip--info";
+            return "";
+          };
+          const html = entries.map(([label, count]) => {
+            const cls = tone(label);
+            const countMarkup = count > 1 ? `<small>${count}</small>` : "";
+            return `<span class="chip ${cls}">${escapeHtml(label)}${countMarkup}</span>`;
+          }).join("");
+          return html ? `<div class="chip-group">${html}</div>` : "";
+        };
+        const renderPortTagColumn = (counts, limit = 10) => {
+          const entries = Object.entries(counts || {}).filter(([label]) => label !== "Unclassified");
+          if (!entries.length) return "None";
+          entries.sort((a, b) => {
+            if (b[1] === a[1]) return a[0].localeCompare(b[0]);
+            return b[1] - a[1];
+          });
+          return entries.slice(0, limit).map(([label, count]) => {
+            const slug = slugifyLabel(label);
+            const suffix = count > 1 ? ` (${count})` : "";
+            return `<span class="port-tag port-tag--${slug}">${escapeHtml(label)}${suffix}</span>`;
+          }).join("<br>");
+        };
+        const getHostPortContext = domainName => {
+          const key = (domainName || "").toLowerCase();
+          return portscanByHost[key] || { entries: [], highlightCounts: {}, categoryCounts: {} };
+        };
         Object.keys(combinedData).forEach(domain => {
           const { dns, http } = combinedData[domain];
-          const dnsResolvers = dns && dns.resolver ? dns.resolver : [];
-          const dnsA = dns && dns.a ? dns.a : [];
+          const dnsResolvers = dns && Array.isArray(dns.resolver) ? dns.resolver : (dns && dns.resolver ? [].concat(dns.resolver) : []);
+          const dnsA = dns && Array.isArray(dns.a) ? dns.a : (dns && dns.a ? [].concat(dns.a) : []);
+          const dnsAAAA = dns && Array.isArray(dns.aaaa) ? dns.aaaa : (dns && dns.aaaa ? [].concat(dns.aaaa) : []);
+          const dnsCname = dns && Array.isArray(dns.cname) ? dns.cname : (dns && dns.cname ? [].concat(dns.cname) : []);
           const dnsStatus = dns ? dns.status_code : "N/A";
           const domainSec = secMapDomain[domain] || {};
+          const colleagueEntry = colleagueMap[domain];
+          let colleagueStatus = false;
+          let colleagueMatches = [];
+          if (typeof colleagueEntry === "string") {
+            colleagueStatus = colleagueEntry === "Yes";
+          } else if (colleagueEntry && typeof colleagueEntry === "object") {
+            const statusValue = colleagueEntry.colleague_endpoint || colleagueEntry.status;
+            colleagueStatus = statusValue === "Yes";
+            if (Array.isArray(colleagueEntry.colleague_matches)) {
+              colleagueMatches = colleagueEntry.colleague_matches;
+            } else if (Array.isArray(colleagueEntry.matches)) {
+              colleagueMatches = colleagueEntry.matches;
+            }
+          }
+          const uniqueKeywordMatches = Array.from(new Set((colleagueMatches || []).map(item => (item === null || item === undefined) ? "" : String(item).trim()).filter(Boolean)));
+          const domainPurpose = colleagueStatus ? "Employee Intended" : "Customer Intended";
+          const domainCell = escapeHtml(domain);
           const spf = domainSec["SPF Record"] || "N/A";
           const dkim = domainSec["DKIM Record"] || "N/A";
           const dmarc = domainSec["DMARC Record"] || "N/A";
           const dnssec = domainSec["DNSSEC Status"] || "N/A";
-          const nsRecords = (domainSec["NS Records"] || "N/A").replace(/\n/g, " ");
-          const mxRecords = (domainSec["MX Records"] || "N/A").replace(/\n/g, " ");
-          const ptrRecords = domainSec["PTR Record"] || "N/A";
+          const nsRecordsList = sanitizeRecordList(domainSec["NS Records"]);
+          const mxRecordsList = sanitizeRecordList(domainSec["MX Records"]);
+          const srvRecordsList = sanitizeRecordList(domainSec["SRV Records"]);
+          const txtRecordsList = sanitizeRecordList(domainSec["TXT Records"]);
+          const soaRecordsList = sanitizeRecordList(domainSec["SOA Record"]);
+          const caaRecordsList = sanitizeRecordList(domainSec["CAA Records"]);
+          const secARecordsList = sanitizeRecordList(domainSec["A Records"]);
+          const secAAAARecordsList = sanitizeRecordList(domainSec["AAAA Records"]);
+          const secCnameRecordsList = sanitizeRecordList(domainSec["CNAME Records"]);
+          const nsRecordsFallback = isMeaningfulString(domainSec["NS Records"]) ? domainSec["NS Records"].trim() : "";
+          const mxRecordsFallback = isMeaningfulString(domainSec["MX Records"]) ? domainSec["MX Records"].trim() : "";
+          const nsRecords = nsRecordsList.length ? nsRecordsList.join(" ") : (nsRecordsFallback || "N/A");
+          const mxRecords = mxRecordsList.length ? mxRecordsList.join(" ") : (mxRecordsFallback || "N/A");
+          const ptrRecordsRaw = typeof domainSec["PTR Record"] === "string" ? domainSec["PTR Record"].trim() : "";
+          const ptrRecords = isMeaningfulString(ptrRecordsRaw) ? ptrRecordsRaw : "N/A";
+          const hostPortContext = getHostPortContext(domain);
+          const openPorts = hostPortContext.entries || [];
+          dnsA.forEach(ip => {
+            const ipKey = String(ip || "").trim();
+            if (!ipKey) return;
+            if (!ipAggregation[ipKey]) {
+              ipAggregation[ipKey] = { hosts: new Set() };
+            }
+            ipAggregation[ipKey].hosts.add(domain);
+          });
+          dnsAAAA.forEach(ip => {
+            const ipKey = String(ip || "").trim();
+            if (!ipKey) return;
+            if (!ipAggregation[ipKey]) {
+              ipAggregation[ipKey] = { hosts: new Set() };
+            }
+            ipAggregation[ipKey].hosts.add(domain);
+          });
           if (http && http.length) {
             http.forEach(h => {
               // Compute port and screenshot key for this record
@@ -1724,80 +3201,186 @@ function buildInsightsCharts({
               }
 
               const urlSec = secMapUrl[h.url] || domainSec;
-              const sslVersion = urlSec["SSL/TLS Version"] || "N/A";
-              const certExpiry = urlSec["Cert Expiry Date"] || "N/A";
-              const sslIssuer = urlSec["SSL/TLS Issuer"] || "N/A";
+              const tlsRecord = getTlsRecord(h.url, domain);
+              const tlsDeprecated = Array.isArray(tlsRecord && tlsRecord.DeprecatedVersions) ? tlsRecord.DeprecatedVersions : [];
+              const highestTlsVersion = tlsRecord && typeof tlsRecord.HighestVersion === "string" && tlsRecord.HighestVersion.trim()
+                ? tlsRecord.HighestVersion.trim()
+                : (tlsRecord && typeof tlsRecord.VersionSummary === "string" && tlsRecord.VersionSummary.trim()
+                  ? tlsRecord.VersionSummary.trim()
+                  : "");
+              const normalizedTlsVersion = highestTlsVersion ? normalizeTlsVersion(highestTlsVersion) : "";
+              const fallbackSslVersion = typeof urlSec["SSL/TLS Version"] === "string" ? urlSec["SSL/TLS Version"] : "";
+              const normalizedFallbackVersion = fallbackSslVersion ? normalizeTlsVersion(fallbackSslVersion) : "";
+              const sslVersion = normalizedTlsVersion || normalizedFallbackVersion || "N/A";
+              const certExpiry = tlsRecord && tlsRecord.ValidTo
+                ? tlsRecord.ValidTo
+                : (urlSec["Cert Expiry Date"] || "N/A");
+              const sslIssuer = tlsRecord && tlsRecord.CertificateIssuer
+                ? tlsRecord.CertificateIssuer
+                : (urlSec["SSL/TLS Issuer"] || "N/A");
               const stsFlag = (urlSec["Strict-Transport-Security"] || "").trim();
               const xfoFlag = (urlSec["X-Frame-Options"] || "").trim();
               const cspFlag = (urlSec["Content-Security-Policy"] || "").trim();
               const xssFlag = (urlSec["X-XSS-Protection"] || "").trim();
               const rpFlag = (urlSec["Referrer-Policy"] || "").trim();
               const ppFlag = (urlSec["Permissions-Policy"] || "").trim();
+              const acaoFlag = (urlSec["Access-Control-Allow-Origin"] || "").trim();
               const techArr = Array.isArray(h.tech) ? h.tech : [];
-              const sanitizedTech = techArr.map(item => item.replace(/\r?\n|\r/g, " ").trim());
+              const sanitizedTech = techArr
+                .map(item => item.replace(/\r?\n|\r/g, " ").trim())
+                .filter(item => item);
               const techCount = sanitizedTech.length;
-              const openPorts = (window.naabuMap && window.naabuMap[domain]) || [];
-              const openPortsCount = openPorts.length;
-              let dbPortsCount = 0;
-              let managementPortsCount = 0;
-              const categoryCounts = {};
-              openPorts.forEach(portObj => {
-                const numericPort = Number(portObj.port);
-                const category = categorizePort(numericPort);
-                categoryCounts[category] = (categoryCounts[category] || 0) + 1;
-                if (DATABASE_PORTS.has(numericPort)) dbPortsCount++;
-                if (MANAGEMENT_PORTS.has(numericPort)) managementPortsCount++;
-              });
-              const sortedCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]);
-              const chipTone = category => {
-                if (category === "Management" || category === "Database") return "chip--danger";
-                if (category.startsWith("Email")) return "chip--warning";
-                if (category === "DNS") return "chip--info";
-                return "";
-              };
-              const categoryChipsHtml = sortedCategories.map(([category, count]) => {
-                const toneClass = chipTone(category);
-                const countMarkup = count > 1 ? `<small>${count}</small>` : "";
-                return `<span class="chip ${toneClass}">${escapeHtml(category)}${countMarkup}</span>`;
-              }).join("");
-              const openPortsDetails = openPorts.length
-                ? openPorts.map(p => `${escapeHtml(String(p.port))} (${escapeHtml(p.service || "Unknown")})`).join("<br>")
+              const statusLabel = (h.status_code !== undefined && h.status_code !== null) ? String(h.status_code) : "N/A";
+              const statusCell = escapeHtml(statusLabel);
+              const webServerCell = escapeHtml(h.webserver || "N/A");
+              const loginDetected = loginMap[h.url] === "Yes" ? "Yes" : "No";
+              const loginCell = escapeHtml(loginDetected);
+              const apiRaw = (apiMap[domain] || "").toString().trim().toLowerCase();
+              const apiDetected = apiRaw === "yes" ? "Yes" : "No";
+              const apiCell = escapeHtml(apiDetected);
+              const colleagueCell = escapeHtml(colleagueStatus ? "Yes" : "No");
+              const urlValue = h.url || "N/A";
+              const safeUrlText = escapeHtml(urlValue);
+              const safeUrlAttr = urlValue !== "N/A" ? escapeHtml(urlValue) : "";
+              const endpointUrlCell = urlValue !== "N/A"
+                ? `<a href="${safeUrlAttr}" target="_blank" rel="noopener">${safeUrlText}</a>`
                 : "N/A";
-              const chipsWrapper = categoryChipsHtml ? `<div class="chip-group">${categoryChipsHtml}</div>` : "";
+              const redirectTarget = Number(statusLabel) >= 300 && Number(statusLabel) < 400 && h.location ? h.location : "";
+              const redirectAttr = redirectTarget ? escapeHtml(redirectTarget) : "";
+              const redirectCell = redirectTarget
+                ? `<a href="${redirectAttr}" target="_blank" rel="noopener">${escapeHtml(redirectTarget)}</a>`
+                : "N/A";
+              const homepageTitleCell = isMeaningfulString(h.title) ? escapeHtml(h.title) : "N/A";
+              const techStackHtml = sanitizedTech.length
+                ? sanitizedTech.map(item => escapeHtml(item)).join("<br>")
+                : "N/A";
+              const contentLengthValue = (h.content_length !== undefined && h.content_length !== null)
+                ? String(h.content_length)
+                : "N/A";
+              const contentLengthCell = escapeHtml(contentLengthValue);
+              const securityHeaderPairs = [
+                ["Strict-Transport-Security", stsFlag],
+                ["X-Frame-Options", xfoFlag],
+                ["Content-Security-Policy", cspFlag],
+                ["X-XSS-Protection", xssFlag],
+                ["Referrer-Policy", rpFlag],
+                ["Permissions-Policy", ppFlag],
+                ["Access-Control-Allow-Origin", acaoFlag]
+              ].filter(([, value]) => isMeaningfulString(value));
+              const securityHeadersCell = securityHeaderPairs.length
+                ? securityHeaderPairs.map(([label, value]) => `<span class="security-kv"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</span>`).join("<br>")
+                : "No key headers observed";
+              const cdnName = typeof h.cdn_name === "string" ? h.cdn_name.trim() : "";
+              const cdnType = typeof h.cdn_type === "string" ? h.cdn_type.trim() : "";
+              const cdnGeneric = typeof h.cdn === "string" ? h.cdn.trim() : "";
+              const wafCdnParts = [];
+              if (isMeaningfulString(cdnType)) wafCdnParts.push(cdnType);
+              if (isMeaningfulString(cdnName)) wafCdnParts.push(cdnName);
+              if (!wafCdnParts.length && isMeaningfulString(cdnGeneric)) wafCdnParts.push(cdnGeneric);
+              const wafCdnCell = wafCdnParts.length ? escapeHtml(wafCdnParts.join(" - ")) : "N/A";
+              const openPortsCount = openPorts.length;
+              const dbPortsCount = hostPortContext.highlightCounts["Database"] || 0;
+              const managementPortsCount = hostPortContext.highlightCounts["Management"] || 0;
+              const openPortsDetails = openPorts.length
+                ? openPorts.map(p => {
+                    const proto = escapeHtml((p.protocol || "tcp").toUpperCase());
+                    const serviceName = escapeHtml(p.service || "unknown/custom");
+                    const categoriesLabel = (Array.isArray(p.categories) && p.categories.length)
+                      ? ` <span class="port-category-label">${escapeHtml(p.categories.join(", "))}</span>`
+                      : "";
+                    return `${escapeHtml(String(p.port))}/${proto} — ${serviceName}${categoriesLabel}`;
+                  }).join("<br>")
+                : "No open ports";
+              const chipsWrapper = renderHighlightChips(hostPortContext.highlightCounts);
 
               const linksForUrl = (window.linksMap && window.linksMap[h.url]) ? window.linksMap[h.url] : [];
               const linkCount = linksForUrl.length;
               const linksCellHTML = linkCount > 0
-                ? `<a href="#" onclick="openLinksModal('${h.url}'); return false;">${linkCount}</a>`
-                : "N/A";
+                ? `<a href="#" onclick="openLinksModal('${h.url}'); return false;">${escapeHtml(String(linkCount))}</a>`
+                : "0";
 
-              const { score, debug } = computePriority({
-                purpose: colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended",
+              const endpointRow = document.createElement("tr");
+              endpointRow.dataset.domain = (domain || "").toLowerCase();
+              endpointRow.dataset.url = (h.url || "").toLowerCase();
+              endpointRow.innerHTML = `
+                <td>${domainCell}</td>
+                <td>${endpointUrlCell}</td>
+                <td>${statusCell}</td>
+                <td>${redirectCell}</td>
+                <td>${homepageTitleCell}</td>
+                <td>${screenshotHTML}</td>
+                <td>${webServerCell}</td>
+                <td>${techStackHtml}</td>
+                <td>${contentLengthCell}</td>
+                <td>${loginCell}</td>
+                <td>${apiCell}</td>
+                <td>${colleagueCell}</td>
+                <td>${securityHeadersCell}</td>
+                <td>${wafCdnCell}</td>
+                <td>${linksCellHTML}</td>
+              `;
+              prepareRowCells(endpointRow);
+              endpointTableRows.push(endpointRow);
+
+              const schemeValue = (h.scheme || "").toLowerCase();
+              let urlHost = "";
+              try {
+                if (h.url) {
+                  urlHost = new URL(h.url).hostname;
+                }
+              } catch {
+                urlHost = "";
+              }
+              const cloudProfile = cloudProfileIndex(urlHost || domain || h.host || "");
+              const headerValues = {
+                "Strict-Transport-Security": stsFlag,
+                "X-Frame-Options": xfoFlag,
+                "Content-Security-Policy": cspFlag,
+                "X-XSS-Protection": xssFlag,
+                "Referrer-Policy": rpFlag,
+                "Permissions-Policy": ppFlag
+              };
+              const missingSecurityHeaders = Object.entries(headerValues)
+                .filter(([, value]) => !isMeaningfulString(value) || value.trim().toLowerCase() === "false")
+                .map(([label]) => label);
+              const hasSpf = typeof spf === "string" && /spf1/i.test(spf);
+              const hasDkim = typeof dkim === "string" && /dkim1/i.test(dkim);
+              const hasDmarc = typeof dmarc === "string" && /dmarc1/i.test(dmarc);
+              const hasDnssec = typeof dnssec === "string" && /dnssec enabled/i.test(dnssec);
+              const { score, reasons, breakdown } = computePriority({
+                purpose: domainPurpose,
                 url: h.url,
                 loginFound: loginMap[h.url] || "N/A",
                 statusCode: h.status_code,
                 sslVersion,
+                tlsDeprecated,
                 certExpiry,
-                sts: stsFlag,
-                xfo: xfoFlag,
-                csp: cspFlag,
-                xss: xssFlag,
-                rp: rpFlag,
-                pp: ppFlag,
+                scheme: schemeValue || (urlValue.startsWith("https://") ? "https" : (urlValue.startsWith("http://") ? "http" : "")),
+                securityHeadersMissing: missingSecurityHeaders,
+                hasSpf,
+                hasDkim,
+                hasDmarc,
+                hasDnssec,
                 openPortsCount: openPortsCount,
                 dbPortsCount: dbPortsCount,
                 managementPortsCount: managementPortsCount,
                 techCount,
-                linkCount
+                linkCount,
+                isApiSurface: apiDetected === "Yes",
+                isEmployeeAsset: colleagueStatus,
+                cloudProfile
               });
+              const roundedScore = Math.round(score);
               if (score < minRiskScore) minRiskScore = score;
               if (score > maxRiskScore) maxRiskScore = score;
-              riskScores[domain] = score;
+              const previousDomainScore = riskScores[domain] || 0;
+              riskScores[domain] = Math.max(previousDomainScore, score);
               riskEntries.push({
                 domain,
                 url: h.url,
-                score,
-                reasons: Array.isArray(debug) ? [...debug] : [],
+                score: roundedScore,
+                reasons: Array.isArray(reasons) ? reasons.slice() : [],
+                breakdown,
                 loginFound: loginMap[h.url] === "Yes",
                 scheme: h.scheme || ((h.url || "").startsWith("https") ? "https" : "http"),
                 openPortsCount,
@@ -1810,7 +3393,7 @@ function buildInsightsCharts({
               row.innerHTML = `
                 <td><!-- risk score cell --></td>
                 <td>${domain}</td>
-                <td>${colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended"}</td>
+                <td>${domainPurpose}</td>
                 <td>${formatCell(dnsResolvers)}</td>
                 <td>${formatCell(dnsA)}</td>
                 <td>${nsRecords}</td>
@@ -1848,11 +3431,11 @@ function buildInsightsCharts({
                 <td>${linksCellHTML}</td>
               `;
               const scoreCell = row.getElementsByTagName("td")[0];
-              const reasonsText = Array.isArray(debug) ? debug.map(reason => String(reason || "")).join("\n") : "";
-              scoreCell.innerHTML = `<span class="score-badge" title="${escapeHtml(reasonsText)}">${score}</span>`;
+              const reasonsText = Array.isArray(reasons) ? reasons.map(reason => String(reason || "")).join("\n") : "";
+              scoreCell.innerHTML = `<span class="score-badge" title="${escapeHtml(reasonsText)}">${roundedScore}</span>`;
               scoreCell.title = reasonsText;
               const emailAuthMissing = [spf, dkim, dmarc].some(value => typeof value === "string" && value.toLowerCase().includes("no "));
-              row.dataset.score = String(score);
+              row.dataset.score = String(roundedScore);
               row.dataset.httpLogin = (loginMap[h.url] === "Yes" && (h.url || "").startsWith("http://")) ? "1" : "0";
               row.dataset.emailAuthMissing = emailAuthMissing ? "1" : "0";
               row.dataset.nxdomain = dnsStatus === "NXDOMAIN" ? "1" : "0";
@@ -1866,7 +3449,7 @@ function buildInsightsCharts({
             row.innerHTML = `
               <td>N/A</td>
               <td>${domain}</td>
-              <td>${colleagueMap[domain] === "Yes" ? "Employee Intended" : "Customer Intended"}</td>
+              <td>${domainPurpose}</td>
               <td>${formatCell(dnsResolvers)}</td>
               <td>${formatCell(dnsA)}</td>
               <td>${nsRecords}</td>
@@ -1909,7 +3492,277 @@ function buildInsightsCharts({
             row.dataset.nxdomain = dnsStatus === "NXDOMAIN" ? "1" : "0";
             allTableRows.push(row);
           }
+
+          const dnsAList = dedupeRecords(dnsA);
+          const dnsAAAAList = dedupeRecords(dnsAAAA);
+          const dnsCnameList = dedupeRecords(dnsCname);
+          const finalARecords = dnsAList.length ? dnsAList : secARecordsList;
+          const finalAAAARecords = dnsAAAAList.length ? dnsAAAAList : secAAAARecordsList;
+          const finalCnameRecords = dnsCnameList.length ? dnsCnameList : secCnameRecordsList;
+          const nsForDisplay = nsRecordsList.length ? nsRecordsList : (nsRecordsFallback ? [nsRecordsFallback] : []);
+          const mxForDisplay = mxRecordsList.length ? mxRecordsList : (mxRecordsFallback ? [mxRecordsFallback] : []);
+          const aRecordHtml = toHtmlList(finalARecords);
+          const aaaaRecordHtml = toHtmlList(finalAAAARecords);
+          const nsRecordHtml = toHtmlList(nsForDisplay);
+          const mxRecordHtml = toHtmlList(mxForDisplay);
+          const cnameRecordHtml = toHtmlList(finalCnameRecords);
+          const txtSpfSummary = isMeaningfulString(spf) ? spf.trim() : "Not Found";
+          const txtDmarcSummary = isMeaningfulString(dmarc) ? dmarc.trim() : "Not Found";
+          const txtSummaryHtml = `SPF: ${escapeHtml(txtSpfSummary)}<br>DMARC: ${escapeHtml(txtDmarcSummary)}`;
+          const soaRecordHtml = toHtmlList(soaRecordsList);
+          const srvRecordHtml = toHtmlList(srvRecordsList);
+          const caaRecordHtml = toHtmlList(caaRecordsList);
+          const zoneTransferRaw = typeof domainSec["Zone Transfer"] === "string" ? domainSec["Zone Transfer"].trim() : "";
+          const zoneTransferHtml = zoneTransferRaw ? escapeHtml(zoneTransferRaw) : "N/A";
+          const whoisSummaryRaw = typeof domainSec["WHOIS Summary"] === "string" ? domainSec["WHOIS Summary"] : "";
+          const whoisHtml = whoisSummaryRaw
+            ? escapeHtml(whoisSummaryRaw).replace(/\n/g, "<br>")
+            : "N/A";
+          const spfDisplay = (typeof spf === "string" && spf.trim()) ? spf.trim() : "No SPF Record";
+          const dkimDisplay = (typeof dkim === "string" && dkim.trim()) ? dkim.trim() : "No DKIM Record";
+          const dmarcDisplay = (typeof dmarc === "string" && dmarc.trim()) ? dmarc.trim() : "No DMARC Record";
+          const dnssecDisplay = (typeof dnssec === "string" && dnssec.trim()) ? dnssec.trim() : "N/A";
+          const spfHtml = escapeHtml(spfDisplay);
+          const dkimHtml = escapeHtml(dkimDisplay);
+          const dmarcHtml = escapeHtml(dmarcDisplay);
+          const dnssecHtml = escapeHtml(dnssecDisplay);
+          const resolutionStatusParts = [];
+          if (dnsStatus && String(dnsStatus).trim()) {
+            resolutionStatusParts.push(String(dnsStatus).trim());
+          }
+          if (dnssecDisplay && dnssecDisplay !== "N/A") {
+            resolutionStatusParts.push(dnssecDisplay);
+          }
+          const resolutionStatusHtml = resolutionStatusParts.length
+            ? resolutionStatusParts.map(item => escapeHtml(item)).join("<br>")
+            : "N/A";
+          let keywordHtml;
+          if (uniqueKeywordMatches.length) {
+            const displayMatches = uniqueKeywordMatches.slice(0, 5).map(item => escapeHtml(item));
+            keywordHtml = `Noteworthy: ${displayMatches.join(", ")}`;
+            if (uniqueKeywordMatches.length > 5) {
+              keywordHtml += `, +${uniqueKeywordMatches.length - 5} more`;
+            }
+          } else if (colleagueStatus) {
+            keywordHtml = "Noteworthy keyword pattern detected";
+          } else {
+            keywordHtml = "None detected";
+          }
+          const domainRow = document.createElement("tr");
+          domainRow.dataset.domain = (domain || "").toLowerCase();
+          domainRow.innerHTML = `
+            <td>${domainCell}</td>
+            <td>${resolutionStatusHtml}</td>
+            <td>${aRecordHtml}</td>
+            <td>${aaaaRecordHtml}</td>
+            <td>${nsRecordHtml}</td>
+            <td>${mxRecordHtml}</td>
+            <td>${cnameRecordHtml}</td>
+            <td>${txtSummaryHtml}</td>
+            <td>${soaRecordHtml}</td>
+            <td>${srvRecordHtml}</td>
+            <td>${caaRecordHtml}</td>
+            <td>${zoneTransferHtml}</td>
+            <td>${whoisHtml}</td>
+            <td>${keywordHtml}</td>
+          `;
+          prepareRowCells(domainRow);
+          domainTableRows.push(domainRow);
+
         });
+
+        cloudRecords.forEach(record => {
+          if (!record || typeof record !== "object") return;
+          const assetRaw = normalizeCloudString(record.Asset || "");
+          const primaryUrlRaw = normalizeCloudString(record.PrimaryURL || "");
+          const assetLabel = assetRaw || (primaryUrlRaw ? primaryUrlRaw.replace(/^https?:\/\//, "") : "N/A");
+          const assetKey = assetLabel.toLowerCase();
+          const assetDisplay = escapeHtml(assetLabel);
+          const rawResourceType = normalizeCloudString(record.ResourceType || "");
+          const resourceType = rawResourceType && rawResourceType.toLowerCase() !== "other" ? rawResourceType : "Unclassified";
+          const cloudProvider = normalizeCloudString(record.CloudProvider || "") || "Unknown";
+          const serviceFamily = normalizeCloudString(record.ServiceFamily || "") || "Unknown";
+          const resourceIdentifier = normalizeCloudString(record.ResourceIdentifier || "") || "N/A";
+          const loadBalancer = normalizeCloudString(record.LoadBalancer || "") || "N/A";
+          const rawShielding = normalizeCloudString(record.WafShielding || "");
+          const wafShielding = rawShielding ? rawShielding : "Not Observed";
+          const storage = normalizeCloudString(record.Storage || "") || "N/A";
+          const evidenceArray = Array.isArray(record.Evidence) ? record.Evidence : [];
+          const evidenceHtml = evidenceArray
+            .map(item => escapeHtml(normalizeCloudString(item || "")))
+            .filter(text => text.length)
+            .join("<br>") || "No supporting signals collected";
+          const row = document.createElement("tr");
+          row.dataset.asset = assetKey;
+          row.dataset.provider = cloudProvider.toLowerCase();
+          row.dataset.resource = resourceType.toLowerCase();
+          row.innerHTML = `
+            <td>${assetDisplay}</td>
+            <td>${escapeHtml(resourceType)}</td>
+            <td>${escapeHtml(cloudProvider)}</td>
+            <td>${escapeHtml(serviceFamily)}</td>
+            <td>${escapeHtml(resourceIdentifier)}</td>
+            <td>${escapeHtml(loadBalancer)}</td>
+            <td>${escapeHtml(wafShielding)}</td>
+            <td>${escapeHtml(storage)}</td>
+            <td>${evidenceHtml}</td>
+          `;
+          prepareRowCells(row);
+          cloudRows.push(row);
+        });
+        cloudInfraTableRows = cloudRows;
+
+        const tlsRowSeenKeys = new Set();
+        tlsInventoryRecords.forEach(record => {
+          if (!record) return;
+          const domainNameRaw = (typeof record.Domain === "string" && record.Domain.trim())
+            ? record.Domain.trim()
+            : (typeof record.domain === "string" && record.domain.trim() ? record.domain.trim() : "");
+          const domainKey = lower(domainNameRaw);
+          const portRaw = (record.Port !== undefined && record.Port !== null)
+            ? String(record.Port).trim()
+            : "";
+          const portDisplay = (portRaw || record.Port || "443").toString();
+          const endpointRaw = (typeof record.EndpointURL === "string" && record.EndpointURL.trim())
+            ? record.EndpointURL.trim()
+            : (typeof record.EndpointUrl === "string" && record.EndpointUrl.trim() ? record.EndpointUrl.trim() : "");
+          const fallbackPort = portDisplay;
+          let endpoint = endpointRaw;
+          if (!endpoint && domainNameRaw) {
+            endpoint = buildEndpointUrl(domainNameRaw, fallbackPort);
+          }
+          const normalizedEndpoint = endpoint ? endpoint.toLowerCase() : "";
+          const uniqueKey = `${domainKey}|${portDisplay}|${normalizedEndpoint}`;
+          if (tlsRowSeenKeys.has(uniqueKey)) return;
+          tlsRowSeenKeys.add(uniqueKey);
+
+          const hostLabel = domainNameRaw || record.Host || record.host || "N/A";
+          const endpointCell = endpoint
+            ? `<a href="${escapeHtml(endpoint)}" target="_blank" rel="noopener noreferrer">${escapeHtml(hostLabel)}</a>`
+            : escapeHtml(hostLabel);
+          const ipCell = record.IP ? escapeHtml(record.IP) : "N/A";
+          const tlsVersionDisplay = record.TLSVersion || record.HighestVersion || record.VersionSummary || "N/A";
+          const cipherDisplay = record.Cipher || record.NegotiatedCipher || "N/A";
+          const notAfterDisplay = record.NotAfter || record.ValidTo || "N/A";
+          const daysNumeric = typeof record.DaysUntilExpiry === "number" ? record.DaysUntilExpiry : null;
+          let expiryStatusClass = "unknown";
+          let daysLabel = "Unknown";
+          if (daysNumeric === null) {
+            expiryStatusClass = "unknown";
+          } else if (daysNumeric < 0) {
+            expiryStatusClass = "expired";
+            const abs = Math.abs(daysNumeric);
+            daysLabel = abs === 1 ? "Expired 1 day ago" : `Expired ${abs} days ago`;
+          } else if (daysNumeric === 0) {
+            expiryStatusClass = "valid";
+            daysLabel = "Expires today";
+          } else {
+            expiryStatusClass = "valid";
+            daysLabel = daysNumeric === 1 ? "In 1 day" : `In ${daysNumeric} days`;
+          }
+          const subjectDnCell = (record.SubjectDN || record.CertificateSubjectDN)
+            ? escapeHtml(record.SubjectDN || record.CertificateSubjectDN)
+            : "N/A";
+          const subjectCnCell = (record.SubjectCN || record.CertificateCommonName)
+            ? escapeHtml(record.SubjectCN || record.CertificateCommonName)
+            : "N/A";
+          const subjectAnArray = Array.isArray(record.SubjectAN) && record.SubjectAN.length
+            ? record.SubjectAN
+            : (Array.isArray(record.CertificateSANs) ? record.CertificateSANs : []);
+          const subjectAnCell = subjectAnArray.length
+            ? subjectAnArray.map(item => escapeHtml(String(item))).join("<br>")
+            : "N/A";
+          const serialCell = record.Serial ? escapeHtml(record.Serial) : "N/A";
+          const issuerDnCell = (record.IssuerDN || record.CertificateIssuer)
+            ? escapeHtml(record.IssuerDN || record.CertificateIssuer)
+            : "N/A";
+          const issuerCnCell = record.IssuerCN ? escapeHtml(record.IssuerCN) : "N/A";
+          const issuerOrgArray = Array.isArray(record.IssuerOrg) && record.IssuerOrg.length ? record.IssuerOrg : [];
+          const issuerOrgCell = issuerOrgArray.length
+            ? issuerOrgArray.map(item => escapeHtml(String(item))).join("<br>")
+            : "N/A";
+
+          const tlsRow = document.createElement("tr");
+          tlsRow.dataset.domain = domainKey || "";
+          tlsRow.dataset.url = normalizedEndpoint;
+          tlsRow.dataset.port = portDisplay;
+          tlsRow.dataset.expiryStatus = expiryStatusClass;
+          tlsRow.dataset.expiryDays = daysNumeric !== null ? String(daysNumeric) : "";
+          tlsRow.innerHTML = `
+            <td>${endpointCell}</td>
+            <td>${ipCell}</td>
+            <td>${escapeHtml(portDisplay)}</td>
+            <td>${escapeHtml(tlsVersionDisplay)}</td>
+            <td>${escapeHtml(cipherDisplay)}</td>
+            <td>${escapeHtml(notAfterDisplay)}</td>
+            <td class="tls-expiry-cell tls-expiry-cell--${expiryStatusClass}">${escapeHtml(daysLabel)}</td>
+            <td>${subjectDnCell}</td>
+            <td>${subjectCnCell}</td>
+            <td>${subjectAnCell}</td>
+            <td>${serialCell}</td>
+            <td>${issuerDnCell}</td>
+            <td>${issuerCnCell}</td>
+            <td>${issuerOrgCell}</td>
+          `;
+          prepareRowCells(tlsRow);
+          tlsTableRows.push(tlsRow);
+        });
+
+        Object.entries(portscanByIp).forEach(([ip, bundle]) => {
+          if (!ipAggregation[ip]) {
+            ipAggregation[ip] = { hosts: new Set() };
+          }
+          const hostSet = ipAggregation[ip].hosts;
+          (bundle.sources || []).forEach(src => {
+            if (src) hostSet.add(src);
+          });
+        });
+
+        Object.entries(ipAggregation).forEach(([ip, data]) => {
+          const ipValue = String(ip || "");
+          if (!ipValue) return;
+          const hostList = Array.from((data.hosts || new Set())).sort((a, b) => a.localeCompare(b));
+          const ipSummary = portscanByIp[ipValue] || { entries: [], highlightCounts: {}, sources: [] };
+          const domainsHtml = hostList.length
+            ? `Count: ${escapeHtml(String(hostList.length))}<br>${hostList.map(item => escapeHtml(item)).join("<br>")}`
+            : "Not observed";
+          const servicesHtml = ipSummary.entries.length
+            ? ipSummary.entries.map(entry => {
+                const proto = escapeHtml((entry.protocol || "tcp").toUpperCase());
+                const serviceName = escapeHtml(entry.service || "unknown/custom");
+                return `${escapeHtml(String(entry.port))}/${proto} — ${serviceName}`;
+              }).join("<br>")
+            : "No open ports";
+          const notableHtml = renderPortTagColumn(ipSummary.highlightCounts);
+          const intel = ipIntelMap[ipValue] || {};
+          const ptrDisplay = intel.ptr ? escapeHtml(intel.ptr) : "Not observed";
+          const asnValue = (intel.asn || "").trim();
+          const providerValue = (intel.provider || "").trim();
+          const asnProviderParts = [asnValue, providerValue].filter(Boolean);
+          const asnProviderDisplay = asnProviderParts.length ? escapeHtml(asnProviderParts.join(" – ")) : "Not observed";
+          const networkDisplay = intel.network ? escapeHtml(intel.network) : "Not observed";
+          const ipRow = document.createElement("tr");
+          ipRow.dataset.ip = ipValue.toLowerCase();
+          ipRow.innerHTML = `
+            <td>${escapeHtml(ipValue)}</td>
+            <td>${domainsHtml}</td>
+            <td>${ptrDisplay}</td>
+            <td>${asnProviderDisplay}</td>
+            <td>${networkDisplay}</td>
+            <td>${servicesHtml}</td>
+            <td>${notableHtml}</td>
+          `;
+          prepareRowCells(ipRow);
+          ipTableRows.push(ipRow);
+        });
+
+        setupTableFilterControllers();
+        refreshAllTableFilterOptions();
+        renderDomainTable();
+        renderEndpointsTable();
+        renderIpTable();
+        renderTlsTable();
+        renderCloudTable();
       }
 
       function finalizeColors() {
@@ -2064,6 +3917,204 @@ function buildInsightsCharts({
         renderPaginationControls(filteredRows.length);
       }
 
+      function renderTableBody(tbodyId, rows, comparator) {
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        tbody.innerHTML = "";
+        rows.forEach(row => {
+          if (row && !row.dataset.cellsPrepared) {
+            prepareRowCells(row);
+            row.dataset.cellsPrepared = "true";
+          }
+        });
+        const sortedRows = comparator ? rows.slice().sort(comparator) : rows.slice();
+        const appended = [];
+        sortedRows.forEach(row => {
+          tbody.appendChild(row);
+          appended.push(row);
+        });
+        if (appended.length) {
+          window.requestAnimationFrame(() => updateClampStates(appended));
+        }
+      }
+
+      function ensureTableFilterRow(tableId) {
+        const table = document.getElementById(tableId);
+        if (!table) return null;
+        const thead = table.querySelector("thead");
+        if (!thead) return null;
+        if (thead.querySelector("tr#filter-row")) return null;
+        let filterRow = thead.querySelector("tr.table-filter-row");
+        if (filterRow) return filterRow;
+        const headerCells = Array.from(thead.querySelectorAll("tr:first-child th"));
+        if (!headerCells.length) return null;
+        filterRow = document.createElement("tr");
+        filterRow.className = "table-filter-row";
+        headerCells.forEach((_, idx) => {
+          const th = document.createElement("th");
+          const select = document.createElement("select");
+          select.dataset.columnIndex = String(idx);
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "All";
+          select.appendChild(option);
+          th.appendChild(select);
+          filterRow.appendChild(th);
+        });
+        thead.appendChild(filterRow);
+        return filterRow;
+      }
+
+      function setupTableFilter(tableId, getRowsFn, renderFn) {
+        if (tableFilterControllers[tableId]) {
+          tableFilterControllers[tableId].getRows = getRowsFn;
+          tableFilterControllers[tableId].render = renderFn;
+          return;
+        }
+        const filterRow = ensureTableFilterRow(tableId);
+        if (!filterRow) return;
+        const selects = Array.from(filterRow.querySelectorAll("select"));
+        const filterState = selects.map(() => "");
+        const controller = {
+          tableId,
+          filterRow,
+          selects,
+          filterState,
+          getRows: getRowsFn,
+          render: renderFn
+        };
+        selects.forEach((select, idx) => {
+          select.addEventListener("change", () => {
+            controller.filterState[idx] = (select.value || "").toLowerCase();
+            controller.render();
+          });
+        });
+        tableFilterControllers[tableId] = controller;
+      }
+
+      function refreshTableFilterOptions(tableId) {
+        const controller = tableFilterControllers[tableId];
+        if (!controller) return;
+        const rows = controller.getRows();
+        const { selects, filterState } = controller;
+        if (!selects.length) return;
+        const uniquePerColumn = selects.map(() => new Set());
+        rows.forEach(row => {
+          const cells = row.cells || [];
+          selects.forEach((_, idx) => {
+            const cell = cells[idx];
+            if (!cell) return;
+            const text = getCellContentText(cell);
+            if (!text) return;
+            uniquePerColumn[idx].add(text);
+          });
+        });
+        selects.forEach((select, idx) => {
+          const currentValue = select.value;
+          Array.from(select.options).slice(1).forEach(opt => opt.remove());
+          const values = Array.from(uniquePerColumn[idx]).sort((a, b) => a.localeCompare(b));
+          values.forEach(value => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            select.appendChild(option);
+          });
+          if (currentValue && uniquePerColumn[idx].has(currentValue)) {
+            select.value = currentValue;
+            filterState[idx] = currentValue.toLowerCase();
+          } else {
+            select.value = "";
+            filterState[idx] = "";
+          }
+        });
+      }
+
+      function refreshAllTableFilterOptions() {
+        Object.keys(tableFilterControllers).forEach(refreshTableFilterOptions);
+      }
+
+      function applyTableFilters(tableId, rows) {
+        const controller = tableFilterControllers[tableId];
+        if (!controller) return rows;
+        const { filterState } = controller;
+        if (!filterState || !filterState.some(value => value)) {
+          return rows;
+        }
+        return rows.filter(row => {
+          const cells = row.cells || [];
+          return filterState.every((filterValue, idx) => {
+            if (!filterValue) return true;
+            const cell = cells[idx];
+            if (!cell) return false;
+            const text = getCellContentText(cell).toLowerCase();
+            return text.includes(filterValue);
+          });
+        });
+      }
+
+      function setupTableFilterControllers() {
+        setupTableFilter("domain-table", () => domainTableRows, renderDomainTable);
+        setupTableFilter("endpoints-table", () => endpointTableRows, renderEndpointsTable);
+        setupTableFilter("ip-table", () => ipTableRows, renderIpTable);
+        setupTableFilter("tls-table", () => tlsTableRows, renderTlsTable);
+        setupTableFilter("cloud-table", () => cloudInfraTableRows, renderCloudTable);
+      }
+
+      const compareByDataset = key => (a, b) => {
+        const aVal = (a.dataset[key] || "").toLowerCase();
+        const bVal = (b.dataset[key] || "").toLowerCase();
+        return aVal.localeCompare(bVal);
+      };
+
+      function renderDomainTable() {
+        const filtered = applyTableFilters("domain-table", domainTableRows);
+        renderTableBody("domain-table-body", filtered, compareByDataset("domain"));
+      }
+
+      function renderEndpointsTable() {
+        const filtered = applyTableFilters("endpoints-table", endpointTableRows);
+        renderTableBody(
+          "endpoints-table-body",
+          filtered,
+          (a, b) => {
+            const domainCompare = compareByDataset("domain")(a, b);
+            if (domainCompare !== 0) return domainCompare;
+            return (a.dataset.url || "").localeCompare(b.dataset.url || "");
+          }
+        );
+      }
+
+      function renderIpTable() {
+        const filtered = applyTableFilters("ip-table", ipTableRows);
+        renderTableBody("ip-table-body", filtered, compareByDataset("ip"));
+      }
+
+      function renderTlsTable() {
+        const filtered = applyTableFilters("tls-table", tlsTableRows);
+        renderTableBody(
+          "tls-table-body",
+          filtered,
+          (a, b) => {
+            const domainCompare = compareByDataset("domain")(a, b);
+            if (domainCompare !== 0) return domainCompare;
+            return (a.dataset.url || "").localeCompare(b.dataset.url || "");
+          }
+        );
+      }
+
+      function renderCloudTable() {
+        const filtered = applyTableFilters("cloud-table", cloudInfraTableRows);
+        renderTableBody(
+          "cloud-table-body",
+          filtered,
+          (a, b) => {
+            const assetA = (a.dataset.asset || "").toLowerCase();
+            const assetB = (b.dataset.asset || "").toLowerCase();
+            return assetA.localeCompare(assetB);
+          }
+        );
+      }
+
       function renderPaginationControls(totalRows) {
         const paginationDiv = document.getElementById("paginationControls");
         paginationDiv.innerHTML = "";
@@ -2187,6 +4238,53 @@ function buildInsightsCharts({
         this.textContent = (riskSortOrder === "asc") ? "▲" : "▼";
         renderTable(getFilteredRows());
       });
+      applyColumnClassesToHeaders();
+      initializeSidebarToggle();
+      initializeViewControls();
+      initializeTableScrollButtons();
       // Async data loading and report building
+      const INVALID_HOST_PATTERN = /[\s,]/;
+      const normalizeHost = (value) => {
+        if (value === null || value === undefined) return "";
+        return String(value).trim();
+      };
+      const extractHostFromUrl = (value) => {
+        const raw = normalizeHost(value);
+        if (!raw) return "";
+        try {
+          return new URL(raw).hostname || "";
+        } catch {
+          const withoutScheme = raw.replace(/^[a-zA-Z]+:\/\//, "");
+          return withoutScheme.split(/[/:]/)[0] || "";
+        }
+      };
+      const hostLooksValid = (value) => {
+        const host = normalizeHost(value);
+        return Boolean(host) && !INVALID_HOST_PATTERN.test(host);
+      };
+      const filterRecordsByHost = (records, selector) => {
+        if (!Array.isArray(records)) return [];
+        return records.filter(record => {
+          try {
+            const candidate = selector(record);
+            return hostLooksValid(candidate);
+          } catch {
+            return false;
+          }
+        });
+      };
+      const dedupeCleanStrings = (items) => {
+        if (!Array.isArray(items)) return [];
+        const seen = new Set();
+        const cleaned = [];
+        items.forEach(item => {
+          const value = normalizeHost(item);
+          if (!value || seen.has(value)) return;
+          seen.add(value);
+          cleaned.push(value);
+        });
+        return cleaned;
+      };
+
       async function loadData() {
         try {
