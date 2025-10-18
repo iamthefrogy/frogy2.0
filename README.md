@@ -12,16 +12,20 @@
 
 # Approx. Time Duration
 
-  - Assumes default project-discovery stack on a mid-tier VPS (8 vCPU, 16 GB RAM, decent bandwidth). Slower links, tight rate limits, or weaker hardware
-    stretch these numbers.
-  - Core contributors to runtime: naabu’s TCP sweeps, httpx screenshots & headless fetches, katana crawl, and TLS/banner enrichment (tlsx, curl).
+Key pipeline stages: 17-step bash workflow.
 
-  | Approx. live hosts in scope | End-to-end duration | Why it takes that long |
-  |-----------------------------|---------------------|------------------------|
-  | 2-digit (≈50)               | ~15–25 minutes      | Tool start-up plus full DNS→port→HTTP cycle; even small sets run every stage (naabu, httpx, katana, login detection). |
-  | 3-digit (≈300)              | ~45–75 minutes      | Naabu/httpx queues grow; each host fans out across multiple ports, screenshots, TLS probes, and katana fetches. |
-  | 4-digit (≈2,000)            | ~3.5–5.5 hours      | Port scanning dominates; thousands of endpoints mean large response archives, more TLS handshakes, and heavier katana/link processing. |
-  | 5-digit (≈12,000)           | ~12–18 hours        | Parallelism hits external rate limits; sheer volume of screenshots, raw bodies, and crawl data becomes the bottleneck alongside network bandwidth. |
+Assumptions for timing: official Docker container on a mid-range cloud VM (≈2 vCPU, 4–8 GB RAM), fast but not unlimited network egress (Nat/ISP throttled around 50–100 Mbps), no upstream rate bans, and default script throttles (httpx -t 5 -rl 15, Katana -c 5, curl timeouts 25 s). Times grow nearly linearly with live subdomains because Naabu, curl login probes, tlsx, and dig/whois loops iterate per host/endpoint.
+
+  | Total Discovered Subdomains | Typical Runtime (wallclock) | Primary Bottleneck / Rationale |
+  | --- | --- | --- |
+  | 2-digit (≤ 99) | ~20 – 40 minutes | Naabu still scans ~180 ports per host; each live endpoint then hits httpx twice (JSON + screenshots), Katana depth-3 crawl, curl login detection, and tlsx handshakes. DNS/email hygiene (dig) plus whois lookups run sequentially across every subdomain. |
+  | 3-digit (100 – 999) | ~45 – 120 minutes | Port scanning now covers tens of thousands of probes; Katana/curl loops grow proportionally and are mostly sequential; tlsx and screenshotting contend for CPU. DNSSEC/SPF/DKIM checks and ipinfo enrichments fan out to hundreds of hosts, each with multiple dig/whois calls. |
+  | 4-digit (1 000 – 9 999) | ~3 – 6 hours | Millions of port probes through Naabu plus repeated httpx/curl/TLS passes saturate rate limits, while Katana depth-3 crawls queue for hours. Large JSON merging (jq, sort) and disk writes (screenshots, responses) add I/O overhead. External services (crt.sh, whois, TLS endpoints) throttle aggressive parallelism. |
+  | 5-digit (10 000 – 99 999) | ~8 – 18 hours | Naabu must touch tens of millions of host:port combos; httpx, tlsx, Katana, and curl runs become the dominant wallclock cost due to conservative rate limits and timeouts. Massive DNS/email hygiene loops hammer resolver APIs, and IP enrichment (whois.cymru, reverse DNS) further drags. Expect retries, remote throttling, and storage pressure from screenshots/responses. |
+
+  Note: real runtimes can swing widely based on upstream rate-limits, packet loss, depth of Katana crawling, and whether endpoints time out (forcing every
+  curl/httpx call to wait a full 15–25 s). Adjusting tool flags (e.g., trimming port catalog, lowering Katana depth, upping httpx -t) can significantly
+  shorten runs at the cost of coverage.
 
 # Features
 
