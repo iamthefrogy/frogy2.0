@@ -42,9 +42,9 @@
 
 # Risk Scoring
 
-In this tool, **risk scoring** is based on the notion of **asset attractiveness**—the idea that certain attributes or characteristics make an asset more interesting to attackers. If we see more of these attributes, the overall score goes **up**, indicating a broader “attack surface” that adversaries could leverage. Below is an overview of how each factor contributes to the final **risk score**.
+Attack Surface scoring flows through three capped buckets **(Exposure ≤45, Hygiene ≤35, Sensitivity ≤20)**. Each endpoint’s attributes—login transport, HTTP status, open/management/database ports, Katana link volume, cloud shielding, TLS version/expiry/protocols, security headers, email auth posture, DNSSEC, employee/API classification, tech stack breadth, cloud resource type—feeds the bucket-specific contributions. The final score is the capped sum of those buckets (max 100) and the top contributor explanations come from the same contribution list.
 
-<img src="https://github.com/user-attachments/assets/312e9d15-482e-4676-96fe-5dd5ae2a061d"/>
+<img src="https://chintangurjar.com/images/riskscore.png"/>
 
 ---
 # Screenshots
@@ -54,73 +54,6 @@ In this tool, **risk scoring** is based on the notion of **asset attractiveness*
 <img src="https://chintangurjar.com/images/frogyss1.png"/>
 
 ---
-
-#### 1. Purpose of the Asset
-- **Employee-Intended Assets**  
-  If a subdomain or system is meant for internal (employee/colleague) use, it’s often higher value for attackers. Internal portals or dashboards tend to hold sensitive data or offer privileged functionality. Therefore, **if the domain is flagged as employee‐only**, its score increases.
-
-#### 2. URLs Found
-- **Valid/Accessible URL**  
-  If the tool identifies a workable URL (e.g., HTTP/HTTPS) for the asset, it means there’s a real endpoint to attack. An asset that isn’t listening on a web port or is offline is less interesting—so **any resolvable URL** raises the score slightly.
-
-#### 3. Login Interfaces
-- **Login Pages**  
-  The presence of a login form indicates some form of access control or user authentication. Attackers often target logins to brute‐force credentials, attempt SQL injection, or exploit session handling. Thus, **any discovered login endpoint** bumps the score.
-
-#### 4. HTTP Status 200
-- **Accessible Status Code**  
-  If an endpoint actually returns a `200 OK`, it often means the page is legitimately reachable and responding with content. A `200 OK` is more interesting to attackers than a `404` or a redirect—so **a 200 status** modestly increases the risk.
-
-### 5. TLS Version
-- **Modern vs. Outdated TLS**  
-  If an asset is using older SSL/TLS protocols (or no TLS), that’s a bigger risk. However, to simplify:
-  - **TLS 1.2 or 1.3** is considered standard (no penalty).
-  - Anything older or absent is penalized by adding to the score.
-
-#### 6. Certificate Expiry
-- **Imminent Expiry**  
-  Certificates expiring soon (within a few weeks) can indicate potential mismanagement or a higher chance of downtime or misconfiguration. Short‐term expiry windows (≤ 7 days, ≤ 14 days, ≤ 30 days) add a cumulative boost to the risk score.
-
-#### 7. Missing Security Headers
-- **Security Header Hygiene**  
-  The tool checks for typical headers like:
-  - `Strict-Transport-Security (HSTS)`
-  - `X-Frame-Options`
-  - `Content-Security-Policy`
-  - `X-XSS-Protection`
-  - `Referrer-Policy`
-  - `Permissions-Policy`
-
-  Missing or disabled headers mean an endpoint is more prone to common web exploits. Each absent header increments the score.
-
-#### 8. Open Ports
-- **Port Exposure**  
-  The more open ports (and associated services) an asset exposes, the broader the potential attack surface. Each open port adds to the risk score.
-
-#### 9. Technology Stack (Tech Count)
-- **Number of Technologies Detected**  
-  Attackers love multi‐tech stacks because more software → more possible CVEs or misconfigurations. Each identified technology (e.g., Apache, PHP, jQuery, etc.) adds to the overall attractiveness of the target.
-
----
-
-#### Putting It All Together
-
-Each factor above contributes **one or more** points to the final risk score. For example:
-
-1. +1 if the purpose is employee‐intended  
-2. +1 if the asset is a valid URL  
-3. +1 if a login is found  
-4. +1 if it returns HTTP 200  
-5. +1 if TLS is older than 1.2 or absent  
-6. +1–3 for certificates expiring soon (≤ 30 days)  
-7. +1 for each missing security header  
-8. +1 per open port  
-9. +1 per detected technology  
-10. +1 per each management ports open
-11. +1 per each database ports open
-12. +1 per each crawled link per application
-
-Once all factors are tallied, we get a **numeric risk score**. **Higher** means **more interesting and potentially gives more room for pentesters to test around** to an attacker.
 
 > **Why This Matters**  
 > This approach helps you quickly **prioritize** which assets warrant deeper testing. Subdomains with high counts of open ports, advanced internal usage, missing headers, or login panels are more complex, more privileged, or more likely to be misconfigured—therefore, your security team can focus on those first.
@@ -196,3 +129,5 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Completed ✅ ~~Expanded heuristics (password/username fields, form attributes, submit labels, CSRF tokens, meta hints, CAPTCHA, modal hints, multilingual keywords, JS auth libraries, 401/403/407, WWW-Authenticate, session cookies, login redirects, URL patterns & query params).~~
 - Completed ✅ ~~Emits structured JSON and increments LOGIN_FOUND_COUNT when detected.~~
 - Completed ✅ ~~Colourised error output; clearer progress steps (e.g., [n/15]).~~
+- Completed ✅ ~~Completeley revamped design for easy navigation.~~
+- Completed ✅ ~~Added side panel to distribute data among Domain intel, application intel, cert intel, IP intel and cloud intel.~~
