@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# running tight so we bail fast and know why
 set -o errtrace
 
-# Enhanced error trap for context on failures
+# colour palette and logging helpers need to be available before traps fire
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+CLEAR='\033[0m'
+NC='\033[0m'
+# jotting these down so the logs feel a little more alive
+info() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [+] $*"; }
+warning() { echo -e "[$(date +'%Y-%m-%d %H:%M:%S')] ${YELLOW}[!]${NC} $*"; }
+error() { echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] [-] $*${NC}"; }
+
+# if anything crashes mid-run, this little buddy shouts where it blew up
 log_err() {
 	local ec=$?
 	local cmd=${BASH_COMMAND}
@@ -10,9 +21,10 @@ log_err() {
 }
 trap log_err ERR
 
-# This function will be called automatically whenever the script exits.
+# keeping track of when we kicked things off
 SCRIPT_START_TIME=$(date +%s)
 
+# tidy up nicely whether we win or crash
 script_cleanup() {
 	local exit_code=$?
 	if [ $exit_code -ne 0 ]; then
@@ -35,12 +47,10 @@ script_cleanup() {
 	fi
 }
 
-# Register the 'script_cleanup' function to run on EXIT.
+# giving the cleanup hook a chance to say goodbye on exit
 trap script_cleanup EXIT
 
-##############################################
-# Global counters for summary metrics
-##############################################
+# keeping score as we go so the wrap-up feels useful
 CHAOS_COUNT=0
 SUBFINDER_COUNT=0
 ASSETFINDER_COUNT=0
@@ -49,23 +59,20 @@ DNSX_LIVE_COUNT=0
 HTTPX_LIVE_COUNT=0
 LOGIN_FOUND_COUNT=0
 GAU_COUNT=0
-# Block Detection - The script will exit if the percentage of live websites found by httpx is lower than this threshold. Set to "0" to disable.
-BLOCK_DETECTION_THRESHOLD="20" # (Exit if < 20% success rate)
+# nudge this if the web scanners seem blocked or throttled
+BLOCK_DETECTION_THRESHOLD="20"
 
+# caching a few lookups so we don't hammer the same data over and over
 declare -A CLOUD_IP_ASN_CACHE=()
 declare -A CLOUD_IP_PROVIDER_CACHE=()
 declare -A CLOUD_IP_NETWORK_CACHE=()
 declare -A CLOUD_IP_PTR_CACHE=()
 declare -A CLOUD_CNAME_CACHE=()
 
-##############################################
-# Function: check_dependencies
-# Purpose: Verify all required external tools are installed before starting.
-##############################################
+# before we spin up tools, double-check the toolbox is stocked
 check_dependencies() {
 	info "Verifying required tools..."
 	local missing_tools=()
-	# Add ALL external commands used in the script to this list
 	local required_tools=("subfinder" "assetfinder" "dnsx" "naabu" "httpx" "katana" "jq" "curl" "whois" "dig" "openssl" "tlsx" "xargs" "unzip" "grep" "sed" "awk")
 
 	for tool in "${required_tools[@]}"; do
@@ -79,22 +86,18 @@ check_dependencies() {
 		for tool in "${missing_tools[@]}"; do
 			echo -e "${RED}  - $tool${NC}"
 		done
-		# Exit immediately because the script cannot continue without these tools.
+		# no point continuing without the basics, so we bail here
 		exit 1
 	fi
 	info "All required tools are present."
 }
 
-##############################################
-# Validate Input Arguments
-##############################################
-# The script expects at least one argument: a file containing primary domains.
+# I expect a plain list of domains as the first argument
 if [ "$#" -lt 1 ]; then
 	echo -e "\033[91m[-] Usage: $0 <primary_domains_file>\033[0m"
 	exit 1
 fi
 
-# Assign the first argument to a variable and check if the file exists.
 PRIMARY_DOMAINS_FILE="$1"
 if [[ ! -f "$PRIMARY_DOMAINS_FILE" || ! -r "$PRIMARY_DOMAINS_FILE" ]]; then
 	echo -e "\033[91m[-] File '$PRIMARY_DOMAINS_FILE' not found or not readable!\033[0m" >&2
@@ -105,35 +108,28 @@ if ! awk '!/^\s*$/ { if ($0 !~ /^[A-Za-z0-9.-]+$/) { exit 1 } }' "$PRIMARY_DOMAI
 	exit 1
 fi
 
-##############################################
-# Create a unique output directory for this run. # The run directory is timestamped for uniqueness.
-##############################################
 RUN_DIR="output/run-$(date +%Y%m%d%H%M%S)"
 mkdir -p "$RUN_DIR/raw_output/raw_http_responses"
 mkdir -p "$RUN_DIR/logs"
 
-# Verify output paths are writable
+# make sure we can actually write under the new run folder
 if [[ ! -w "$RUN_DIR" || ! -w "$RUN_DIR/logs" ]]; then
 	error "Output directory '$RUN_DIR' or its 'logs' subdir is not writable."
 	exit 1
 fi
 
-# Begin logging configuration (store only in logs) - Redirect STDERR (which xtrace uses) to the log file.
+# tucking stderr into the run log so the console isn't noisy
 exec 2>"$RUN_DIR/logs/logs.log"
+# turning on shell tracing for easier debugging later
 set -x
 
-##############################################
-# Global file paths for temporary subdomain lists
-##############################################
 ALL_TEMP="$RUN_DIR/all_temp_subdomains.txt"
 MASTER_SUBS="$RUN_DIR/master_subdomains.txt"
+MASTER_HOST_INDEX="$RUN_DIR/master_hosts_lower.txt"
 >"$ALL_TEMP"
 >"$MASTER_SUBS"
+> "$MASTER_HOST_INDEX"
 
-##############################################
-# Option toggles for different reconnaissance tools
-##############################################
-# Set each tool to "true" or "false" as needed
 USE_CHAOS="false"
 USE_SUBFINDER="true"
 USE_ASSETFINDER="true"
@@ -142,14 +138,11 @@ USE_NAABU="true"
 USE_HTTPX="true"
 USE_GAU="true"
 
-# Default naabu scan mode; override via NAABU_SCAN_MODE env (auto|syn|connect).
 NAABU_SCAN_MODE="${NAABU_SCAN_MODE:-auto}"
 
-##############################################
-# Port catalogue for Naabu scans (top ports + category coverage)
-##############################################
 PORT_SPEC_FILE="assets/port-spec.txt"
 
+# pulling port targets from the shortlist so naabu knows where to look
 generate_port_list() {
 	local outfile="$1"
 	local spec_file="$PORT_SPEC_FILE"
@@ -194,6 +187,7 @@ generate_port_list() {
 	rm -f "$tmp"
 }
 
+# quick helper to glue list items together without duplicates
 join_unique() {
 	local delimiter="$1"
 	shift
@@ -220,6 +214,7 @@ join_unique() {
 	printf '%s' "${unique[*]}"
 }
 
+# making sure hostnames look consistent when we compare them
 normalize_hostname() {
 	local value="$1"
 	value=$(echo "$value" | tr -d '\r' | tr '[:upper:]' '[:lower:]')
@@ -227,6 +222,7 @@ normalize_hostname() {
 	echo "$value"
 }
 
+# caching WHOIS-style bits to avoid hammering upstream services
 enrich_cloud_ip_metadata() {
 	local ip="$1"
 	[[ -z "$ip" ]] && return
@@ -282,6 +278,7 @@ enrich_cloud_ip_metadata() {
 	fi
 }
 
+# chasing down CNAME chains so we can spot cloud providers from redirects
 get_cloud_cname_chain() {
 	local host="$1"
 	[[ -z "$host" ]] && return
@@ -325,6 +322,7 @@ get_cloud_cname_chain() {
 	printf '%s\n' "${chain[@]}"
 }
 
+# best guess labels for the cloud bits we discover
 classify_cloud_asset() {
 	local host="$1"
 	local target="$2"
@@ -634,38 +632,83 @@ classify_cloud_asset() {
 	printf '%s|%s|%s|%s|%s|%s' "$resource_type" "$cloud_provider" "$service_family" "$load_balancer" "$waf" "$storage"
 }
 
-##############################################
-# Logging Functions (with timestamps)
-##############################################
-# info: print informational messages
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-info() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [+] $*"; }
-# warning: print warning messages
-warning() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [!] $*"; }
-# error: print error messages
-error() { echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] [-] $*${NC}"; }
+declare -a QUALITY_ALERTS=()
 
-# Helper: count JSON records in newline-delimited or array form
+# keeping data checks handy so we notice weird runs right away
+quality_ping() {
+	local message="$1"
+	QUALITY_ALERTS+=("$message")
+	warning "$message"
+}
+
+quality_check_json_array() {
+	local label="$1"
+	local file="$2"
+	local min=${3:-0}
+	if [[ ! -s "$file" ]]; then
+		quality_ping "$label came back empty at $file. Moving on but keep an eye on coverage."
+		echo "[]" >"$file"
+		return 0
+	fi
+	if ! jq -e 'type=="array"' "$file" >/dev/null 2>&1; then
+		quality_ping "$label looked malformed, so I reset $file to []. Continuing the run."
+		echo "[]" >"$file"
+		return 0
+	fi
+	local count
+	count=$(jq 'length' "$file")
+	if (( count < min )); then
+		quality_ping "$label only has $count record(s); expected at least $min. Carrying on regardless."
+	else
+		info "[✔] Quality check for $label: $count record(s) in place."
+	fi
+	return 0
+}
+
+quality_check_hosts_against_master() {
+	local label="$1"
+	local file="$2"
+	local jq_expr="$3"
+	local master_index="$RUN_DIR/master_hosts_lower.txt"
+	[[ -s "$file" && -s "$master_index" ]] || return 0
+	local tmp
+	tmp=$(mktemp)
+	if ! jq -r "$jq_expr" "$file" 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/^\s*//;s/\s*$//' | sed '/^$/d' | sort -u >"$tmp"; then
+		quality_ping "$label host extraction failed for $file. Continuing without cross-check."
+		rm -f "$tmp"
+		return 0
+	fi
+	if [[ ! -s "$tmp" ]]; then
+		rm -f "$tmp"
+		return 0
+	fi
+	local misses
+	misses=$(comm -23 "$tmp" "$master_index")
+	if [[ -n "$misses" ]]; then
+		local slice
+		slice=$(echo "$misses" | paste -sd',' -)
+		quality_ping "$label spotted hosts missing from master list: $slice (still exporting data)."
+	fi
+	rm -f "$tmp"
+}
+
+# gives us a quick record count no matter how the JSON is shaped
 json_count() {
 	local file="$1"
 	[[ -s "$file" ]] || { echo 0; return; }
 	jq -s 'if length == 0 then 0 elif length == 1 and (.[0]|type=="array") then (.[0]|length) else length end' "$file" 2>/dev/null || wc -l <"$file"
 }
 
-##############################################
-# Function: merge_and_count
-# Purpose: Merge subdomain results from a given file into a global temporary file and update the corresponding counter based on the source.
-##############################################
+# pouring each tool's findings into the shared bucket and tallying counts
 merge_and_count() {
-	local file="$1"        # Input file containing subdomains from one tool
-	local source_name="$2" # The tool name (e.g., "Chaos", "Subfinder")
+	local file="$1"        # stash of subdomains from a single tool
+	local source_name="$2" # tag so we know which counter to bump
 	local count=0
 	if [[ -s "$file" ]]; then
 		count=$(wc -l <"$file")
 		cat "$file" >>"$ALL_TEMP"
 	fi
-	# Update counters based on the tool used
+	# keep the little scoreboard up to date per source
 	case "$source_name" in
 	"Chaos") CHAOS_COUNT=$((CHAOS_COUNT + count)) ;;
 	"Subfinder") SUBFINDER_COUNT=$((SUBFINDER_COUNT + count)) ;;
@@ -676,19 +719,16 @@ merge_and_count() {
 
 }
 
-##############################################
-# Function: run_chaos
-# Purpose: Query the Chaos database (if enabled) and merge its subdomain results.
-##############################################
+# optional Chaos dataset pull for folks with API access
 run_chaos() {
 	if [[ "$USE_CHAOS" == "true" ]]; then
 		info "Running Chaos..."
 		local cdir
 		cdir="$(basename "$RUN_DIR")"
 		local chaos_index="output/$cdir/logs/chaos_index.json"
-		# Download the Chaos index file
+		# grab the chaos index so we know where to pull data from
 		curl -s https://chaos-data.projectdiscovery.io/index.json -o "$chaos_index"
-		# Find the URL for the current directory (cdir variable should be set externally)
+		# match the index entry to this run's folder name
 		local chaos_url
 		chaos_url=$(grep -w "$cdir" "$chaos_index" | grep "URL" | sed 's/"URL": "//;s/",//' | xargs || true)
 		if [[ -n "$chaos_url" ]]; then
@@ -705,10 +745,7 @@ run_chaos() {
 	fi
 }
 
-##############################################
-# Function: run_subfinder
-# Purpose: Run the Subfinder tool on the primary domains and merge the subdomains.
-##############################################
+# bread-and-butter subdomain discovery via subfinder
 run_subfinder() {
 	if [[ "$USE_SUBFINDER" == "true" ]]; then
 		info "[1/17] Running Subfinder..."
@@ -717,10 +754,7 @@ run_subfinder() {
 	fi
 }
 
-##############################################
-# Function: run_assetfinder
-# Purpose: Run Assetfinder for each primary domain and merge the results.
-##############################################
+# catching whatever assetfinder can scrape from public sources
 run_assetfinder() {
 	if [[ "$USE_ASSETFINDER" != "true" ]]; then
 		return 0
@@ -741,10 +775,7 @@ info "[2/17] Running Assetfinder..."
 	return $asset_status
 }
 
-##############################################
-# Function: run_crtsh
-# Purpose: Query crt.sh for certificate data and extract subdomains.
-##############################################
+# leaning on crt.sh to shake out certificate-disclosed hosts
 run_crtsh() {
 info "[3/17] Running crt.sh..."
 	local crt_file="$RUN_DIR/whois.txt"
@@ -752,10 +783,10 @@ info "[3/17] Running crt.sh..."
 	local crt_status=0
 	if ! while read -r domain; do
 		{
-			# Temporarily disable exit on error for this block
+			# pausing strict mode so we can tolerate flaky whois replies
 			set +e
 			local registrant
-			# Attempt to extract the registrant organization from whois data
+			# try to yank the registrant org from whois
 			registrant=$(whois "$domain" 2>/dev/null |
 				grep -i "Registrant Organization" |
 				cut -d ":" -f2 |
@@ -764,13 +795,13 @@ info "[3/17] Running crt.sh..."
 				egrep -v '(Whois|whois|WHOIS|domains|DOMAINS|Domains|domain|DOMAIN|Domain|proxy|Proxy|PROXY|PRIVACY|privacy|Privacy|REDACTED|redacted|Redacted|DNStination|WhoisGuard|Protected|protected|PROTECTED|Registration Private|REGISTRATION PRIVATE|registration private)' ||
 				true)
 			if [[ -n "$registrant" ]]; then
-				# Query crt.sh using the registrant information
+				# ask crt.sh about that org as well
 				curl -s "https://crt.sh/?q=$registrant" |
 					grep -Eo '<TD>[[:alnum:]\.-]+\.[[:alpha:]]{2,}</TD>' |
 					sed -e 's/^<TD>//;s/<\/TD>$//' \
 						>>"$crt_file"
 			fi
-			# Also query crt.sh using the domain and JSON output
+			# fall back to straight domain lookups too
 			curl -s "https://crt.sh/?q=$domain&output=json" |
 				jq -r ".[].name_value" 2>/dev/null |
 				sed 's/\*\.//g' \
@@ -785,10 +816,7 @@ info "[3/17] Running crt.sh..."
 	return $crt_status
 }
 
-##############################################
-# Function: run_gau
-# Purpose: Use gau (wayback) to discover archived URLs, extract hostnames
-##############################################
+# GAU gives us historical URLs that still hint at old assets
 run_gau() {
 	if [[ "$USE_GAU" != "true" ]]; then
 		return 0
@@ -835,10 +863,7 @@ info "[4/17] Running GAU…"
 	return $gau_status
 }
 
-##############################################
-# Function: run_dnsx
-# Purpose: Run dnsx tool to check which subdomains are live.
-##############################################
+# quick DNS sweep to see what actually resolves
 run_dnsx() {
 	if [[ "$USE_DNSX" == "true" ]]; then
 		info "[6/17] Running dnsx..."
@@ -850,7 +875,7 @@ run_dnsx() {
 			-j \
 			>/dev/null 2>&1 || true
 		if [[ -s "$RUN_DIR/dnsx.json" ]]; then
-			# Count live domains based on the "NOERROR" status code from dnsx output
+			# tally how many hosts actually resolved cleanly
 			DNSX_LIVE_COUNT=$(jq -r 'select(.status_code=="NOERROR") | .host' "$RUN_DIR/dnsx.json" | sort -u | wc -l)
 		else
 			DNSX_LIVE_COUNT=0
@@ -858,9 +883,7 @@ run_dnsx() {
 	fi
 }
 
-# Function: run_naabu
-# Purpose: Run naabu port scanner against discovered subdomains.
-##############################################
+# port scan time; naabu checks which services even bother replying
 run_naabu() {
 	if [[ "$USE_NAABU" == "true" ]]; then
 		info "[7/17] Running naabu..."
@@ -907,7 +930,7 @@ run_naabu() {
 		local total_hits
 		total_hits=$(json_count "$RUN_DIR/naabu.json")
 
-		# Process naabu JSON to extract unique host:port pairs
+		# build a simple host:port list for later HTTP checks
 		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 		if [[ -s "$RUN_DIR/naabu.json" ]]; then
 			jq -r '"\(.host):\(.port)"' "$RUN_DIR/naabu.json" | sort -u >"$final_urls_ports"
@@ -918,10 +941,7 @@ run_naabu() {
 	generate_portscan_summary
 }
 
-##############################################
-# Function: generate_portscan_summary
-# Purpose: Consolidate raw naabu output into per-IP structures consumed by the report.
-##############################################
+# summarizing naabu hits per IP so later steps have clean data
 generate_portscan_summary() {
 	local naabu_raw="$RUN_DIR/naabu.json"
 	local portscan_file="$RUN_DIR/portscan.json"
@@ -948,12 +968,10 @@ generate_portscan_summary() {
 	else
 		echo "[]" >"$portscan_file"
 	fi
+	quality_check_json_array "Port summary" "$portscan_file"
 }
 
-##############################################
-# Function: generate_ip_intel
-# Purpose: Build PTR, ASN, and network metadata for discovered IPs.
-##############################################
+# pulling rDNS and ASN notes so the report has context on each IP
 generate_ip_intel() {
 	local intel_file="$RUN_DIR/ip_enrichment.json"
 	local ip_candidates="$RUN_DIR/ip_candidates.txt"
@@ -971,6 +989,7 @@ generate_ip_intel() {
 
 	if [[ ! -s "$ip_candidates" ]]; then
 		echo "[]" >"$intel_file"
+		quality_check_json_array "IP enrichment" "$intel_file"
 		return
 	fi
 
@@ -1054,20 +1073,18 @@ generate_ip_intel() {
 		echo "  $json_entry" >>"$intel_file"
 	done <"$ip_candidates"
 	echo "]" >>"$intel_file"
+	quality_check_json_array "IP enrichment" "$intel_file"
 	rm -f "$ip_candidates"
 }
 
-##############################################
-# Function: run_httpx
-# Purpose: Run httpx to probe live web endpoints using the ports identified.
-##############################################
+# httpx tells us which services are actually talking over HTTP/S
 run_httpx() {
 	if [[ "$USE_HTTPX" == "true" ]]; then
 		info "[8/17] Running httpx..."
 		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 		local httpx_json_file="$RUN_DIR/httpx.json"
 
-		# If naabu found no open ports, there's nothing for httpx to do.
+		# skip the run if naabu came back empty-handed
 		if [ ! -s "$final_urls_ports" ]; then
 			warning "Input file for httpx is empty. Skipping."
 			>"$httpx_json_file"
@@ -1085,26 +1102,24 @@ run_httpx() {
 			-o "$RUN_DIR/httpx.json" \
 			>/dev/null || true
 
-		# Ensure the JSON file exists even if httpx produced nothing.
+		# make sure the json file exists even if httpx stayed quiet
 		if [[ ! -f "$httpx_json_file" ]]; then
 			>"$httpx_json_file"
 		fi
 
-		# Count live endpoints
+		# keep track of how many URLs actually responded
 		HTTPX_LIVE_COUNT=$(wc -l <"$RUN_DIR/httpx.json" || echo 0)
 
-		# Ensure the default output dirs exist
+		# making sure the screenshot folders exist before we stash files there
 		mkdir -p output/screenshot output/response
 
-		# Verify runtime output dirs are writable
+		# double-checking we can actually write the screenshots and bodies
 		if [[ ! -w "output/screenshot" || ! -w "output/response" ]]; then
 			error "Output directories under ./output are not writable."
 			exit 1
 		fi
 
-		# 2) Screenshot + store raw HTTP bodies
-		#    • PNGs → output/screenshot (default)
-		#    • Responses → output/response (must specify)
+		# grab screenshots and bodies so the report has something pretty to show
 		httpx -silent \
 	   	-t 5 \
 		  -rl 15 \
@@ -1114,7 +1129,7 @@ run_httpx() {
 			-ss \
 			>/dev/null || true
 
-		# --- DYNAMIC BLOCK DETECTION LOGIC ---
+		# quick pulse check to catch rate limits or blocking
 		local naabu_target_count
 		naabu_target_count=$(wc -l <"$final_urls_ports")
 		if [[ -s "$httpx_json_file" ]]; then
@@ -1128,12 +1143,12 @@ run_httpx() {
 			success_rate=$((HTTPX_LIVE_COUNT * 100 / naabu_target_count))
 		fi
 
-		# If the success rate is below the threshold, emit a warning so the operator can decide next steps.
+		# shout if we dropped below the comfort threshold
 		if [[ "$BLOCK_DETECTION_THRESHOLD" -gt 0 && "$naabu_target_count" -gt 10 && "$success_rate" -lt "$BLOCK_DETECTION_THRESHOLD" ]]; then
 			warning "httpx success rate ${success_rate}% fell below ${BLOCK_DETECTION_THRESHOLD}%. Results may be incomplete."
 		fi
 
-		# Only run detection if we have a meaningful number of targets and the threshold is enabled.
+		# only talk about success rate if the sample size is worth it
 		if [[ "$naabu_target_count" -gt 10 && "$BLOCK_DETECTION_THRESHOLD" -gt 0 ]]; then
 			info "Web Scan Success Rate: ${success_rate}% (${HTTPX_LIVE_COUNT} live websites found / ${naabu_target_count} total live targets)"
 
@@ -1141,14 +1156,11 @@ run_httpx() {
 				warning "Success rate remains below the ${BLOCK_DETECTION_THRESHOLD}% threshold. Results may be incomplete (consider lowering BLOCK_DETECTION_THRESHOLD or changing IP)."
 			fi
 		fi
-	fi
+fi
 }
 
-##############################################
-# Function: gather_screenshot
-# Purpose: Gathering screenshots
-##############################################
 
+# mapping screenshots so the HTML can reference them quickly
 gather_screenshots() {
 	local screenshot_map_file="$RUN_DIR/screenshot_map.json"
 	local screenshot_dir="$RUN_DIR/screenshot"
@@ -1162,7 +1174,7 @@ gather_screenshots() {
 
 		local png
 		png=$(find "$folder" -maxdepth 1 -type f -iname '*.png' | head -n1)
-		[ -z "$png" ] && continue # skip if no screenshot
+		[ -z "$png" ] && continue # nothing to map if there isn't a shot
 
 		local relpath="${png#$RUN_DIR/}"
 
@@ -1175,10 +1187,7 @@ gather_screenshots() {
 	printf '}\n' >>"$screenshot_map_file"
 }
 
-##############################################
-# Function: run_katana
-# Purpose: Crawl live URLs (from httpx.json) and save per-URL links into one JSON file.
-##############################################
+# quick crawl with katana to widen the URL funnel
 run_katana() {
 info "[9/17] Crawling links with Katana..."
 	local httpx_file="$RUN_DIR/httpx.json"
@@ -1215,28 +1224,23 @@ info "[9/17] Crawling links with Katana..."
 	echo "}" >>"$output_file"
 }
 
-##############################################
-# Function: run_login_detection
-# Purpose: Detect login interfaces on discovered web endpoints.
-# Detailed Explanation:
-#   1. Reads each URL from the httpx output.
-#   2. Uses curl to fetch headers and body.
-#   3. Applies a series of regex searches (via grep) to detect login elements.
-#   4. Returns a JSON object indicating if login was found and lists the reasons.
-##############################################
+# sniffing out login flows so folks know where auth might live
 run_login_detection() {
-info "[10/17] Detecting Login panels..."
+	info "[10/17] Detecting Login panels..."
 	local input_file="$RUN_DIR/httpx.json"
 	local output_file="$RUN_DIR/login.json"
 
-	: "${CURL_CONNECT_TIMEOUT:=10}" # seconds
-	: "${CURL_MAX_TIME:=25}"        # seconds
+	: "${CURL_CONNECT_TIMEOUT:=10}"
+	: "${CURL_MAX_TIME:=25}"
 
-	# Exit if input file or jq is not available.
 	if [ ! -f "$input_file" ]; then
+		echo "[]" >"$output_file"
+		quality_check_json_array "Login detection" "$output_file"
 		return
 	fi
 	if ! command -v jq >/dev/null 2>&1; then
+		echo "[]" >"$output_file"
+		quality_check_json_array "Login detection" "$output_file"
 		return
 	fi
 
@@ -1247,19 +1251,15 @@ info "[10/17] Detecting Login panels..."
 		error "mktemp failed"
 		return
 	}
-	# Start JSON array output for login detection
 	echo "[" >"$output_file"
 	local first_entry=true
 
-	# Helper function: detect_login
-	# It examines header and body files for indicators of a login interface.
 	detect_login() {
 		local headers_file="$1"
 		local body_file="$2"
 		local final_url="$3"
 		local -a reasons=()
 
-		# Each grep command below checks for patterns that might indicate a login form.
 		if grep -qi -E '<input[^>]*type=["'"'"']password["'"'"']' "$body_file"; then
 			reasons+=("Found password field")
 		fi
@@ -1317,16 +1317,13 @@ info "[10/17] Detecting Login panels..."
 			login_found="Yes"
 		fi
 
-		# Build a JSON array of the reasons using jq.
 		local json_details
 		json_details=$(printf '%s\n' "${reasons[@]:-}" | jq -R . | jq -s .)
 
-		# Return a JSON object with the login detection results.
 		jq -n --arg login_found "$login_found" --argjson details "$json_details" \
 			'{login_found: $login_found, login_details: $details}'
 	}
 
-	# Process each URL from the httpx data.
 	for url in $urls; do
 		local headers_file
 		headers_file="$(mktemp -p "$tmp_dir" headers.XXXXXX)"
@@ -1343,12 +1340,10 @@ info "[10/17] Detecting Login panels..."
 			"$url" \
 			2>"$curl_err"; then
 			curl_exit=$?
-			# SSL connect error → skip this target cleanly
 			if [ $curl_exit -eq 35 ]; then
 				rm -f "$headers_file" "$body_file" "$curl_err"
 				continue
 			fi
-			# Any other error → emit a record and continue
 			if [ "$first_entry" = true ]; then
 				first_entry=false
 			else
@@ -1360,7 +1355,7 @@ info "[10/17] Detecting Login panels..."
 		fi
 		rm -f "$curl_err"
 
-		# Get the final URL after redirections.
+		# follow redirects so we log where folks actually land
 		set +e
 		local final_url
 		final_url=$(curl -s -S -L \
@@ -1369,21 +1364,18 @@ info "[10/17] Detecting Login panels..."
 			-o /dev/null -w "%{url_effective}" "$url")
 		local final_curl_exit=$?
 
-		# If fetching the final URL fails, fallback to the original URL.
+		# if curl choked, just stick with the original URL
 		if [ $final_curl_exit -ne 0 ] || [ -z "$final_url" ]; then
 			final_url="$url"
 		fi
 		set -e
-		# Run the login detection function on the fetched data.
 		local detection_json
 		detection_json=$(detect_login "$headers_file" "$body_file" "$final_url")
 
-		# If login is detected, increment the LOGIN_FOUND_COUNT.
 		if echo "$detection_json" | grep -q '"login_found": "Yes"'; then
 			LOGIN_FOUND_COUNT=$((LOGIN_FOUND_COUNT + 1))
 		fi
 
-		# Append the detection result for this URL to the output JSON file.
 		if [ "$first_entry" = true ]; then
 			first_entry=false
 		else
@@ -1395,13 +1387,13 @@ info "[10/17] Detecting Login panels..."
 		rm -f "$headers_file" "$body_file"
 	done
 
-	# Close the JSON array.
 	echo "]" >>"$output_file"
 
-	# Clean up any temporary files.
+	quality_check_json_array "Login detection" "$output_file"
 	rm -rf -- "$tmp_dir"
 }
 
+# using tlsx to grab cert metadata and expiry windows
 run_tls_inventory() {
 	info "[11/17] Building TLS certificate inventory..."
 	local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
@@ -1412,6 +1404,7 @@ run_tls_inventory() {
 	if [[ ! -s "$final_urls_ports" ]]; then
 		info "No open ports detected; TLS inventory will be empty."
 		echo "[]" >"$tls_json"
+		quality_check_json_array "TLS inventory" "$tls_json"
 		return
 	fi
 
@@ -1419,6 +1412,7 @@ run_tls_inventory() {
 		warning "tlsx scan failed; TLS inventory will be empty. Check $tlsx_log for details."
 		echo "[]" >"$tls_json"
 		rm -f "$tlsx_raw"
+		quality_check_json_array "TLS inventory" "$tls_json"
 		return
 	fi
 
@@ -1503,12 +1497,11 @@ run_tls_inventory() {
 		echo "[]" >"$tls_json"
 	fi
 
+	quality_check_json_array "TLS inventory" "$tls_json"
 	rm -f "$tlsx_raw"
 }
 
-##############################################
-# Security Compliance and Hygine Checks
-##############################################
+# checking DNS hygiene, email auth, and handy headers in one pass
 run_security_compliance() {
 	info "[12/17] Analyzing security hygiene using..."
 	local compliance_output="$RUN_DIR/securitycompliance.json"
@@ -1884,13 +1877,12 @@ run_security_compliance() {
 	combine_json "$compliance_jsonl" "$compliance_output"
 	combine_json "$headers_jsonl" "$headers_output"
 	rm -f "$compliance_jsonl" "$headers_jsonl"
+	quality_check_json_array "Security compliance" "$compliance_output"
+	quality_check_json_array "Security headers" "$headers_output"
+
 }
 
-
-##############################################
-# Function: combine_json
-# Purpose: Merge a line-based JSON file into a single JSON array.
-##############################################
+# turning jsonl blobs into tidy arrays for later steps
 combine_json() {
 	local infile="$1"
 	local outfile="$2"
@@ -1901,18 +1893,15 @@ combine_json() {
 	fi
 }
 
-##############################################
-# Function: run_api_identification
-# Purpose: Identify API endpoints based on simple pattern matching in domain names.
-##############################################
+# marking domains that smell like APIs based on simple keywords
 run_api_identification() {
 info "[13/17] Identifying API endpoints..."
 	local api_file="$RUN_DIR/api_identification.json"
-	# Begin JSON array output
+	# starting a fresh array so we can jot down every guess
 	echo "[" >"$api_file"
 	local first_entry=true
 	while read -r domain; do
-		# Check if the domain name contains common API-related strings.
+		# super lightweight keyword check; nothing fancy here
 		if echo "$domain" | grep -E -i '(\.api\.|-api-|-api\.)' >/dev/null; then
 			api_status="Yes"
 		else
@@ -1926,12 +1915,10 @@ info "[13/17] Identifying API endpoints..."
 		echo "  { \"domain\": \"${domain}\", \"api_endpoint\": \"${api_status}\" }" >>"$api_file"
 	done <"$MASTER_SUBS"
 	echo "]" >>"$api_file"
+	quality_check_json_array "API detection" "$api_file"
 }
 
-##############################################
-# Function: run_colleague_identification
-# Purpose: Identify endpoints intended for internal/colleague use based on keywords in domain names.
-##############################################
+# looking for intranet-ish names so the team sees potential internal portals
 run_colleague_identification() {
 info "[14/17] Identifying colleague-facing endpoints..."
 	local colleague_file="$RUN_DIR/colleague_identification.json"
@@ -1942,7 +1929,7 @@ info "[14/17] Identifying colleague-facing endpoints..."
 		echo "[]" >"$colleague_file"
 		return
 	fi
-	# Read all keywords from the file into the 'tokens' array, trimming whitespace.
+	# pull keywords into an array and trim the junk spaces
 	mapfile -t raw_tokens <"$keywords_file"
 	local -a tokens=()
 	for token in "${raw_tokens[@]}"; do
@@ -1953,7 +1940,7 @@ info "[14/17] Identifying colleague-facing endpoints..."
 	echo "[" >"$colleague_file"
 	local first_entry=true
 	while read -r domain; do
-		# Convert domain to lowercase for consistent matching.
+		# lowercase everything so comparisons behave
 		local lc_domain
 		lc_domain=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
 		local found="No"
@@ -1988,8 +1975,10 @@ info "[14/17] Identifying colleague-facing endpoints..."
 		echo "  ${entry}" >>"$colleague_file"
 	done <"$MASTER_SUBS"
 	echo "]" >>"$colleague_file"
+	quality_check_json_array "Colleague detection" "$colleague_file"
 }
 
+# stitching DNS, HTTP, and TLS bits into a single cloud story
 run_cloud_infrastructure_inventory() {
 	info "[15/17] Building cloud infrastructure inventory..."
 	local output_file="$RUN_DIR/cloud_infrastructure.json"
@@ -2380,18 +2369,12 @@ run_cloud_infrastructure_inventory() {
 	done
 	echo "]" >>"$output_file"
 
+	quality_check_json_array "Cloud inventory" "$output_file"
 	rm -f "$dns_map_file" "$httpx_map_file" "$tls_map_file"
 }
 
-##############################################
-# Function: build_html_report
-# Purpose: Combine the various JSON outputs and generate the final HTML report.
-# Detailed Explanation:
-#   - Combines JSON files from dnsx, naabu, and httpx.
-#   - Moves merged JSON files into place.
-#   - Writes the complete HTML (including embedded JavaScript and CSS) to the report file.
-##############################################
 
+# glue the UI shell with the datasets and drop the finished HTML
 build_html_report() {
 info "[16/17] Building HTML report with analytics..."
 	combine_json "$RUN_DIR/dnsx.json" "$RUN_DIR/dnsx_merged.json"
@@ -2457,10 +2440,26 @@ info "[16/17] Building HTML report with analytics..."
 	info "[17/17] Report generated at $RUN_DIR/report.html"
 }
 
-##############################################
-# Function: show_summary
-# Purpose: Display a final summary table of the recon results.
-##############################################
+# final sandbox of data checks so we ship trustworthy artifacts
+quality_post_run_checks() {
+	quality_check_json_array "DNS inventory" "$RUN_DIR/dnsx.json"
+	quality_check_json_array "Port scan inventory" "$RUN_DIR/naabu.json"
+	quality_check_json_array "HTTP inventory" "$RUN_DIR/httpx.json"
+	quality_check_json_array "Login detection" "$RUN_DIR/login.json"
+	quality_check_json_array "Security compliance" "$RUN_DIR/securitycompliance.json"
+	quality_check_json_array "Security headers" "$RUN_DIR/sec_headers.json"
+	quality_check_json_array "TLS inventory" "$RUN_DIR/tls_inventory.json"
+	quality_check_json_array "API detection" "$RUN_DIR/api_identification.json"
+	quality_check_json_array "Colleague detection" "$RUN_DIR/colleague_identification.json"
+	quality_check_json_array "Cloud inventory" "$RUN_DIR/cloud_infrastructure.json"
+	quality_check_json_array "Port summary" "$RUN_DIR/portscan.json"
+	quality_check_json_array "IP enrichment" "$RUN_DIR/ip_enrichment.json"
+	quality_check_hosts_against_master "HTTP inventory" "$RUN_DIR/httpx.json" '(if type=="array" then .[] else . end) | (.input // .url // .host // "") | sub("^https?://"; "") | split("/")[0] | split(":")[0] | ascii_downcase'
+	quality_check_hosts_against_master "TLS inventory" "$RUN_DIR/tls_inventory.json" '(if type=="array" then .[] else . end) | (.Host // .host // .Domain // .domain // "") | ascii_downcase'
+	quality_check_hosts_against_master "Cloud inventory" "$RUN_DIR/cloud_infrastructure.json" '(if type=="array" then .[] else . end) | (.Asset // "") | ascii_downcase'
+}
+
+# quick recap for the terminal once everything wraps up
 show_summary() {
 	local combined_pre_dedup=$((CHAOS_COUNT + SUBFINDER_COUNT + ASSETFINDER_COUNT + CRT_COUNT + GAU_COUNT))
 	local final_subdomains_count
@@ -2472,10 +2471,19 @@ show_summary() {
 	printf "%-28s %s\n" "Total Live assets:" "$DNSX_LIVE_COUNT"
 	printf "%-28s %s\n" "Total Live websites:" "$HTTPX_LIVE_COUNT"
 	echo "============================================="
+	if (( ${#QUALITY_ALERTS[@]} > 0 )); then
+		echo ""
+		echo "Data quality heads-up:"
+		local note
+		for note in "${QUALITY_ALERTS[@]}"; do
+			printf " - %s\n" "$note"
+		done
+	else
+		echo ""
+		echo "Data quality checks looked solid this round."
+	fi
 }
-##############################################
-# Main Execution Function
-##############################################
+# main path: run the scanners, enrich the output, and wrap it all up
 main() {
 	check_dependencies
 	run_chaos
@@ -2489,13 +2497,13 @@ main() {
 	if ! run_gau; then
 		warning "GAU step encountered an error and was skipped."
 	fi
-info "[5/17] Merging subdomains..."
-	# Append each primary domain and its www subdomain to ALL_TEMP.
+	info "[5/17] Merging subdomains..."
 	while read -r domain; do
 		echo "$domain" >>"$ALL_TEMP"
 		echo "www.$domain" >>"$ALL_TEMP"
 	done <"$PRIMARY_DOMAINS_FILE"
 	sort -u "$ALL_TEMP" >"$MASTER_SUBS"
+	tr '[:upper:]' '[:lower:]' <"$MASTER_SUBS" | sed '/^$/d' | sort -u >"$MASTER_HOST_INDEX"
 	rm -f "$ALL_TEMP"
 	run_dnsx
 	run_naabu
@@ -2512,9 +2520,9 @@ info "[5/17] Merging subdomains..."
 	run_colleague_identification
 	run_cloud_infrastructure_inventory
 	build_html_report
+	quality_post_run_checks
 	show_summary
 }
-# Entry point
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	main "$@"
 fi
