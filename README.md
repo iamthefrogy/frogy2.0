@@ -64,6 +64,12 @@ Attack Surface scoring flows through three capped buckets **(Exposure ≤45, Hyg
 
 # Installation and Usage
 
+## Give permissions
+
+```bash
+chmod 777 *
+```
+
 ## Quick Start (Docker)
 
 ```bash
