@@ -135,6 +135,7 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Completed ✅ ~~Colourised error output; clearer progress steps (e.g., [n/15]).~~
 - Completed ✅ ~~Completeley revamped design for easy navigation.~~
 - Completed ✅ ~~Added side panel to distribute data among Domain intel, application intel, cert intel, IP intel and cloud intel.~~
+- Enforce data quality checks (valid domain syntax, duplicate detection, enrichment completion) before persisting records.
 - Provide option to hide the side panel.
 - Export report in CSV + JSON format.
 - Add the same search here bar to all side panel reporting.
