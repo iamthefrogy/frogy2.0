@@ -30,19 +30,28 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
-      ca-certificates curl zip unzip jq sed python3 whois dnsutils openssl \
+      ca-certificates curl zip unzip jq sed python3 python3-pip python3-venv whois dnsutils openssl \
       bash libpcap0.8 \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/frogy
+
+COPY requirements.txt ./requirements.txt
+RUN python3 -m venv /opt/frogy/.venv \
+ && /opt/frogy/.venv/bin/pip install --upgrade pip \
+ && /opt/frogy/.venv/bin/pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
 RUN sed -i 's/\r$//' frogy.sh || true \
- && chmod 0755 frogy.sh
+ && chmod 0755 frogy.sh entrypoint.sh
 
 COPY --from=builder /out/* /usr/local/bin/
-ENV PATH=/usr/local/bin:$PATH
+ENV PATH=/opt/frogy/.venv/bin:/usr/local/bin:$PATH
 
 RUN mkdir -p /opt/frogy/output
 
-ENTRYPOINT ["bash", "frogy.sh"]
+ENV FROGY_WEB_PORT=8787
+EXPOSE 8787
+
+ENTRYPOINT ["./entrypoint.sh"]
