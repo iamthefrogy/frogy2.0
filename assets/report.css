@@ -135,6 +135,57 @@ body[data-theme="dark"] .header__subtitle {
   gap: 10px;
 }
 
+.export-menu {
+  position: relative;
+}
+
+.export-menu__trigger {
+  min-width: 140px;
+}
+
+.export-menu__list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  display: grid;
+  min-width: 160px;
+  padding: 6px 0;
+  z-index: 24;
+}
+
+.export-menu__list[hidden] {
+  display: none;
+}
+
+.export-menu__list--floating {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: auto;
+  z-index: 240;
+}
+
+.export-menu__item {
+  background: transparent;
+  border: 0;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 8px 16px;
+  text-align: left;
+  width: 100%;
+}
+
+.export-menu__item:hover,
+.export-menu__item:focus {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
 .theme-toggle {
   min-width: 120px;
 }
