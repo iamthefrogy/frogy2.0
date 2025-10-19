@@ -64,25 +64,85 @@ Attack Surface scoring flows through three capped buckets **(Exposure ≤45, Hyg
 
 # Installation and Usage
 
-- Step 1 - Clone the repository.
-- Step 2 - Create the target file and add all primary domains to it. E.g., target.txt
-- Step 3 - Give permissions to all files within the frogy2.0 folder.
-  ```bash
-  chmod 777 *
-  ```
-- Step 4 - Build docker container.
-  ```bash
-  docker build -t frogy:latest .
-  ```
-- Step 5 - Run docker container.
+## Quick Start (Docker)
+
 ```bash
-  docker run --rm -it --network host --privileged --cap-add=NET_RAW --cap-add=NET_ADMIN --security-opt seccomp=unconfined --ulimit nofile=1048576:1048576 -v "$(pwd):/opt/frogy" -w /opt/frogy --entrypoint /bin/bash frogy:latest
- ```
-- Step 6 - Once, you are inside docker, run this command to start operations: 
+docker build -t frogy:latest .
+```
+
+#### Linux hosts (native Docker)
+
+`--network host` works reliably on Linux, so you can bind directly to the host network and keep the default port:
+
 ```bash
-  ./frogy.sh target.txt
- ```
-<b>Once this is completed, you will find the output within the output/run-2025XXXXXXXX/report.html</b>
+docker run --rm --network host --privileged --cap-add=NET_RAW frogy:latest
+```
+
+If you want runs to survive container restarts, add `-v "$(pwd)/output:/opt/frogy/output"` to that command so artefacts are stored on the host.
+
+#### macOS & Windows (Docker Desktop)
+
+Docker Desktop does **not** support `--network host`. Use bridged networking with an explicit port mapping instead:
+
+```bash
+docker run --rm --privileged --cap-add=NET_RAW -p 8787:8787 frogy:latest
+```
+
+Add `-v "$(pwd)/output:/opt/frogy/output"` if you want to persist run history to the host filesystem.
+
+When the container starts you will see a banner similar to:
+
+```
+[frogy] Docker container is up. Control plane will be served at http://0.0.0.0:8787
+[frogy] If you mapped the port (e.g. -p 8787:8787), open that URL from your browser.
+```
+
+The UI is available at `http://localhost:8787` (or the host/IP you published the port on).
+
+> **Persisting runs**: Mounting `./output` into `/opt/frogy/output` keeps your scan history, metadata, and reports on the host. Without the mount the container still works, but all artefacts are wiped when it stops.
+
+## Launching a Run
+
+The control plane now opens with a single scan table:
+
+1. Click **New Scan** to define a company name and paste newline-delimited **primary domains** (same format as `target.txt`). Client-side checks catch whitespace and invalid characters before submission.
+2. Choose **Run Now**, **Add to Queue**, or **Schedule** (future date/time) directly from the modal. The scan is persisted regardless of the launch mode so you can rerun it later.
+3. Scan rows list the last known status, completion time, and a report link. Selecting a row enables **Modify** (updates name/targets and optionally reruns) or **Delete** (removes the project folder and artefacts from disk).
+
+Every launch writes a fresh target file to `output/projects/<project>/targets/targets-<timestamp>.txt` before invoking `frogy.sh`. Status badges stay in sync with the scheduler, so refreshes never lose track of queued or running jobs; reports always open in a new browser tab.
+
+## Interface Highlights
+
+- **Selectable rows & bulk actions**: Use the new checkbox column (or the select-all header) to modify or delete multiple scans at once.
+- **Targets on demand**: The Targets column shows the total count plus a “View” pop-up with a scrollable list, keeping the table compact even for large target sets.
+- **Instant reports**: The dedicated **View Results** column launches the latest HTML report in a new tab; buttons disable automatically while runs are still generating data.
+- **Report exports**: Grab the underlying data straight from the dashboard—download JSON (all datasets) or a ZIP of CSV files ready for spreadsheets.
+- **Progress visibility**: Each row carries a horizontal progress bar with live step labels (e.g. “Step 5/17 – httpx”), so you can see pipeline momentum at a glance.
+- **Action icons**: The rightmost column offers quick controls for rescan/stop (🔄/⏹), modify (✏️), and delete (🗑️). Tooltips clarify each action; active runs expose a stop button you can use to cancel in-flight work.
+- **Theme toggle**: Swap between dark and light palettes via the toggle in the header; your preference is remembered in the browser.
+- **Footer credits**: A persistent “Developed by Frogy (Chintan Gurjar)” footer links out to contact details and the project homepage.
+
+## Queueing & Scheduling
+
+- Use **Add to Queue** when resources are busy—jobs execute automatically once earlier work completes.
+- Use **Schedule** to select a future date/time; the run starts at that moment (subject to queue order). Scheduled entries remain highlighted until they fire.
+- Parallel execution is supported by raising `FROGY_MAX_CONCURRENT` (see below); the scheduler respects that ceiling while interleaving queued and scheduled work.
+
+## Browsing History
+
+- The table consolidates every saved scan. Completed runs expose a **Report** link that opens a fresh tab to the archived HTML dashboard. Queued/running entries keep their link disabled until output is ready.
+- If a run directory has been removed (for example `output/projects/<project>/run-2025XXXXXX` no longer exists) the UI surfaces a clear warning instead of rendering a blank report.
+- Logs for every run are still archived under `output/projects/<project>/logs/`.
+
+
+## CLI Compatibility
+
+`frogy.sh` retains its original CLI usage and can still be executed manually:
+
+```bash
+bash frogy.sh target.txt
+```
+Manual runs continue to emit `output/run-*` folders in the repository root. The control plane only relocates runs that it initiated into `output/projects/<project>/`.
 
 # BlackHat Video
 https://www.youtube.com/watch?v=LHlU4CYNj1M
@@ -140,3 +200,4 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Export report in CSV + JSON format.
 - Add the same search bar to all side panel reporting.
 - User should be allowed to directly open UI and add targets there only.
+
