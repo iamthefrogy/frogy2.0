@@ -255,7 +255,12 @@ const secMapDomain = {};
           const combinedData = {};
           dnsxData.forEach(d => { combinedData[d.host] = { dns: d, http: [] }; });
           httpxData.forEach(h => {
-            const domain = (h.input || "").split(":")[0];
+            const rawInput = (h.input || "").split(":")[0];
+            let domain = rawInput ? rawInput.trim().toLowerCase() : "";
+            if (!domain) {
+              domain = (extractHostFromUrl(h.url || h.input || h.host || "") || "").toLowerCase();
+            }
+            if (!domain) return;
             if (!combinedData[domain]) combinedData[domain] = { dns: null, http: [] };
             combinedData[domain].http.push(h);
           });
