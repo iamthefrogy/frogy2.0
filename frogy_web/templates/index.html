@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>frogy@Dashboard:~$</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-theme="dark">
+  <header class="top-bar">
+    <div class="brand">
+      <div class="brand-title">
+        <h1>External Attack Surface Intelligence – Crafted by <a href="https://chintangurjar.com" target="_blank" rel="noopener noreferrer">Frogy</a></h1>
+      </div>
+      <p class="tagline">Unified visibility across internet-exposed assets, live services, and defensive readiness indicators.</p>
+    </div>
+    <div class="top-actions">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle theme">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Scan History</h2>
+          <p class="panel-subtitle">Select a scan to modify, rerun, or clean up results.</p>
+        </div>
+        <div class="panel-actions">
+          <button id="new-scan-btn" type="button">New Scan</button>
+          <button id="modify-scan-btn" type="button" disabled>Modify</button>
+          <button id="delete-scan-btn" type="button" disabled>Delete</button>
+        </div>
+      </div>
+
+      <div id="flash-message" class="flash" aria-live="polite"></div>
+
+      <div class="table-wrapper">
+        <table id="scan-table">
+          <thead>
+            <tr>
+              <th scope="col" class="select-col">
+                <input type="checkbox" id="select-all" aria-label="Select all scans">
+              </th>
+              <th scope="col">#</th>
+              <th scope="col">Project</th>
+              <th scope="col">Targets</th>
+              <th scope="col">Progress</th>
+              <th scope="col">Last Run</th>
+              <th scope="col">Status</th>
+              <th scope="col">View Results</th>
+              <th scope="col" class="download-col">Download Report</th>
+              <th scope="col" class="actions-col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="scan-table-body">
+            <tr class="empty">
+              <td colspan="10">No scans yet. Start with <strong>New Scan</strong>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Developed by Frogy &mdash; Chintan Gurjar · <a href="mailto:chitnangurjar@outlook.com">chitnangurjar@outlook.com</a> · <a href="https://chintangurjar.com" target="_blank" rel="noopener noreferrer">chintangurjar.com</a></p>
+  </footer>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden"></div>
+
+  <section id="scan-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="modal-title">New Scan</h2>
+        <button id="modal-close" type="button" aria-label="Close">&times;</button>
+      </header>
+      <form id="modal-form">
+        <div class="modal-field">
+          <label for="modal-project-name">Company name</label>
+          <input id="modal-project-name" name="project-name" type="text" placeholder="acme-security" required>
+        </div>
+        <div class="modal-field">
+          <label for="modal-targets">Primary domains <small>(one per line)</small></label>
+          <textarea id="modal-targets" name="targets" rows="8" placeholder="example.com&#10;api.example.com" required></textarea>
+        </div>
+        <div class="modal-field hidden" id="modal-schedule-field">
+          <label for="modal-schedule">Schedule start</label>
+          <input id="modal-schedule" name="schedule" type="datetime-local">
+        </div>
+        <div id="modal-feedback" class="feedback" aria-live="polite"></div>
+        <div class="modal-actions">
+          <button type="button" data-run-mode="immediate">Run Now</button>
+          <button type="button" data-run-mode="queue">Add to Queue</button>
+          <button type="button" data-run-mode="schedule">Schedule</button>
+          <button type="button" id="modal-cancel">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="targets-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="targets-modal-title">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="targets-modal-title">Target Domains</h2>
+        <button id="targets-modal-close" type="button" aria-label="Close">&times;</button>
+      </header>
+      <div class="targets-body">
+        <p class="targets-count"><span id="targets-count">0</span> primary domain(s)</p>
+        <div class="targets-scroll">
+          <ol id="targets-list"></ol>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="targets-modal-ok">Close</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
