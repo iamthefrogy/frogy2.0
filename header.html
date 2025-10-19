@@ -540,44 +540,79 @@
       });
       const TABLE_VIEW_CLASSNAMES = Object.freeze(Object.keys(VIEW_LABELS).map(view => `table-view--${view}`));
       const COLUMN_CLASS_MAP = Object.freeze([
-        ["col-core"],
-        ["col-core"],
-        ["col-core"],
-        ["col-domain"],
-        ["col-domain"],
-        ["col-domain"],
-        ["col-domain", "col-cloud"],
-        ["col-domain"],
-        ["col-domain"],
-        ["col-domain"],
-        ["col-domain"],
-        ["col-domain", "col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-domain", "col-web"],
-        ["col-cloud"],
-        ["col-cloud"],
-        ["col-cloud"],
-        ["col-domain", "col-cloud"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-web"],
-        ["col-domain"],
-        ["col-web"]
+        ["col-core"], // 0
+        ["col-core"], // 1
+        ["col-core"], // 2
+        ["col-domain"], // 3
+        ["col-domain"], // 4
+        ["col-domain"], // 5
+        ["col-domain"], // 6
+        ["col-domain"], // 7
+        ["col-domain"], // 8
+        ["col-domain"], // 9
+        ["col-domain"], // 10
+        ["col-domain"], // 11
+        ["col-domain"], // 12
+        ["col-domain"], // 13
+        ["col-domain"], // 14
+        ["col-domain"], // 15
+        ["col-domain"], // 16
+        ["col-domain"], // 17
+        ["col-domain"], // 18
+        ["col-domain"], // 19
+        ["col-domain"], // 20
+        ["col-domain"], // 21
+        ["col-domain"], // 22
+        ["col-web"], // 23
+        ["col-web"], // 24
+        ["col-web"], // 25
+        ["col-web"], // 26
+        ["col-web"], // 27
+        ["col-web"], // 28
+        ["col-web"], // 29
+        ["col-web"], // 30
+        ["col-web"], // 31
+        ["col-web"], // 32
+        ["col-web"], // 33
+        ["col-web"], // 34
+        ["col-web"], // 35
+        ["col-web"], // 36
+        ["col-web"], // 37
+        ["col-web"], // 38
+        ["col-web"], // 39
+        ["col-web"], // 40
+        ["col-web"], // 41
+        ["col-web"], // 42
+        ["col-web"], // 43
+        ["col-web"], // 44
+        ["col-web"], // 45
+        ["col-web"], // 46
+        ["col-web"], // 47
+        ["col-web"], // 48
+        ["col-web"], // 49
+        ["col-domain"], // 50
+        ["col-domain"], // 51
+        ["col-domain"], // 52
+        ["col-web"], // 53
+        ["col-web"], // 54
+        ["col-web"], // 55
+        ["col-web"], // 56
+        ["col-web"], // 57
+        ["col-web"], // 58
+        ["col-web"], // 59
+        ["col-web"], // 60
+        ["col-web"], // 61
+        ["col-web"], // 62
+        ["col-web"], // 63
+        ["col-domain"], // 64
+        ["col-cloud"], // 65
+        ["col-cloud"], // 66
+        ["col-cloud"], // 67
+        ["col-cloud"], // 68
+        ["col-cloud"], // 69
+        ["col-cloud"], // 70
+        ["col-cloud"], // 71
+        ["col-cloud"] // 72
       ]);
     </script>
   </head>
@@ -590,7 +625,13 @@
         </div>
         <div class="header__actions">
           <button id="themeToggleButton" class="btn btn--ghost theme-toggle" type="button" aria-pressed="false" title="Switch to dark theme">Dark theme</button>
-          <button id="exportCsvButton" class="btn btn--primary" type="button">Export CSV</button>
+          <div class="export-menu">
+            <button id="exportReportButton" class="btn btn--primary export-menu__trigger" type="button" aria-haspopup="true" aria-expanded="false">Export Report</button>
+            <div id="exportMenu" class="export-menu__list" role="menu" hidden>
+              <button type="button" class="export-menu__item" data-export-type="csv" role="menuitem">CSV</button>
+              <button type="button" class="export-menu__item" data-export-type="json" role="menuitem">JSON</button>
+            </div>
+          </div>
         </div>
       </div>
     </header>
@@ -650,6 +691,9 @@
             <span class="view-indicator">Domain Intelligence</span>
             <p class="focus-description">&nbsp;&nbsp;&nbsp;Aggregate visibility into discovery health, mail authentication, and exposed services across observed domains.</p>
           </section>
+          <section class="table-top-controls view-block" data-view-group="domain">
+            <input type="text" class="table-search-input" data-table-id="domain-table" placeholder="Search Domain Intelligence..." />
+          </section>
 
         <div class="table-scroll-controls view-block" data-view-group="domain" role="group" aria-label="Domain intelligence table scroll controls">
           <button type="button" class="table-scroll-button" data-direction="left">◀</button>
@@ -682,6 +726,9 @@
           <section class="focus-header view-block" data-view-group="endpoints">
             <span class="view-indicator">Application Endpoints</span>
             <p class="focus-description">&nbsp;&nbsp;&nbsp;Inventory of reachable web surfaces, response characteristics, and technology fingerprints.</p>
+          </section>
+          <section class="table-top-controls view-block" data-view-group="endpoints">
+            <input type="text" class="table-search-input" data-table-id="endpoints-table" placeholder="Search Application Endpoints..." />
           </section>
 
         <div class="table-scroll-controls view-block" data-view-group="endpoints" role="group" aria-label="Application endpoints table scroll controls">
@@ -717,6 +764,9 @@
             <span class="view-indicator">IP Addresses</span>
             <p class="focus-description">&nbsp;&nbsp;&nbsp;Mapping of discovered hosts to resolved IP space alongside observed services.</p>
           </section>
+          <section class="table-top-controls view-block" data-view-group="ips">
+            <input type="text" class="table-search-input" data-table-id="ip-table" placeholder="Search IP Intelligence..." />
+          </section>
 
         <div class="table-scroll-controls view-block" data-view-group="ips" role="group" aria-label="IP addresses table scroll controls">
           <button type="button" class="table-scroll-button" data-direction="left">◀</button>
@@ -742,6 +792,9 @@
           <section class="focus-header view-block" data-view-group="tls">
             <span class="view-indicator">TLS Certificates</span>
             <p class="focus-description">&nbsp;&nbsp;&nbsp;Summary of TLS implementations, certificate issuers, and expiration timelines.</p>
+          </section>
+          <section class="table-top-controls view-block" data-view-group="tls">
+            <input type="text" class="table-search-input" data-table-id="tls-table" placeholder="Search TLS Certificates..." />
           </section>
 
         <div class="table-scroll-controls view-block" data-view-group="tls" role="group" aria-label="TLS certificates table scroll controls">
@@ -775,6 +828,9 @@
           <section class="focus-header view-block" data-view-group="cloud">
             <span class="view-indicator">Cloud Infrastructure</span>
             <p class="focus-description">&nbsp;&nbsp;&nbsp;Cloud asset classifications, provider coverage, and supporting evidence across discovered hosts.</p>
+          </section>
+          <section class="table-top-controls view-block" data-view-group="cloud">
+            <input type="text" class="table-search-input" data-table-id="cloud-table" placeholder="Search Cloud Infrastructure..." />
           </section>
 
         <div class="table-scroll-controls view-block" data-view-group="cloud" role="group" aria-label="Cloud infrastructure table scroll controls">
@@ -811,89 +867,445 @@
               <th id="riskScoreHeader">Attack Surface Score<span id="riskSortToggle">▼</span></th>
               <th>Domain</th>
               <th>Purpose</th>
+              <th>Resolution Status</th>
               <th>Resolvers</th>
               <th>A Records</th>
+              <th>AAAA Records</th>
+              <th>CNAME Records</th>
               <th>NS Records</th>
               <th>MX Records</th>
-              <th>PTR Records</th>
+              <th>Reverse DNS (PTR)</th>
+              <th>TXT Records (SPF/DMARC)</th>
+              <th>SOA Record</th>
+              <th>SRV Records</th>
+              <th>CAA Records</th>
+              <th>Zone Transfer</th>
+              <th>WHOIS Summary</th>
+              <th>Subdomain Keywords</th>
+              <th>SPF Record</th>
+              <th>DKIM Record</th>
+              <th>DMARC Record</th>
+              <th>DNSSEC Record</th>
               <th>DNS Status</th>
-              <th>CDN Name</th>
-              <th>CDN Type</th>
               <th>Port</th>
               <th>URL</th>
               <th>Screenshot</th>
               <th>Redirect Location</th>
               <th>Homepage Title</th>
               <th>Web Server</th>
-              <th>Login Found</th>
-              <th>API Endpoint</th>
               <th>Technology Stack</th>
-              <th>Status Code</th>
-              <th>Content Length</th>
-              <th>CDN</th>
-              <th>SPF Record</th>
-              <th>DKIM Record</th>
-              <th>DMARC Record</th>
-              <th>DNSSEC Record</th>
-              <th>SSL/TLS Version</th>
-              <th>Cert Expiry Date</th>
-              <th>SSL/TLS Issuer</th>
+              <th>Login Interface</th>
+              <th>API Detected</th>
+              <th>Colleague Facing Portal</th>
+              <th>Security Headers</th>
               <th>Strict-Transport-Security</th>
               <th>X-Frame-Options</th>
               <th>Content-Security-Policy</th>
               <th>X-XSS-Protection</th>
               <th>Referrer Policy</th>
               <th>Permissions Policy</th>
+              <th>Access-Control-Allow-Origin</th>
+              <th>HTTP Status</th>
+              <th>Content Length</th>
+              <th>Crawled Links Count</th>
+              <th>CDN Name</th>
+              <th>CDN Type</th>
+              <th>WAF / CDN Presence</th>
+              <th>CDN Flag</th>
               <th>Open Ports / Services</th>
-              <th>Crawled Links</th>
+              <th>Notable Ports / Services</th>
+              <th>Hostnames on IP</th>
+              <th>ASN / Provider</th>
+              <th>Network Block</th>
+              <th>SSL/TLS Version</th>
+              <th>SSL/TLS Cipher</th>
+              <th>Cert Expiry Date</th>
+              <th>Days Until Expiry</th>
+              <th>SSL/TLS Issuer</th>
+              <th>Issuer CN</th>
+              <th>Issuer Org</th>
+              <th>Subject DN</th>
+              <th>Subject CN</th>
+              <th>Subject AN</th>
+              <th>Certificate Serial</th>
+              <th>TLS Endpoint IP</th>
+              <th>Cloud Provider</th>
+              <th>Cloud Resource Type</th>
+              <th>Cloud Service Family</th>
+              <th>Cloud Resource Identifier</th>
+              <th>Load Balancer / Traffic Manager</th>
+              <th>WAF / CDN Shielding</th>
+              <th>Storage</th>
+              <th>Cloud Evidence</th>
             </tr>
             <tr id="filter-row">
-              <th><select id="priority-filter"><option value="">All</option></select></th>
-              <th><select id="domain-filter"><option value="">All</option></select></th>
-              <th><select id="purpose-filter"><option value="">All</option></select></th>
-              <th><select id="resolvers-filter"><option value="">All</option></select></th>
-              <th><select id="arecords-filter"><option value="">All</option></select></th>
-              <th><select id="ns-filter"><option value="">All</option></select></th>
-              <th><select id="mx-filter"><option value="">All</option></select></th>
-              <th><select id="ptr-filter"><option value="">All</option></select></th>
-              <th><select id="dnsstatus-filter"><option value="">All</option></select></th>
-              <th><select id="cdnname-filter"><option value="">All</option></select></th>
-              <th><select id="cdntype-filter"><option value="">All</option></select></th>
-              <th><select id="port-filter"><option value="">All</option></select></th>
-              <th><select id="url-filter"><option value="">All</option></select></th>
               <th>
-                <select id="screenshot-filter">
+                <select id="priority-filter" data-column-index="0">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="domain-filter" data-column-index="1">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="purpose-filter" data-column-index="2">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="resolution-filter" data-column-index="3">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="resolvers-filter" data-column-index="4">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="arecords-filter" data-column-index="5">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="aaaarecords-filter" data-column-index="6">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cnamerecords-filter" data-column-index="7">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="ns-filter" data-column-index="8">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="mx-filter" data-column-index="9">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="ptr-filter" data-column-index="10">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="txt-filter" data-column-index="11">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="soa-filter" data-column-index="12">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="srv-filter" data-column-index="13">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="caa-filter" data-column-index="14">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="zone-filter" data-column-index="15">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="whois-filter" data-column-index="16">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="keyword-filter" data-column-index="17">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="spf-filter" data-column-index="18">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="dkim-filter" data-column-index="19">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="dmarc-filter" data-column-index="20">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="dnssec-filter" data-column-index="21">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="dnsstatus-filter" data-column-index="22">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="port-filter" data-column-index="23">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="url-filter" data-column-index="24">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="screenshot-filter" data-column-index="25">
                   <option value="">All</option>
                   <option value="has screenshot">Has screenshot</option>
                   <option value="no screenshot">No screenshot</option>
                 </select>
               </th>
-              <th><select id="redirect-filter"><option value="">All</option></select></th>
-              <th><select id="title-filter"><option value="">All</option></select></th>
-              <th><select id="webserver-filter"><option value="">All</option></select></th>
-              <th><select id="login-filter"><option value="">All</option></select></th>
-              <th><select id="api-endpoint-filter"><option value="">All</option></select></th>
-              <th><select id="tech-filter"><option value="">All</option></select></th>
-              <th><select id="statuscode-filter"><option value="">All</option></select></th>
-              <th><select id="contentlength-filter"><option value="">All</option></select></th>
-              <th><select id="cdn-filter"><option value="">All</option></select></th>
-              <th><select id="spf-filter"><option value="">All</option></select></th>
-              <th><select id="dkim-filter"><option value="">All</option></select></th>
-              <th><select id="dmarc-filter"><option value="">All</option></select></th>
-              <th><select id="dnssec-filter"><option value="">All</option></select></th>
-              <th><select id="sslversion-filter"><option value="">All</option></select></th>
-              <th><select id="certexpiry-filter"><option value="">All</option></select></th>
-              <th><select id="sslissuer-filter"><option value="">All</option></select></th>
-              <th><select id="sts-filter"><option value="">All</option></select></th>
-              <th><select id="xfo-filter"><option value="">All</option></select></th>
-              <th><select id="csp-filter"><option value="">All</option></select></th>
-              <th><select id="xss-filter"><option value="">All</option></select></th>
-              <th><select id="rp-filter"><option value="">All</option></select></th>
-              <th><select id="pp-filter"><option value="">All</option></select></th>
-              <th><select id="ports-services-filter"><option value="">All</option></select></th>
-              <th><select id="crawledlinks-filter"><option value="">All</option></select></th>
-            </tr>
-          </thead>
+              <th>
+                <select id="redirect-filter" data-column-index="26">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="title-filter" data-column-index="27">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="webserver-filter" data-column-index="28">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="tech-filter" data-column-index="29">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="login-filter" data-column-index="30">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="api-detected-filter" data-column-index="31">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="colleague-filter" data-column-index="32">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="security-headers-filter" data-column-index="33">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="sts-filter" data-column-index="34">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="xfo-filter" data-column-index="35">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="csp-filter" data-column-index="36">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="xss-filter" data-column-index="37">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="rp-filter" data-column-index="38">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="pp-filter" data-column-index="39">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="acao-filter" data-column-index="40">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="statuscode-filter" data-column-index="41">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="contentlength-filter" data-column-index="42">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="crawledlinks-filter" data-column-index="43">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cdnname-filter" data-column-index="44">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cdntype-filter" data-column-index="45">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="wafcdn-filter" data-column-index="46">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cdn-filter" data-column-index="47">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="ports-services-filter" data-column-index="48">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="notable-ports-filter" data-column-index="49">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="hostnames-filter" data-column-index="50">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="asn-filter" data-column-index="51">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="network-filter" data-column-index="52">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="sslversion-filter" data-column-index="53">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="sslcipher-filter" data-column-index="54">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="certexpiry-filter" data-column-index="55">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="days-expiry-filter" data-column-index="56">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="sslissuer-filter" data-column-index="57">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="issuercn-filter" data-column-index="58">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="issuerorg-filter" data-column-index="59">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="subjectdn-filter" data-column-index="60">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="subjectcn-filter" data-column-index="61">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="subjectan-filter" data-column-index="62">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="certserial-filter" data-column-index="63">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="tlsip-filter" data-column-index="64">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cloudprovider-filter" data-column-index="65">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cloudtype-filter" data-column-index="66">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cloudfamily-filter" data-column-index="67">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cloudresource-filter" data-column-index="68">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="loadbalancer-filter" data-column-index="69">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cloudshield-filter" data-column-index="70">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cloudstorage-filter" data-column-index="71">
+                  <option value="">All</option>
+                </select>
+              </th>
+              <th>
+                <select id="cloudevidence-filter" data-column-index="72">
+                  <option value="">All</option>
+                </select>
+              </th>
           <tbody id="report-table-body"></tbody>
             </table>
           </div>
@@ -1454,39 +1866,186 @@
       let riskSortOrder = "desc";
       let riskEntries = [];
 
-      // CSV Export Functions
-      function downloadCSV(csv, filename) {
-        const csvFile = new Blob([csv], { type: "text/csv" });
+      // Export Helpers
+      function getHeaderTitles() {
+        const headerRow = document.querySelector("#report-table thead tr");
+        if (!headerRow) {
+          return [];
+        }
+        return Array.from(headerRow.querySelectorAll("th")).map(th => {
+          return (th.innerText || "").replace(/\s*[▼▲]\s*$/, "").trim();
+        });
+      }
+
+      function triggerDownload(blob, filename) {
         const downloadLink = document.createElement("a");
         downloadLink.download = filename;
-        downloadLink.href = window.URL.createObjectURL(csvFile);
+        downloadLink.href = window.URL.createObjectURL(blob);
         downloadLink.style.display = "none";
         document.body.appendChild(downloadLink);
         downloadLink.click();
         document.body.removeChild(downloadLink);
       }
+
+      function downloadCSV(csv, filename) {
+        const csvFile = new Blob([csv], { type: "text/csv" });
+        triggerDownload(csvFile, filename);
+      }
+
       function exportAllTableRowsToCSV(filename) {
+        const headers = getHeaderTitles();
+        if (!headers.length) return;
         const csv = [];
-        const headerRow = document.querySelectorAll("#report-table thead tr")[0];
-        const headers = [];
-        headerRow.querySelectorAll("th").forEach(th => {
-          headers.push('"' + th.innerText.trim().replace(/"/g, '""') + '"');
-        });
-        csv.push(headers.join(","));
+        csv.push(headers.map(header => '"' + header.replace(/"/g, '""') + '"').join(","));
         allTableRows.forEach(row => {
           const cols = row.querySelectorAll("td");
-          const rowData = [];
-          cols.forEach(td => {
-            const text = getCellContentText(td);
-            rowData.push('"' + text.replace(/"/g, '""') + '"');
+          const rowData = headers.map((_, index) => {
+            const text = getCellContentText(cols[index]);
+            return '"' + text.replace(/"/g, '""') + '"';
           });
           csv.push(rowData.join(","));
         });
         downloadCSV(csv.join("\n"), filename);
       }
-      document.getElementById("exportCsvButton").addEventListener("click", function() {
-        exportAllTableRowsToCSV("report.csv");
-      });
+
+      function downloadJSON(data, filename) {
+        const jsonFile = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        triggerDownload(jsonFile, filename);
+      }
+
+      function exportAllTableRowsToJSON(filename) {
+        const headers = getHeaderTitles();
+        if (!headers.length) return;
+        const dataset = allTableRows.map(row => {
+          const cols = row.querySelectorAll("td");
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header] = getCellContentText(cols[index]);
+          });
+          return rowData;
+        });
+        downloadJSON(dataset, filename);
+      }
+
+      const exportMenuElement = document.getElementById("exportMenu");
+      const exportReportButton = document.getElementById("exportReportButton");
+      if (exportMenuElement && exportReportButton) {
+        const exportMenuContainer = exportReportButton.closest(".export-menu") || exportReportButton;
+        const exportMenuItems = exportMenuElement.querySelectorAll(".export-menu__item");
+        let exportMenuPlaceholder = null;
+
+        const ensureMenuInBody = () => {
+          if (exportMenuElement.parentElement !== document.body) {
+            if (!exportMenuPlaceholder) {
+              exportMenuPlaceholder = document.createComment("export-menu-placeholder");
+            }
+            const parent = exportMenuElement.parentElement;
+            parent.insertBefore(exportMenuPlaceholder, exportMenuElement);
+            document.body.appendChild(exportMenuElement);
+          }
+        };
+
+        const restoreMenuToOriginalPosition = () => {
+          if (exportMenuPlaceholder && exportMenuPlaceholder.parentNode) {
+            exportMenuPlaceholder.parentNode.insertBefore(exportMenuElement, exportMenuPlaceholder);
+            exportMenuPlaceholder.remove();
+            exportMenuPlaceholder = null;
+          }
+        };
+
+        const positionExportMenu = () => {
+          const triggerRect = exportReportButton.getBoundingClientRect();
+          const menuWidth = exportMenuElement.offsetWidth || exportMenuElement.scrollWidth || 0;
+          const viewportWidth = document.documentElement.clientWidth;
+          const horizontalPadding = 16;
+          let left = triggerRect.right - menuWidth;
+          const maxLeft = viewportWidth - menuWidth - horizontalPadding;
+          if (left < horizontalPadding) {
+            left = horizontalPadding;
+          }
+          if (left > maxLeft) {
+            left = Math.max(horizontalPadding, maxLeft);
+          }
+          exportMenuElement.style.top = `${triggerRect.bottom + 6}px`;
+          exportMenuElement.style.left = `${left}px`;
+        };
+
+        const openExportMenu = () => {
+          if (!exportMenuElement.hidden) return;
+          exportMenuElement.hidden = false;
+          ensureMenuInBody();
+          exportMenuElement.classList.add("export-menu__list--floating");
+          exportMenuElement.style.visibility = "hidden";
+          exportMenuElement.style.pointerEvents = "none";
+          requestAnimationFrame(() => {
+            positionExportMenu();
+            exportMenuElement.style.visibility = "";
+            exportMenuElement.style.pointerEvents = "";
+          });
+          exportReportButton.setAttribute("aria-expanded", "true");
+          window.addEventListener("resize", closeOnWindowChange);
+          window.addEventListener("scroll", closeOnWindowChange, true);
+        };
+
+        const closeExportMenu = () => {
+          if (exportMenuElement.hidden) return;
+          exportMenuElement.hidden = true;
+          exportMenuElement.classList.remove("export-menu__list--floating");
+          exportMenuElement.style.left = "";
+          exportMenuElement.style.top = "";
+          exportMenuElement.style.visibility = "";
+          exportMenuElement.style.pointerEvents = "";
+          restoreMenuToOriginalPosition();
+          exportReportButton.setAttribute("aria-expanded", "false");
+          window.removeEventListener("resize", closeOnWindowChange);
+          window.removeEventListener("scroll", closeOnWindowChange, true);
+        };
+        const closeOnWindowChange = () => closeExportMenu();
+
+        const toggleExportMenu = () => {
+          if (exportMenuElement.hidden) {
+            openExportMenu();
+          } else {
+            closeExportMenu();
+          }
+        };
+
+        exportReportButton.addEventListener("click", event => {
+          event.stopPropagation();
+          toggleExportMenu();
+        });
+        exportReportButton.addEventListener("keydown", event => {
+          if (event.key === "Escape") {
+            closeExportMenu();
+            exportReportButton.blur();
+          }
+        });
+        exportMenuElement.addEventListener("click", event => {
+          event.stopPropagation();
+        });
+        exportMenuElement.addEventListener("keydown", event => {
+          if (event.key === "Escape") {
+            closeExportMenu();
+            exportReportButton.focus();
+          }
+        });
+        document.addEventListener("click", event => {
+          if (!exportMenuContainer.contains(event.target) && !exportMenuElement.contains(event.target)) {
+            closeExportMenu();
+          }
+        });
+        exportMenuItems.forEach(item => {
+          item.addEventListener("click", () => {
+            const type = item.dataset.exportType;
+            closeExportMenu();
+            if (type === "csv") {
+              exportAllTableRowsToCSV("report.csv");
+            } else if (type === "json") {
+              exportAllTableRowsToJSON("report.json");
+            }
+          });
+        });
+      }
 
       function getCellContentText(cell) {
         if (!cell) return "";
@@ -2928,6 +3487,10 @@ function buildInsightsCharts({
         const seenTlsKeys = new Set();
         const tlsInventoryRecords = Array.isArray(window.tlsInventoryData) ? window.tlsInventoryData : [];
         const lower = value => (typeof value === "string") ? value.toLowerCase() : "";
+        const safeString = value => {
+          if (value === undefined || value === null) return "";
+          return String(value).trim();
+        };
         const tlsByEndpoint = new Map();
         const tlsByDomainPort = new Map();
         const tlsByDomain = new Map();
@@ -3109,6 +3672,53 @@ function buildInsightsCharts({
             return `<span class="port-tag port-tag--${slug}">${escapeHtml(label)}${suffix}</span>`;
           }).join("<br>");
         };
+        const describeTlsDetails = (record, fallback) => {
+          const safe = value => {
+            if (value === undefined || value === null) return "";
+            return String(value).trim();
+          };
+          const versionRaw = safe(record?.TLSVersion) || safe(record?.HighestVersion) || safe(record?.VersionSummary) || safe(fallback?.["SSL/TLS Version"]);
+          const versionNormalized = normalizeTlsVersion(versionRaw) || versionRaw;
+          const cipherRaw = safe(record?.Cipher) || safe(record?.NegotiatedCipher) || safe(fallback?.["SSL/TLS Cipher"]);
+          const certExpiryRaw = safe(record?.NotAfter) || safe(record?.ValidTo) || safe(fallback?.["Cert Expiry Date"]);
+          const issuerRaw = safe(record?.CertificateIssuer) || safe(record?.Issuer) || safe(record?.IssuerDN) || safe(record?.CertificateIssuerDN) || safe(fallback?.["SSL/TLS Issuer"]);
+          const issuerCnRaw = safe(record?.IssuerCN) || safe(record?.CertificateIssuerCommonName) || safe(record?.IssuerCommonName);
+          const issuerOrgRaw = safe(record?.IssuerOrg) || safe(record?.CertificateIssuerOrganization);
+          const subjectDnRaw = safe(record?.SubjectDN) || safe(record?.CertificateSubjectDN);
+          const subjectCnRaw = safe(record?.SubjectCN) || safe(record?.CertificateCommonName);
+          const subjectAnList = Array.isArray(record?.SubjectAN)
+            ? record.SubjectAN
+            : (Array.isArray(record?.CertificateSANs) ? record.CertificateSANs : []);
+          const serialRaw = safe(record?.Serial) || safe(record?.SerialNumber) || safe(record?.CertificateSerialNumber);
+          const endpointIpRaw = safe(record?.IP) || safe(record?.Ip) || safe(record?.IpAddress);
+          const daysNumeric = typeof record?.DaysUntilExpiry === "number" ? record.DaysUntilExpiry : null;
+          let daysLabel = "Unknown";
+          if (daysNumeric !== null) {
+            if (daysNumeric < 0) {
+              const abs = Math.abs(daysNumeric);
+              daysLabel = abs === 1 ? "Expired 1 day ago" : `Expired ${abs} days ago`;
+            } else if (daysNumeric === 0) {
+              daysLabel = "Expires today";
+            } else {
+              daysLabel = daysNumeric === 1 ? "In 1 day" : `In ${daysNumeric} days`;
+            }
+          }
+          return {
+            version: versionNormalized ? escapeHtml(versionNormalized) : "N/A",
+            cipher: cipherRaw ? escapeHtml(cipherRaw) : "N/A",
+            certExpiry: certExpiryRaw ? escapeHtml(certExpiryRaw) : "N/A",
+            daysLabel: escapeHtml(daysLabel),
+            issuer: issuerRaw ? escapeHtml(issuerRaw) : "N/A",
+            issuerCn: issuerCnRaw ? escapeHtml(issuerCnRaw) : "N/A",
+            issuerOrg: issuerOrgRaw ? escapeHtml(issuerOrgRaw) : "N/A",
+            subjectDn: subjectDnRaw ? escapeHtml(subjectDnRaw) : "N/A",
+            subjectCn: subjectCnRaw ? escapeHtml(subjectCnRaw) : "N/A",
+            subjectAn: subjectAnList.length ? subjectAnList.map(item => escapeHtml(String(item))).join("<br>") : "N/A",
+            serial: serialRaw ? escapeHtml(serialRaw) : "N/A",
+            endpointIp: endpointIpRaw ? escapeHtml(endpointIpRaw) : "N/A",
+            daysNumeric
+          };
+        };
         const getHostPortContext = domainName => {
           const key = (domainName || "").toLowerCase();
           return portscanByHost[key] || { entries: [], highlightCounts: {}, categoryCounts: {} };
@@ -3175,324 +3785,6 @@ function buildInsightsCharts({
             }
             ipAggregation[ipKey].hosts.add(domain);
           });
-          if (http && http.length) {
-            http.forEach(h => {
-              // Compute port and screenshot key for this record
-              const port = h.port ? h.port : (h.url && h.url.startsWith("https") ? 443 : 80);
-              const screenshotKey = domain + "_" + port;
-              let screenshotHTML = "No screenshot";
-              // Use the global screenshotMap defined earlier
-
-              if (screenshotMap[screenshotKey]) {
-                screenshotHTML = `
-                  <span style="display:none;">has screenshot</span>
-                  <img
-                    src="${screenshotMap[screenshotKey]}"
-                    class="thumbnail"
-                    onclick="openModal('${screenshotMap[screenshotKey]}')"
-                    alt="screenshot"
-                  />
-                `;
-              } else {
-                screenshotHTML = `
-                  <span style="display:none;">no screenshot</span>
-                  No screenshot
-                `;
-              }
-
-              const urlSec = secMapUrl[h.url] || domainSec;
-              const tlsRecord = getTlsRecord(h.url, domain);
-              const tlsDeprecated = Array.isArray(tlsRecord && tlsRecord.DeprecatedVersions) ? tlsRecord.DeprecatedVersions : [];
-              const highestTlsVersion = tlsRecord && typeof tlsRecord.HighestVersion === "string" && tlsRecord.HighestVersion.trim()
-                ? tlsRecord.HighestVersion.trim()
-                : (tlsRecord && typeof tlsRecord.VersionSummary === "string" && tlsRecord.VersionSummary.trim()
-                  ? tlsRecord.VersionSummary.trim()
-                  : "");
-              const normalizedTlsVersion = highestTlsVersion ? normalizeTlsVersion(highestTlsVersion) : "";
-              const fallbackSslVersion = typeof urlSec["SSL/TLS Version"] === "string" ? urlSec["SSL/TLS Version"] : "";
-              const normalizedFallbackVersion = fallbackSslVersion ? normalizeTlsVersion(fallbackSslVersion) : "";
-              const sslVersion = normalizedTlsVersion || normalizedFallbackVersion || "N/A";
-              const certExpiry = tlsRecord && tlsRecord.ValidTo
-                ? tlsRecord.ValidTo
-                : (urlSec["Cert Expiry Date"] || "N/A");
-              const sslIssuer = tlsRecord && tlsRecord.CertificateIssuer
-                ? tlsRecord.CertificateIssuer
-                : (urlSec["SSL/TLS Issuer"] || "N/A");
-              const stsFlag = (urlSec["Strict-Transport-Security"] || "").trim();
-              const xfoFlag = (urlSec["X-Frame-Options"] || "").trim();
-              const cspFlag = (urlSec["Content-Security-Policy"] || "").trim();
-              const xssFlag = (urlSec["X-XSS-Protection"] || "").trim();
-              const rpFlag = (urlSec["Referrer-Policy"] || "").trim();
-              const ppFlag = (urlSec["Permissions-Policy"] || "").trim();
-              const acaoFlag = (urlSec["Access-Control-Allow-Origin"] || "").trim();
-              const techArr = Array.isArray(h.tech) ? h.tech : [];
-              const sanitizedTech = techArr
-                .map(item => item.replace(/\r?\n|\r/g, " ").trim())
-                .filter(item => item);
-              const techCount = sanitizedTech.length;
-              const statusLabel = (h.status_code !== undefined && h.status_code !== null) ? String(h.status_code) : "N/A";
-              const statusCell = escapeHtml(statusLabel);
-              const webServerCell = escapeHtml(h.webserver || "N/A");
-              const loginDetected = loginMap[h.url] === "Yes" ? "Yes" : "No";
-              const loginCell = escapeHtml(loginDetected);
-              const apiRaw = (apiMap[domain] || "").toString().trim().toLowerCase();
-              const apiDetected = apiRaw === "yes" ? "Yes" : "No";
-              const apiCell = escapeHtml(apiDetected);
-              const colleagueCell = escapeHtml(colleagueStatus ? "Yes" : "No");
-              const urlValue = h.url || "N/A";
-              const safeUrlText = escapeHtml(urlValue);
-              const safeUrlAttr = urlValue !== "N/A" ? escapeHtml(urlValue) : "";
-              const endpointUrlCell = urlValue !== "N/A"
-                ? `<a href="${safeUrlAttr}" target="_blank" rel="noopener">${safeUrlText}</a>`
-                : "N/A";
-              const redirectTarget = Number(statusLabel) >= 300 && Number(statusLabel) < 400 && h.location ? h.location : "";
-              const redirectAttr = redirectTarget ? escapeHtml(redirectTarget) : "";
-              const redirectCell = redirectTarget
-                ? `<a href="${redirectAttr}" target="_blank" rel="noopener">${escapeHtml(redirectTarget)}</a>`
-                : "N/A";
-              const homepageTitleCell = isMeaningfulString(h.title) ? escapeHtml(h.title) : "N/A";
-              const techStackHtml = sanitizedTech.length
-                ? sanitizedTech.map(item => escapeHtml(item)).join("<br>")
-                : "N/A";
-              const contentLengthValue = (h.content_length !== undefined && h.content_length !== null)
-                ? String(h.content_length)
-                : "N/A";
-              const contentLengthCell = escapeHtml(contentLengthValue);
-              const securityHeaderPairs = [
-                ["Strict-Transport-Security", stsFlag],
-                ["X-Frame-Options", xfoFlag],
-                ["Content-Security-Policy", cspFlag],
-                ["X-XSS-Protection", xssFlag],
-                ["Referrer-Policy", rpFlag],
-                ["Permissions-Policy", ppFlag],
-                ["Access-Control-Allow-Origin", acaoFlag]
-              ].filter(([, value]) => isMeaningfulString(value));
-              const securityHeadersCell = securityHeaderPairs.length
-                ? securityHeaderPairs.map(([label, value]) => `<span class="security-kv"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</span>`).join("<br>")
-                : "No key headers observed";
-              const cdnName = typeof h.cdn_name === "string" ? h.cdn_name.trim() : "";
-              const cdnType = typeof h.cdn_type === "string" ? h.cdn_type.trim() : "";
-              const cdnGeneric = typeof h.cdn === "string" ? h.cdn.trim() : "";
-              const wafCdnParts = [];
-              if (isMeaningfulString(cdnType)) wafCdnParts.push(cdnType);
-              if (isMeaningfulString(cdnName)) wafCdnParts.push(cdnName);
-              if (!wafCdnParts.length && isMeaningfulString(cdnGeneric)) wafCdnParts.push(cdnGeneric);
-              const wafCdnCell = wafCdnParts.length ? escapeHtml(wafCdnParts.join(" - ")) : "N/A";
-              const openPortsCount = openPorts.length;
-              const dbPortsCount = hostPortContext.highlightCounts["Database"] || 0;
-              const managementPortsCount = hostPortContext.highlightCounts["Management"] || 0;
-              const openPortsDetails = openPorts.length
-                ? openPorts.map(p => {
-                    const proto = escapeHtml((p.protocol || "tcp").toUpperCase());
-                    const serviceName = escapeHtml(p.service || "unknown/custom");
-                    const categoriesLabel = (Array.isArray(p.categories) && p.categories.length)
-                      ? ` <span class="port-category-label">${escapeHtml(p.categories.join(", "))}</span>`
-                      : "";
-                    return `${escapeHtml(String(p.port))}/${proto} — ${serviceName}${categoriesLabel}`;
-                  }).join("<br>")
-                : "No open ports";
-              const chipsWrapper = renderHighlightChips(hostPortContext.highlightCounts);
-
-              const linksForUrl = (window.linksMap && window.linksMap[h.url]) ? window.linksMap[h.url] : [];
-              const linkCount = linksForUrl.length;
-              const linksCellHTML = linkCount > 0
-                ? `<a href="#" onclick="openLinksModal('${h.url}'); return false;">${escapeHtml(String(linkCount))}</a>`
-                : "0";
-
-              const endpointRow = document.createElement("tr");
-              endpointRow.dataset.domain = (domain || "").toLowerCase();
-              endpointRow.dataset.url = (h.url || "").toLowerCase();
-              endpointRow.innerHTML = `
-                <td>${domainCell}</td>
-                <td>${endpointUrlCell}</td>
-                <td>${statusCell}</td>
-                <td>${redirectCell}</td>
-                <td>${homepageTitleCell}</td>
-                <td>${screenshotHTML}</td>
-                <td>${webServerCell}</td>
-                <td>${techStackHtml}</td>
-                <td>${contentLengthCell}</td>
-                <td>${loginCell}</td>
-                <td>${apiCell}</td>
-                <td>${colleagueCell}</td>
-                <td>${securityHeadersCell}</td>
-                <td>${wafCdnCell}</td>
-                <td>${linksCellHTML}</td>
-              `;
-              prepareRowCells(endpointRow);
-              endpointTableRows.push(endpointRow);
-
-              const schemeValue = (h.scheme || "").toLowerCase();
-              let urlHost = "";
-              try {
-                if (h.url) {
-                  urlHost = new URL(h.url).hostname;
-                }
-              } catch {
-                urlHost = "";
-              }
-              const cloudProfile = cloudProfileIndex(urlHost || domain || h.host || "");
-              const headerValues = {
-                "Strict-Transport-Security": stsFlag,
-                "X-Frame-Options": xfoFlag,
-                "Content-Security-Policy": cspFlag,
-                "X-XSS-Protection": xssFlag,
-                "Referrer-Policy": rpFlag,
-                "Permissions-Policy": ppFlag
-              };
-              const missingSecurityHeaders = Object.entries(headerValues)
-                .filter(([, value]) => !isMeaningfulString(value) || value.trim().toLowerCase() === "false")
-                .map(([label]) => label);
-              const hasSpf = typeof spf === "string" && /spf1/i.test(spf);
-              const hasDkim = typeof dkim === "string" && /dkim1/i.test(dkim);
-              const hasDmarc = typeof dmarc === "string" && /dmarc1/i.test(dmarc);
-              const hasDnssec = typeof dnssec === "string" && /dnssec enabled/i.test(dnssec);
-              const { score, reasons, breakdown } = computePriority({
-                purpose: domainPurpose,
-                url: h.url,
-                loginFound: loginMap[h.url] || "N/A",
-                statusCode: h.status_code,
-                sslVersion,
-                tlsDeprecated,
-                certExpiry,
-                scheme: schemeValue || (urlValue.startsWith("https://") ? "https" : (urlValue.startsWith("http://") ? "http" : "")),
-                securityHeadersMissing: missingSecurityHeaders,
-                hasSpf,
-                hasDkim,
-                hasDmarc,
-                hasDnssec,
-                openPortsCount: openPortsCount,
-                dbPortsCount: dbPortsCount,
-                managementPortsCount: managementPortsCount,
-                techCount,
-                linkCount,
-                isApiSurface: apiDetected === "Yes",
-                isEmployeeAsset: colleagueStatus,
-                cloudProfile
-              });
-              const roundedScore = Math.round(score);
-              if (score < minRiskScore) minRiskScore = score;
-              if (score > maxRiskScore) maxRiskScore = score;
-              const previousDomainScore = riskScores[domain] || 0;
-              riskScores[domain] = Math.max(previousDomainScore, score);
-              riskEntries.push({
-                domain,
-                url: h.url,
-                score: roundedScore,
-                reasons: Array.isArray(reasons) ? reasons.slice() : [],
-                breakdown,
-                loginFound: loginMap[h.url] === "Yes",
-                scheme: h.scheme || ((h.url || "").startsWith("https") ? "https" : "http"),
-                openPortsCount,
-                dbPortsCount,
-                managementPortsCount,
-                statusCode: h.status_code
-              });
-              rowDataStore.push({ domain, prioScore: score });
-              const row = document.createElement("tr");
-              row.innerHTML = `
-                <td><!-- risk score cell --></td>
-                <td>${domain}</td>
-                <td>${domainPurpose}</td>
-                <td>${formatCell(dnsResolvers)}</td>
-                <td>${formatCell(dnsA)}</td>
-                <td>${nsRecords}</td>
-                <td>${mxRecords}</td>
-                <td>${ptrRecords}</td>
-                <td>${dnsStatus}</td>
-                <td>${h.cdn_name || "N/A"}</td>
-                <td>${h.cdn_type || "N/A"}</td>
-                <td>${h.port || "N/A"}</td>
-                <td>${h.url || "N/A"}</td>
-                <td>${screenshotHTML}</td>
-                <td>${h.location || "N/A"}</td>
-                <td>${h.title || "N/A"}</td>
-                <td>${h.webserver || "N/A"}</td>
-                <td>${loginMap[h.url] || "N/A"}</td>
-                <td>${apiMap[domain] || "No"}</td>
-                <td>${sanitizedTech.length ? sanitizedTech.join("<br>") : "N/A"}</td>
-                <td>${(h.status_code !== undefined) ? h.status_code : "N/A"}</td>
-                <td>${(h.content_length !== undefined) ? h.content_length : "N/A"}</td>
-                <td>${(h.cdn !== undefined) ? h.cdn : "N/A"}</td>
-                <td>${spf}</td>
-                <td>${dkim}</td>
-                <td>${dmarc}</td>
-                <td>${dnssec}</td>
-                <td>${sslVersion}</td>
-                <td>${certExpiry}</td>
-                <td>${sslIssuer}</td>
-                <td>${stsFlag ? "True" : "False"}</td>
-                <td>${xfoFlag ? "True" : "False"}</td>
-                <td>${cspFlag ? "True" : "False"}</td>
-                <td>${xssFlag ? "True" : "False"}</td>
-                <td>${rpFlag ? "True" : "False"}</td>
-                <td>${ppFlag ? "True" : "False"}</td>
-                <td>${openPortsDetails}${chipsWrapper}</td>
-                <td>${linksCellHTML}</td>
-              `;
-              const scoreCell = row.getElementsByTagName("td")[0];
-              const reasonsText = Array.isArray(reasons) ? reasons.map(reason => String(reason || "")).join("\n") : "";
-              scoreCell.innerHTML = `<span class="score-badge" title="${escapeHtml(reasonsText)}">${roundedScore}</span>`;
-              scoreCell.title = reasonsText;
-              const emailAuthMissing = [spf, dkim, dmarc].some(value => typeof value === "string" && value.toLowerCase().includes("no "));
-              row.dataset.score = String(roundedScore);
-              row.dataset.httpLogin = (loginMap[h.url] === "Yes" && (h.url || "").startsWith("http://")) ? "1" : "0";
-              row.dataset.emailAuthMissing = emailAuthMissing ? "1" : "0";
-              row.dataset.nxdomain = dnsStatus === "NXDOMAIN" ? "1" : "0";
-              prepareRowCells(row);
-              allTableRows.push(row);
-            });
-          }
-          else {
-            // If no HTTP data for domain, create a default row.
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td>N/A</td>
-              <td>${domain}</td>
-              <td>${domainPurpose}</td>
-              <td>${formatCell(dnsResolvers)}</td>
-              <td>${formatCell(dnsA)}</td>
-              <td>${nsRecords}</td>
-              <td>${mxRecords}</td>
-              <td>${ptrRecords}</td>
-              <td>${dnsStatus}</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>No screenshot</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>${spf}</td>
-              <td>${dkim}</td>
-              <td>${dmarc}</td>
-              <td>${dnssec}</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-              <td>N/A</td>
-            `;
-            prepareRowCells(row);
-            const emailAuthMissing = [spf, dkim, dmarc].some(value => typeof value === "string" && value.toLowerCase().includes("no "));
-            row.dataset.score = "0";
-            row.dataset.httpLogin = "0";
-            row.dataset.emailAuthMissing = emailAuthMissing ? "1" : "0";
-            row.dataset.nxdomain = dnsStatus === "NXDOMAIN" ? "1" : "0";
-            allTableRows.push(row);
-          }
-
           const dnsAList = dedupeRecords(dnsA);
           const dnsAAAAList = dedupeRecords(dnsAAAA);
           const dnsCnameList = dedupeRecords(dnsCname);
@@ -3503,12 +3795,13 @@ function buildInsightsCharts({
           const mxForDisplay = mxRecordsList.length ? mxRecordsList : (mxRecordsFallback ? [mxRecordsFallback] : []);
           const aRecordHtml = toHtmlList(finalARecords);
           const aaaaRecordHtml = toHtmlList(finalAAAARecords);
+          const cnameRecordHtml = toHtmlList(finalCnameRecords);
           const nsRecordHtml = toHtmlList(nsForDisplay);
           const mxRecordHtml = toHtmlList(mxForDisplay);
-          const cnameRecordHtml = toHtmlList(finalCnameRecords);
           const txtSpfSummary = isMeaningfulString(spf) ? spf.trim() : "Not Found";
           const txtDmarcSummary = isMeaningfulString(dmarc) ? dmarc.trim() : "Not Found";
           const txtSummaryHtml = `SPF: ${escapeHtml(txtSpfSummary)}<br>DMARC: ${escapeHtml(txtDmarcSummary)}`;
+          const txtRecordsHtml = txtRecordsList.length ? toHtmlList(txtRecordsList) : txtSummaryHtml;
           const soaRecordHtml = toHtmlList(soaRecordsList);
           const srvRecordHtml = toHtmlList(srvRecordsList);
           const caaRecordHtml = toHtmlList(caaRecordsList);
@@ -3547,6 +3840,490 @@ function buildInsightsCharts({
             keywordHtml = "Noteworthy keyword pattern detected";
           } else {
             keywordHtml = "None detected";
+          }
+          const ptrRecordHtml = isMeaningfulString(ptrRecords) ? escapeHtml(ptrRecords) : "N/A";
+          const dnsResolversHtml = dnsResolvers.length ? dnsResolvers.map(item => escapeHtml(String(item))).join("<br>") : "N/A";
+          const dnsStatusHtml = isMeaningfulString(dnsStatus) ? escapeHtml(dnsStatus) : "N/A";
+          const combinedIpList = Array.from(new Set([...finalARecords, ...finalAAAARecords])).filter(Boolean);
+          const describeHostsForIp = ip => {
+            const hostSet = new Set();
+            if (ipAggregation[ip] && ipAggregation[ip].hosts) {
+              ipAggregation[ip].hosts.forEach(value => {
+                if (value) hostSet.add(value);
+              });
+            }
+            const ipSummary = portscanByIp[ip];
+            if (ipSummary && Array.isArray(ipSummary.sources)) {
+              ipSummary.sources.forEach(value => {
+                if (value) hostSet.add(value);
+              });
+            }
+            const hosts = Array.from(hostSet).sort((a, b) => a.localeCompare(b));
+            if (!hosts.length) return "Hosts: None recorded";
+            return `Hosts (${hosts.length}):<br>${hosts.map(item => escapeHtml(item)).join("<br>")}`;
+          };
+          const hostnamesOnIpHtml = combinedIpList.length
+            ? combinedIpList.map(ip => `<div><strong>${escapeHtml(ip)}</strong><br>${describeHostsForIp(ip)}</div>`).join("<br>")
+            : "Not observed";
+          const asnProviderHtml = combinedIpList.length
+            ? combinedIpList.map(ip => {
+                const intel = ipIntelMap[ip] || {};
+                const parts = [safeString(intel.asn), safeString(intel.provider)].filter(Boolean);
+                const label = parts.length ? parts.join(" – ") : "Unknown";
+                return `<div><strong>${escapeHtml(ip)}</strong>: ${escapeHtml(label)}</div>`;
+              }).join("<br>")
+            : "Not observed";
+          const networkBlockHtml = combinedIpList.length
+            ? combinedIpList.map(ip => {
+                const intel = ipIntelMap[ip] || {};
+                const networkLabel = safeString(intel.network) || "Unknown";
+                return `<div><strong>${escapeHtml(ip)}</strong>: ${escapeHtml(networkLabel)}</div>`;
+              }).join("<br>")
+            : "Not observed";
+          const openPortsCount = openPorts.length;
+          const dbPortsCount = Number(hostPortContext.highlightCounts["Database"] || 0);
+          const managementPortsCount = Number(hostPortContext.highlightCounts["Management"] || 0);
+          const openPortsDetails = openPorts.length
+            ? openPorts.map(p => {
+                const proto = escapeHtml((p.protocol || "tcp").toUpperCase());
+                const serviceName = escapeHtml(p.service || "unknown/custom");
+                const categoriesLabel = (Array.isArray(p.categories) && p.categories.length)
+                  ? ` <span class="port-category-label">${escapeHtml(p.categories.join(", "))}</span>`
+                  : "";
+                return `${escapeHtml(String(p.port))}/${proto} — ${serviceName}${categoriesLabel}`;
+              }).join("<br>")
+            : "No open ports";
+          const chipsWrapper = renderHighlightChips(hostPortContext.highlightCounts);
+          const openPortsCell = chipsWrapper ? `${openPortsDetails}${chipsWrapper}` : openPortsDetails;
+          const notablePortsCell = renderPortTagColumn(hostPortContext.highlightCounts);
+          const domainColumns = [
+            domainCell,
+            escapeHtml(domainPurpose),
+            resolutionStatusHtml,
+            dnsResolversHtml,
+            aRecordHtml,
+            aaaaRecordHtml,
+            cnameRecordHtml,
+            nsRecordHtml,
+            mxRecordHtml,
+            ptrRecordHtml,
+            txtRecordsHtml,
+            soaRecordHtml,
+            srvRecordHtml,
+            caaRecordHtml,
+            zoneTransferHtml,
+            whoisHtml,
+            escapeHtml(keywordHtml),
+            spfHtml,
+            dkimHtml,
+            dmarcHtml,
+            dnssecHtml,
+            dnsStatusHtml
+          ];
+          const displayOrNA = value => {
+            const str = safeString(value);
+            return str ? escapeHtml(str) : "N/A";
+          };
+          const headerValueOrNotSet = value => isMeaningfulString(value) ? escapeHtml(value) : "Not Set";
+          const cloudValueOrDefault = (value, fallback) => {
+            const normalized = normalizeCloudString(value);
+            return normalized ? escapeHtml(normalized) : fallback;
+          };
+          const sanitizeCloudValue = value => {
+            const normalized = normalizeCloudString(value);
+            return normalized ? escapeHtml(normalized) : "";
+          };
+
+          if (http && http.length) {
+            http.forEach(h => {
+              const port = h.port ? h.port : (h.url && h.url.startsWith("https") ? 443 : 80);
+              const screenshotKey = domain + "_" + port;
+              let screenshotHTML;
+              if (screenshotMap[screenshotKey]) {
+                screenshotHTML = `
+                  <span style="display:none;">has screenshot</span>
+                  <img
+                    src="${screenshotMap[screenshotKey]}"
+                    class="thumbnail"
+                    onclick="openModal('${screenshotMap[screenshotKey]}')"
+                    alt="screenshot"
+                  />
+                `;
+              } else {
+                screenshotHTML = `
+                  <span style="display:none;">no screenshot</span>
+                  No screenshot
+                `;
+              }
+
+              const urlSec = secMapUrl[h.url] || domainSec;
+              const tlsRecord = getTlsRecord(h.url, domain);
+              const tlsDetails = describeTlsDetails(tlsRecord, urlSec);
+              const tlsDeprecated = Array.isArray(tlsRecord && tlsRecord.DeprecatedVersions) ? tlsRecord.DeprecatedVersions : [];
+              const highestTlsVersion = tlsRecord && typeof tlsRecord.HighestVersion === "string" && tlsRecord.HighestVersion.trim()
+                ? tlsRecord.HighestVersion.trim()
+                : (tlsRecord && typeof tlsRecord.VersionSummary === "string" && tlsRecord.VersionSummary.trim()
+                  ? tlsRecord.VersionSummary.trim()
+                  : "");
+              const normalizedTlsVersion = highestTlsVersion ? normalizeTlsVersion(highestTlsVersion) : "";
+              const fallbackSslVersion = typeof urlSec["SSL/TLS Version"] === "string" ? urlSec["SSL/TLS Version"] : "";
+              const normalizedFallbackVersion = fallbackSslVersion ? normalizeTlsVersion(fallbackSslVersion) : "";
+              const sslVersion = normalizedTlsVersion || normalizedFallbackVersion || "N/A";
+              const certExpiry = tlsRecord && tlsRecord.ValidTo
+                ? tlsRecord.ValidTo
+                : (urlSec["Cert Expiry Date"] || "N/A");
+              const stsFlag = (urlSec["Strict-Transport-Security"] || "").trim();
+              const xfoFlag = (urlSec["X-Frame-Options"] || "").trim();
+              const cspFlag = (urlSec["Content-Security-Policy"] || "").trim();
+              const xssFlag = (urlSec["X-XSS-Protection"] || "").trim();
+              const rpFlag = (urlSec["Referrer-Policy"] || "").trim();
+              const ppFlag = (urlSec["Permissions-Policy"] || "").trim();
+              const acaoFlag = (urlSec["Access-Control-Allow-Origin"] || "").trim();
+              const techArr = Array.isArray(h.tech) ? h.tech : [];
+              const sanitizedTech = techArr
+                .map(item => item.replace(/\r?\n|\r/g, " ").trim())
+                .filter(item => item);
+              const techStackHtml = sanitizedTech.length
+                ? sanitizedTech.map(item => escapeHtml(item)).join("<br>")
+                : "N/A";
+              const statusLabel = (h.status_code !== undefined && h.status_code !== null) ? String(h.status_code) : "N/A";
+              const statusCell = escapeHtml(statusLabel);
+              const webServerCell = displayOrNA(h.webserver);
+              const loginDetected = loginMap[h.url] === "Yes" ? "Yes" : "No";
+              const loginCell = escapeHtml(loginDetected);
+              const apiRaw = (apiMap[domain] || "").toString().trim().toLowerCase();
+              const apiDetected = apiRaw === "yes" ? "Yes" : "No";
+              const apiCell = escapeHtml(apiDetected);
+              const colleagueCellValue = escapeHtml(colleagueStatus ? "Yes" : "No");
+              const urlValue = h.url || "N/A";
+              const safeUrlText = escapeHtml(urlValue);
+              const safeUrlAttr = urlValue !== "N/A" ? escapeHtml(urlValue) : "";
+              const endpointUrlCell = urlValue !== "N/A"
+                ? `<a href="${safeUrlAttr}" target="_blank" rel="noopener">${safeUrlText}</a>`
+                : "N/A";
+              const redirectTarget = Number(statusLabel) >= 300 && Number(statusLabel) < 400 && h.location ? h.location : "";
+              const redirectAttr = redirectTarget ? escapeHtml(redirectTarget) : "";
+              const redirectCell = redirectTarget
+                ? `<a href="${redirectAttr}" target="_blank" rel="noopener">${escapeHtml(redirectTarget)}</a>`
+                : "N/A";
+              const homepageTitleCell = isMeaningfulString(h.title) ? escapeHtml(h.title) : "N/A";
+              const contentLengthValue = (h.content_length !== undefined && h.content_length !== null)
+                ? String(h.content_length)
+                : "N/A";
+              const contentLengthCell = escapeHtml(contentLengthValue);
+              const securityHeaderPairs = [
+                ["Strict-Transport-Security", stsFlag],
+                ["X-Frame-Options", xfoFlag],
+                ["Content-Security-Policy", cspFlag],
+                ["X-XSS-Protection", xssFlag],
+                ["Referrer-Policy", rpFlag],
+                ["Permissions-Policy", ppFlag],
+                ["Access-Control-Allow-Origin", acaoFlag]
+              ].filter(([, value]) => isMeaningfulString(value));
+              const securityHeadersCell = securityHeaderPairs.length
+                ? securityHeaderPairs.map(([label, value]) => `<span class="security-kv"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</span>`).join("<br>")
+                : "No key headers observed";
+              const cdnNameCell = displayOrNA(h.cdn_name);
+              const cdnTypeCell = displayOrNA(h.cdn_type);
+              const cdnGeneric = safeString(h.cdn);
+              let cdnFlagCell = "N/A";
+              if (typeof h.cdn === "boolean") {
+                cdnFlagCell = h.cdn ? "Yes" : "No";
+              } else if (cdnGeneric) {
+                cdnFlagCell = escapeHtml(cdnGeneric);
+              } else {
+                const fallbackCdn = safeString(urlSec["CDN"]);
+                if (fallbackCdn) cdnFlagCell = escapeHtml(fallbackCdn);
+              }
+              const wafCdnParts = [];
+              if (isMeaningfulString(h.cdn_type)) wafCdnParts.push(h.cdn_type.trim());
+              if (isMeaningfulString(h.cdn_name)) wafCdnParts.push(h.cdn_name.trim());
+              if (!wafCdnParts.length && isMeaningfulString(cdnGeneric)) wafCdnParts.push(cdnGeneric);
+              const wafCdnCell = wafCdnParts.length ? escapeHtml(wafCdnParts.join(" - ")) : "N/A";
+
+              const linksForUrl = (window.linksMap && window.linksMap[h.url]) ? window.linksMap[h.url] : [];
+              const linkCount = linksForUrl.length;
+              const linksCellHTML = linkCount > 0
+                ? `<a href="#" onclick="openLinksModal('${h.url}'); return false;">${escapeHtml(String(linkCount))}</a>`
+                : "0";
+
+              const schemeValue = (h.scheme || "").toLowerCase();
+              const headerValues = {
+                "Strict-Transport-Security": stsFlag,
+                "X-Frame-Options": xfoFlag,
+                "Content-Security-Policy": cspFlag,
+                "X-XSS-Protection": xssFlag,
+                "Referrer-Policy": rpFlag,
+                "Permissions-Policy": ppFlag
+              };
+              const missingSecurityHeaders = Object.entries(headerValues)
+                .filter(([, value]) => !isMeaningfulString(value) || value.trim().toLowerCase() === "false")
+                .map(([label]) => label);
+              const hasSpf = typeof spf === "string" && /spf1/i.test(spf);
+              const hasDkim = typeof dkim === "string" && /dkim1/i.test(dkim);
+              const hasDmarc = typeof dmarc === "string" && /dmarc1/i.test(dmarc);
+              const hasDnssec = typeof dnssec === "string" && /dnssec enabled/i.test(dnssec);
+
+              let urlHost = "";
+              try {
+                if (h.url) {
+                  urlHost = new URL(h.url).hostname;
+                }
+              } catch {
+                urlHost = "";
+              }
+              const cloudProfile = cloudProfileIndex(urlHost || domain || h.host || "");
+              const { score, reasons, breakdown } = computePriority({
+                purpose: domainPurpose,
+                url: h.url,
+                loginFound: loginMap[h.url] || "N/A",
+                statusCode: h.status_code,
+                sslVersion,
+                tlsDeprecated,
+                certExpiry,
+                scheme: schemeValue || (urlValue.startsWith("https://") ? "https" : (urlValue.startsWith("http://") ? "http" : "")),
+                securityHeadersMissing: missingSecurityHeaders,
+                hasSpf,
+                hasDkim,
+                hasDmarc,
+                hasDnssec,
+                openPortsCount,
+                dbPortsCount,
+                managementPortsCount,
+                techCount: sanitizedTech.length,
+                linkCount,
+                isApiSurface: apiDetected === "Yes",
+                isEmployeeAsset: colleagueStatus,
+                cloudProfile
+              });
+              const roundedScore = Math.round(score);
+              if (score < minRiskScore) minRiskScore = score;
+              if (score > maxRiskScore) maxRiskScore = score;
+              const previousDomainScore = riskScores[domain] || 0;
+              riskScores[domain] = Math.max(previousDomainScore, score);
+              riskEntries.push({
+                domain,
+                url: h.url,
+                score: roundedScore,
+                reasons: Array.isArray(reasons) ? reasons.slice() : [],
+                breakdown,
+                loginFound: loginMap[h.url] === "Yes",
+                scheme: h.scheme || ((h.url || "").startsWith("https") ? "https" : "http"),
+                openPortsCount,
+                dbPortsCount,
+                managementPortsCount,
+                statusCode: h.status_code
+              });
+              rowDataStore.push({ domain, prioScore: score });
+
+              const httpColumns = [
+                escapeHtml(port ? String(port) : "N/A"),
+                endpointUrlCell,
+                screenshotHTML,
+                redirectCell,
+                homepageTitleCell,
+                webServerCell,
+                techStackHtml,
+                loginCell,
+                apiCell,
+                colleagueCellValue,
+                securityHeadersCell,
+                headerValueOrNotSet(stsFlag),
+                headerValueOrNotSet(xfoFlag),
+                headerValueOrNotSet(cspFlag),
+                headerValueOrNotSet(xssFlag),
+                headerValueOrNotSet(rpFlag),
+                headerValueOrNotSet(ppFlag),
+                headerValueOrNotSet(acaoFlag),
+                statusCell,
+                contentLengthCell,
+                linksCellHTML,
+                cdnNameCell,
+                cdnTypeCell,
+                wafCdnCell,
+                cdnFlagCell,
+                openPortsCell,
+                notablePortsCell,
+                hostnamesOnIpHtml,
+                asnProviderHtml,
+                networkBlockHtml
+              ];
+
+              const tlsEndpointIpCell = tlsDetails.endpointIp !== "N/A"
+                ? tlsDetails.endpointIp
+                : (combinedIpList.length ? escapeHtml(combinedIpList[0]) : "N/A");
+              const tlsColumns = [
+                tlsDetails.version,
+                tlsDetails.cipher,
+                tlsDetails.certExpiry,
+                tlsDetails.daysLabel,
+                tlsDetails.issuer,
+                tlsDetails.issuerCn,
+                tlsDetails.issuerOrg,
+                tlsDetails.subjectDn,
+                tlsDetails.subjectCn,
+                tlsDetails.subjectAn,
+                tlsDetails.serial,
+                tlsEndpointIpCell
+              ];
+
+              const cloudProviderCell = cloudProfile ? cloudValueOrDefault(cloudProfile.CloudProvider, "Unknown") : "Not mapped";
+              const cloudResourceTypeCell = cloudProfile ? cloudValueOrDefault(cloudProfile.ResourceType, "Unclassified") : "Not mapped";
+              const cloudServiceFamilyCell = cloudProfile ? cloudValueOrDefault(cloudProfile.ServiceFamily, "Unknown") : "Not mapped";
+              const cloudResourceIdentifierCell = cloudProfile ? cloudValueOrDefault(cloudProfile.ResourceIdentifier, "N/A") : "Not mapped";
+              const loadBalancerCell = cloudProfile ? cloudValueOrDefault(cloudProfile.LoadBalancer, "N/A") : "Not mapped";
+              const cloudShieldingCell = cloudProfile ? (sanitizeCloudValue(cloudProfile.WafShielding) || "Not Observed") : "Not mapped";
+              const cloudStorageCell = cloudProfile ? (sanitizeCloudValue(cloudProfile.Storage) || "N/A") : "Not mapped";
+              const cloudEvidenceCell = cloudProfile
+                ? (() => {
+                    if (Array.isArray(cloudProfile.Evidence) && cloudProfile.Evidence.length) {
+                      const rendered = cloudProfile.Evidence.map(item => sanitizeCloudValue(item)).filter(Boolean).join("<br>");
+                      return rendered || "No supporting signals collected";
+                    }
+                    return "No supporting signals collected";
+                  })()
+                : "Not mapped";
+              const cloudColumns = [
+                cloudProviderCell,
+                cloudResourceTypeCell,
+                cloudServiceFamilyCell,
+                cloudResourceIdentifierCell,
+                loadBalancerCell,
+                cloudShieldingCell,
+                cloudStorageCell,
+                cloudEvidenceCell
+              ];
+
+              const endpointRow = document.createElement("tr");
+              endpointRow.dataset.domain = (domain || "").toLowerCase();
+              endpointRow.dataset.url = (h.url || "").toLowerCase();
+              endpointRow.innerHTML = `
+                <td>${domainCell}</td>
+                <td>${endpointUrlCell}</td>
+                <td>${statusCell}</td>
+                <td>${redirectCell}</td>
+                <td>${homepageTitleCell}</td>
+                <td>${screenshotHTML}</td>
+                <td>${webServerCell}</td>
+                <td>${techStackHtml}</td>
+                <td>${contentLengthCell}</td>
+                <td>${loginCell}</td>
+                <td>${apiCell}</td>
+                <td>${colleagueCellValue}</td>
+                <td>${securityHeadersCell}</td>
+                <td>${wafCdnCell}</td>
+                <td>${linksCellHTML}</td>
+              `;
+              prepareRowCells(endpointRow);
+              endpointTableRows.push(endpointRow);
+
+              const masterCells = [
+                "",
+                ...domainColumns,
+                ...httpColumns,
+                ...tlsColumns,
+                ...cloudColumns
+              ];
+              const row = document.createElement("tr");
+              row.innerHTML = masterCells.map(value => `<td>${value}</td>`).join("");
+              const scoreCell = row.cells[0];
+              const reasonsText = Array.isArray(reasons) ? reasons.map(reason => String(reason || "")).join("\n") : "";
+              scoreCell.innerHTML = `<span class="score-badge" title="${escapeHtml(reasonsText)}">${roundedScore}</span>`;
+              scoreCell.title = reasonsText;
+              const emailAuthMissing = [spf, dkim, dmarc].some(value => typeof value === "string" && value.toLowerCase().includes("no "));
+              row.dataset.score = String(roundedScore);
+              row.dataset.httpLogin = (loginMap[h.url] === "Yes" && (h.url || "").startsWith("http://")) ? "1" : "0";
+              row.dataset.emailAuthMissing = emailAuthMissing ? "1" : "0";
+              row.dataset.nxdomain = dnsStatus === "NXDOMAIN" ? "1" : "0";
+              row.dataset.expiryDays = tlsDetails.daysNumeric !== null ? String(tlsDetails.daysNumeric) : "";
+              prepareRowCells(row);
+              allTableRows.push(row);
+            });
+          } else {
+            const colleagueCellValue = escapeHtml(colleagueStatus ? "Yes" : "No");
+            const fallbackApiDetected = ((apiMap[domain] || "").toString().trim().toLowerCase() === "yes") ? "Yes" : "No";
+            const fallbackApiCell = escapeHtml(fallbackApiDetected);
+            const fallbackScreenshot = `
+              <span style="display:none;">no screenshot</span>
+              No screenshot
+            `;
+            const fallbackTlsRaw = getTlsRecord(buildEndpointUrl(domain, "443"), domain);
+            const fallbackTlsDetails = describeTlsDetails(fallbackTlsRaw, domainSec);
+            const fallbackTlsEndpointIp = fallbackTlsDetails.endpointIp !== "N/A"
+              ? fallbackTlsDetails.endpointIp
+              : (combinedIpList.length ? escapeHtml(combinedIpList[0]) : "N/A");
+            const fallbackHttpColumns = [
+              "N/A",
+              "N/A",
+              fallbackScreenshot,
+              "N/A",
+              "N/A",
+              "N/A",
+              "N/A",
+              "N/A",
+              fallbackApiCell,
+              colleagueCellValue,
+              "No key headers observed",
+              "Not Set",
+              "Not Set",
+              "Not Set",
+              "Not Set",
+              "Not Set",
+              "Not Set",
+              "Not Set",
+              "N/A",
+              "N/A",
+              "0",
+              "N/A",
+              "N/A",
+              "N/A",
+              "N/A",
+              openPortsCell,
+              notablePortsCell,
+              hostnamesOnIpHtml,
+              asnProviderHtml,
+              networkBlockHtml
+            ];
+            const fallbackTlsColumns = [
+              fallbackTlsDetails.version,
+              fallbackTlsDetails.cipher,
+              fallbackTlsDetails.certExpiry,
+              fallbackTlsDetails.daysLabel,
+              fallbackTlsDetails.issuer,
+              fallbackTlsDetails.issuerCn,
+              fallbackTlsDetails.issuerOrg,
+              fallbackTlsDetails.subjectDn,
+              fallbackTlsDetails.subjectCn,
+              fallbackTlsDetails.subjectAn,
+              fallbackTlsDetails.serial,
+              fallbackTlsEndpointIp
+            ];
+            const fallbackCloudColumns = [
+              "Not mapped",
+              "Not mapped",
+              "Not mapped",
+              "Not mapped",
+              "Not mapped",
+              "Not mapped",
+              "Not mapped",
+              "Not mapped"
+            ];
+            const fallbackCells = [
+              "N/A",
+              ...domainColumns,
+              ...fallbackHttpColumns,
+              ...fallbackTlsColumns,
+              ...fallbackCloudColumns
+            ];
+            const row = document.createElement("tr");
+            row.innerHTML = fallbackCells.map(value => `<td>${value}</td>`).join("");
+            const emailAuthMissing = [spf, dkim, dmarc].some(value => typeof value === "string" && value.toLowerCase().includes("no "));
+            row.dataset.score = "0";
+            row.dataset.httpLogin = "0";
+            row.dataset.emailAuthMissing = emailAuthMissing ? "1" : "0";
+            row.dataset.nxdomain = dnsStatus === "NXDOMAIN" ? "1" : "0";
+            prepareRowCells(row);
+            allTableRows.push(row);
           }
           const domainRow = document.createElement("tr");
           domainRow.dataset.domain = (domain || "").toLowerCase();
@@ -3794,100 +4571,34 @@ function buildInsightsCharts({
         });
       }
 
-      // Update filtering – note that we add a check for screenshot filter in column index 13.
       function getFilteredRows() {
-        const query = document.getElementById("searchBox").value.toLowerCase();
-        const filters = {
-          priority: document.getElementById("priority-filter").value.toLowerCase(),
-          domain: document.getElementById("domain-filter").value.toLowerCase(),
-          purpose: document.getElementById("purpose-filter").value.toLowerCase(),
-          resolvers: document.getElementById("resolvers-filter").value.toLowerCase(),
-          arecords: document.getElementById("arecords-filter").value.toLowerCase(),
-          ns: document.getElementById("ns-filter").value.toLowerCase(),
-          mx: document.getElementById("mx-filter").value.toLowerCase(),
-          ptr: document.getElementById("ptr-filter").value.toLowerCase(),
-          dnsstatus: document.getElementById("dnsstatus-filter").value.toLowerCase(),
-          cdnname: document.getElementById("cdnname-filter").value.toLowerCase(),
-          cdntype: document.getElementById("cdntype-filter").value.toLowerCase(),
-          port: document.getElementById("port-filter").value.toLowerCase(),
-          url: document.getElementById("url-filter").value.toLowerCase(),
-          screenshot: document.getElementById("screenshot-filter").value.toLowerCase(),
-          location: document.getElementById("redirect-filter").value.toLowerCase(),
-          title: document.getElementById("title-filter").value.toLowerCase(),
-          webserver: document.getElementById("webserver-filter").value.toLowerCase(),
-          login: document.getElementById("login-filter").value.toLowerCase(),
-          apiEndpoint: document.getElementById("api-endpoint-filter").value.toLowerCase(),
-          tech: document.getElementById("tech-filter").value.toLowerCase(),
-          statuscode: document.getElementById("statuscode-filter").value.toLowerCase(),
-          contentlength: document.getElementById("contentlength-filter").value.toLowerCase(),
-          cdn: document.getElementById("cdn-filter").value.toLowerCase(),
-          spf: document.getElementById("spf-filter").value.toLowerCase(),
-          dkim: document.getElementById("dkim-filter").value.toLowerCase(),
-          dmarc: document.getElementById("dmarc-filter").value.toLowerCase(),
-          dnssec: document.getElementById("dnssec-filter").value.toLowerCase(),
-          sslversion: document.getElementById("sslversion-filter").value.toLowerCase(),
-          certexpiry: document.getElementById("certexpiry-filter").value.toLowerCase(),
-          sslissuer: document.getElementById("sslissuer-filter").value.toLowerCase(),
-          sts: document.getElementById("sts-filter").value.toLowerCase(),
-          xfo: document.getElementById("xfo-filter").value.toLowerCase(),
-          csp: document.getElementById("csp-filter").value.toLowerCase(),
-          xss: document.getElementById("xss-filter").value.toLowerCase(),
-          rp: document.getElementById("rp-filter").value.toLowerCase(),
-          pp: document.getElementById("pp-filter").value.toLowerCase(),
-          portsservices: document.getElementById("ports-services-filter").value.toLowerCase(),
-          crawledlinks: document.getElementById("crawledlinks-filter").value.toLowerCase()
-
-        };
+        const searchInput = document.getElementById("searchBox");
+        const query = searchInput ? searchInput.value.toLowerCase() : "";
+        const filterSelects = Array.from(document.querySelectorAll("#filter-row select"));
+        const filters = filterSelects.map(select => ({
+          id: select.id || "",
+          index: Number(select.dataset.columnIndex || filterSelects.indexOf(select)),
+          value: (select.value || "").toLowerCase()
+        }));
         const filtered = allTableRows.filter(row => {
           const cells = Array.from(row.getElementsByTagName("td"));
           const cellTexts = cells.map(cell => getCellContentText(cell).toLowerCase());
-          if (filters.priority && !(cellTexts[0] || "").includes(filters.priority)) return false;
-          if (filters.domain && !(cellTexts[1] || "").includes(filters.domain)) return false;
-          if (filters.purpose && !(cellTexts[2] || "").includes(filters.purpose)) return false;
-          if (filters.resolvers && !(cellTexts[3] || "").includes(filters.resolvers)) return false;
-          if (filters.arecords && !(cellTexts[4] || "").includes(filters.arecords)) return false;
-          if (filters.ns && !(cellTexts[5] || "").includes(filters.ns)) return false;
-          if (filters.mx && !(cellTexts[6] || "").includes(filters.mx)) return false;
-          if (filters.ptr && !(cellTexts[7] || "").includes(filters.ptr)) return false;
-          if (filters.dnsstatus && !(cellTexts[8] || "").includes(filters.dnsstatus)) return false;
-          if (filters.cdnname && !(cellTexts[9] || "").includes(filters.cdnname)) return false;
-          if (filters.cdntype && !(cellTexts[10] || "").includes(filters.cdntype)) return false;
-          if (filters.port && !(cellTexts[11] || "").includes(filters.port)) return false;
-          if (filters.url && !(cellTexts[12] || "").includes(filters.url)) return false;
-          const screenshotFilter = filters.screenshot;
-          if (screenshotFilter) {
-            const screenshotCell = cells[13];
-            const hasImage = !!(screenshotCell && screenshotCell.querySelector("img"));
-            if (screenshotFilter === "has screenshot" && !hasImage) return false;
-            if (screenshotFilter === "no screenshot" && hasImage) return false;
-          }
-          if (filters.location && !(cellTexts[14] || "").includes(filters.location)) return false;
-          if (filters.title && !(cellTexts[15] || "").includes(filters.title)) return false;
-          if (filters.webserver && !(cellTexts[16] || "").includes(filters.webserver)) return false;
-          if (filters.login && !(cellTexts[17] || "").includes(filters.login)) return false;
-          if (filters.apiEndpoint && !(cellTexts[18] || "").includes(filters.apiEndpoint)) return false;
-          if (filters.tech && !(cellTexts[19] || "").includes(filters.tech)) return false;
-          if (filters.statuscode && !(cellTexts[20] || "").includes(filters.statuscode)) return false;
-          if (filters.contentlength && !(cellTexts[21] || "").includes(filters.contentlength)) return false;
-          if (filters.cdn && !(cellTexts[22] || "").includes(filters.cdn)) return false;
-          if (filters.spf && !(cellTexts[23] || "").includes(filters.spf)) return false;
-          if (filters.dkim && !(cellTexts[24] || "").includes(filters.dkim)) return false;
-          if (filters.dmarc && !(cellTexts[25] || "").includes(filters.dmarc)) return false;
-          if (filters.dnssec && !(cellTexts[26] || "").includes(filters.dnssec)) return false;
-          if (filters.sslversion && !(cellTexts[27] || "").includes(filters.sslversion)) return false;
-          if (filters.certexpiry && !(cellTexts[28] || "").includes(filters.certexpiry)) return false;
-          if (filters.sslissuer && !(cellTexts[29] || "").includes(filters.sslissuer)) return false;
-          if (filters.sts && !(cellTexts[30] || "").includes(filters.sts)) return false;
-          if (filters.xfo && !(cellTexts[31] || "").includes(filters.xfo)) return false;
-          if (filters.csp && !(cellTexts[32] || "").includes(filters.csp)) return false;
-          if (filters.xss && !(cellTexts[33] || "").includes(filters.xss)) return false;
-          if (filters.rp && !(cellTexts[34] || "").includes(filters.rp)) return false;
-          if (filters.pp && !(cellTexts[35] || "").includes(filters.pp)) return false;
-          if (filters.portsservices && !(cellTexts[36] || "").includes(filters.portsservices)) return false;
-          if (filters.crawledlinks && !(cellTexts[37] || "").includes(filters.crawledlinks)) return false;
           if (query) {
-            const rowText = cellTexts.join(" ");
-            if (!rowText.includes(query)) return false;
+            const matchesQuery = cellTexts.some(text => text.includes(query));
+            if (!matchesQuery) return false;
+          }
+          for (const filter of filters) {
+            if (!filter.value) continue;
+            const cell = cells[filter.index];
+            if (!cell) return false;
+            if (filter.id === "screenshot-filter") {
+              const hasImage = !!cell.querySelector("img");
+              if (filter.value === "has screenshot" && !hasImage) return false;
+              if (filter.value === "no screenshot" && hasImage) return false;
+              continue;
+            }
+            const text = cellTexts[filter.index] || "";
+            if (!text.includes(filter.value)) return false;
           }
           return true;
         });
@@ -3967,8 +4678,20 @@ function buildInsightsCharts({
 
       function setupTableFilter(tableId, getRowsFn, renderFn) {
         if (tableFilterControllers[tableId]) {
-          tableFilterControllers[tableId].getRows = getRowsFn;
-          tableFilterControllers[tableId].render = renderFn;
+          const controller = tableFilterControllers[tableId];
+          controller.getRows = getRowsFn;
+          controller.render = renderFn;
+          if (!controller.searchInput) {
+            const searchInput = document.querySelector(`.table-search-input[data-table-id="${tableId}"]`);
+            if (searchInput) {
+              controller.searchInput = searchInput;
+              controller.searchQuery = (searchInput.value || "").trim().toLowerCase();
+              searchInput.addEventListener("input", () => {
+                controller.searchQuery = (searchInput.value || "").trim().toLowerCase();
+                controller.render();
+              });
+            }
+          }
           return;
         }
         const filterRow = ensureTableFilterRow(tableId);
@@ -3981,7 +4704,9 @@ function buildInsightsCharts({
           selects,
           filterState,
           getRows: getRowsFn,
-          render: renderFn
+          render: renderFn,
+          searchInput: null,
+          searchQuery: ""
         };
         selects.forEach((select, idx) => {
           select.addEventListener("change", () => {
@@ -3989,6 +4714,15 @@ function buildInsightsCharts({
             controller.render();
           });
         });
+        const searchInput = document.querySelector(`.table-search-input[data-table-id="${tableId}"]`);
+        if (searchInput) {
+          controller.searchInput = searchInput;
+          controller.searchQuery = (searchInput.value || "").trim().toLowerCase();
+          searchInput.addEventListener("input", () => {
+            controller.searchQuery = (searchInput.value || "").trim().toLowerCase();
+            controller.render();
+          });
+        }
         tableFilterControllers[tableId] = controller;
       }
 
@@ -4036,17 +4770,33 @@ function buildInsightsCharts({
       function applyTableFilters(tableId, rows) {
         const controller = tableFilterControllers[tableId];
         if (!controller) return rows;
-        const { filterState } = controller;
-        if (!filterState || !filterState.some(value => value)) {
+        const { filterState, selects, searchQuery } = controller;
+        const hasColumnFilters = Array.isArray(filterState) && filterState.some(value => value);
+        const normalizedQuery = (searchQuery || "").trim();
+        const hasSearch = normalizedQuery.length > 0;
+        if (!hasColumnFilters && !hasSearch) {
           return rows;
         }
         return rows.filter(row => {
-          const cells = row.cells || [];
+          const cells = Array.from(row.cells || []);
+          const cellTexts = cells.map(cell => getCellContentText(cell).toLowerCase());
+          if (hasSearch) {
+            const matchesQuery = cellTexts.some(text => text.includes(normalizedQuery));
+            if (!matchesQuery) return false;
+          }
+          if (!hasColumnFilters) return true;
           return filterState.every((filterValue, idx) => {
             if (!filterValue) return true;
             const cell = cells[idx];
             if (!cell) return false;
-            const text = getCellContentText(cell).toLowerCase();
+            const select = selects[idx];
+            if (select && select.id === "screenshot-filter") {
+              const hasImage = !!cell.querySelector("img");
+              if (filterValue === "has screenshot" && !hasImage) return false;
+              if (filterValue === "no screenshot" && hasImage) return false;
+              return true;
+            }
+            const text = cellTexts[idx] || "";
             return text.includes(filterValue);
           });
         });
@@ -4159,76 +4909,59 @@ function buildInsightsCharts({
       }
 
       function populateColumnFilters() {
-        const uniqueCols = Array.from({ length: 38 }, () => new Set());
-        allTableRows.forEach(row => {
-          const cells = row.getElementsByTagName("td");
-          for (let col = 0; col < 38; col++) {
-            const cell = cells[col];
-            if (!cell) continue;
-            if (col === 13) {
-              const hasImage = !!cell.querySelector("img");
-              uniqueCols[col].add(hasImage ? "Has screenshot" : "No screenshot");
-            } else {
-              const text = getCellContentText(cell);
-              if (text) uniqueCols[col].add(text);
-            }
-          }
+        const filterSelects = Array.from(document.querySelectorAll("#filter-row select"));
+        const uniqueValuesByColumn = new Map();
+        filterSelects.forEach(select => {
+          const columnIndex = Number(select.dataset.columnIndex || "0");
+          uniqueValuesByColumn.set(columnIndex, new Set());
         });
-        function fillSelectOptions(selectId, values) {
-          const select = document.getElementById(selectId);
-          const existing = select.querySelectorAll("option:not([value=''])");
-          existing.forEach(opt => opt.remove());
-          if (selectId === "priority-filter") {
-            values = values.filter(v => !isNaN(v)).sort((a, b) => b - a);
+        allTableRows.forEach(row => {
+          const cells = Array.from(row.getElementsByTagName("td"));
+          filterSelects.forEach(select => {
+            const columnIndex = Number(select.dataset.columnIndex || "0");
+            const values = uniqueValuesByColumn.get(columnIndex);
+            if (!values) return;
+            const cell = cells[columnIndex];
+            if (!cell) return;
+            if (select.id === "screenshot-filter") {
+              const hasImage = !!cell.querySelector("img");
+              values.add(hasImage ? "Has screenshot" : "No screenshot");
+              return;
+            }
+            const text = getCellContentText(cell);
+            if (text) values.add(text);
+          });
+        });
+        filterSelects.forEach(select => {
+          if (select.id === "screenshot-filter") return; // preserve static options
+          const columnIndex = Number(select.dataset.columnIndex || "0");
+          const valueSet = uniqueValuesByColumn.get(columnIndex) || new Set();
+          const currentValue = select.value;
+          Array.from(select.options).slice(1).forEach(option => option.remove());
+          let values = Array.from(valueSet);
+          if (select.id === "priority-filter") {
+            values = values
+              .map(v => Number(v))
+              .filter(v => Number.isFinite(v))
+              .sort((a, b) => b - a)
+              .map(v => String(v));
           } else {
-            values.sort();
+            values.sort((a, b) => a.localeCompare(b));
           }
           values.forEach(val => {
+            if (!val) return;
             if (val.toLowerCase() === "asc" || val.toLowerCase() === "desc") return;
             const option = document.createElement("option");
             option.value = val;
             option.textContent = val;
             select.appendChild(option);
           });
-        }
-        fillSelectOptions("priority-filter", [...uniqueCols[0]]);
-        fillSelectOptions("domain-filter", [...uniqueCols[1]]);
-        fillSelectOptions("purpose-filter", [...uniqueCols[2]]);
-        fillSelectOptions("resolvers-filter", [...uniqueCols[3]]);
-        fillSelectOptions("arecords-filter", [...uniqueCols[4]]);
-        fillSelectOptions("ns-filter", [...uniqueCols[5]]);
-        fillSelectOptions("mx-filter", [...uniqueCols[6]]);
-        fillSelectOptions("ptr-filter", [...uniqueCols[7]]);
-        fillSelectOptions("dnsstatus-filter", [...uniqueCols[8]]);
-        fillSelectOptions("cdnname-filter", [...uniqueCols[9]]);
-        fillSelectOptions("cdntype-filter", [...uniqueCols[10]]);
-        fillSelectOptions("port-filter", [...uniqueCols[11]]);
-        fillSelectOptions("url-filter", [...uniqueCols[12]]);
-        fillSelectOptions("screenshot-filter", [...uniqueCols[13]]);
-        fillSelectOptions("redirect-filter", [...uniqueCols[14]]);
-        fillSelectOptions("title-filter", [...uniqueCols[15]]);
-        fillSelectOptions("webserver-filter", [...uniqueCols[16]]);
-        fillSelectOptions("login-filter", [...uniqueCols[17]]);
-        fillSelectOptions("api-endpoint-filter", [...uniqueCols[18]]);
-        fillSelectOptions("tech-filter", [...uniqueCols[19]]);
-        fillSelectOptions("statuscode-filter", [...uniqueCols[20]]);
-        fillSelectOptions("contentlength-filter", [...uniqueCols[21]]);
-        fillSelectOptions("cdn-filter", [...uniqueCols[22]]);
-        fillSelectOptions("spf-filter", [...uniqueCols[23]]);
-        fillSelectOptions("dkim-filter", [...uniqueCols[24]]);
-        fillSelectOptions("dmarc-filter", [...uniqueCols[25]]);
-        fillSelectOptions("dnssec-filter", [...uniqueCols[26]]);
-        fillSelectOptions("sslversion-filter", [...uniqueCols[27]]);
-        fillSelectOptions("certexpiry-filter", [...uniqueCols[28]]);
-        fillSelectOptions("sslissuer-filter", [...uniqueCols[29]]);
-        fillSelectOptions("sts-filter", [...uniqueCols[30]]);
-        fillSelectOptions("xfo-filter", [...uniqueCols[31]]);
-        fillSelectOptions("csp-filter", [...uniqueCols[32]]);
-        fillSelectOptions("xss-filter", [...uniqueCols[33]]);
-        fillSelectOptions("rp-filter", [...uniqueCols[34]]);
-        fillSelectOptions("pp-filter", [...uniqueCols[35]]);
-        fillSelectOptions("ports-services-filter", [...uniqueCols[36]]);
-        fillSelectOptions("crawledlinks-filter", [...uniqueCols[37]]);
+          if (currentValue && values.includes(currentValue)) {
+            select.value = currentValue;
+          } else if (select.id !== "screenshot-filter") {
+            select.value = "";
+          }
+        });
       }
 
       document.getElementById("searchBox").addEventListener("input", onFilterChange);
@@ -4237,6 +4970,9 @@ function buildInsightsCharts({
         riskSortOrder = (riskSortOrder === "asc") ? "desc" : "asc";
         this.textContent = (riskSortOrder === "asc") ? "▲" : "▼";
         renderTable(getFilteredRows());
+      });
+      document.querySelectorAll("#filter-row select").forEach(select => {
+        select.addEventListener("change", onFilterChange);
       });
       applyColumnClassesToHeaders();
       initializeSidebarToggle();
@@ -4288,3 +5024,4 @@ function buildInsightsCharts({
 
       async function loadData() {
         try {
+          
