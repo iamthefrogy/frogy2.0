@@ -1092,14 +1092,18 @@ run_httpx() {
 			return
 		fi
 
-		httpx -silent \
-			-t 5 \
-			-rl 15 \
-			-timeout 15 \
-			-retries 2 \
-			-l "$final_urls_ports" \
+		local -a httpx_base_args=(
+			-silent
+			-t 5
+			-rl 15
+			-timeout 15
+			-retries 2
+			-l "$final_urls_ports"
+		)
+
+		httpx "${httpx_base_args[@]}" \
 			-json \
-			-o "$RUN_DIR/httpx.json" \
+			-o "$httpx_json_file" \
 			>/dev/null || true
 
 		# make sure the json file exists even if httpx stayed quiet
@@ -1108,26 +1112,76 @@ run_httpx() {
 		fi
 
 		# keep track of how many URLs actually responded
-		HTTPX_LIVE_COUNT=$(wc -l <"$RUN_DIR/httpx.json" || echo 0)
+		HTTPX_LIVE_COUNT=$(wc -l <"$httpx_json_file" || echo 0)
 
-		# making sure the screenshot folders exist before we stash files there
-		mkdir -p output/screenshot output/response
+		local screenshot_staging_dir="output/screenshot"
+		local legacy_response_dir="output/response"
+		local response_dir="$RUN_DIR/response"
+
+		rm -rf "$screenshot_staging_dir" "$legacy_response_dir" "$response_dir"
+		mkdir -p "$screenshot_staging_dir" "$response_dir"
 
 		# double-checking we can actually write the screenshots and bodies
-		if [[ ! -w "output/screenshot" || ! -w "output/response" ]]; then
-			error "Output directories under ./output are not writable."
+		if [[ ! -w "$screenshot_staging_dir" || ! -w "$response_dir" ]]; then
+			error "Screenshot or response directories are not writable."
 			exit 1
 		fi
 
+		local screenshot_timeout="${FROGY_SCREENSHOT_TIMEOUT:-20}"
+		if ! [[ "$screenshot_timeout" =~ ^[0-9]+$ ]] || (( screenshot_timeout <= 0 )); then
+			screenshot_timeout=20
+		fi
+
+		local chrome_preference="${FROGY_HTTPX_SYSTEM_CHROME:-auto}"
+		local chrome_flag=""
+		if [[ "$chrome_preference" != "off" ]]; then
+			local -a chrome_candidates=("chromium" "chromium-browser" "google-chrome" "google-chrome-stable" "microsoft-edge" "msedge")
+			for candidate in "${chrome_candidates[@]}"; do
+				if command -v "$candidate" >/dev/null 2>&1; then
+					chrome_flag="-system-chrome"
+					break
+				fi
+			done
+			if [[ -z "$chrome_flag" && "$chrome_preference" == "require" ]]; then
+				warning "FROGY_HTTPX_SYSTEM_CHROME is set to require but no local Chrome/Chromium binary was found. Falling back to bundled renderer."
+			fi
+		fi
+
+		local -a httpx_screenshot_args=(
+			"${httpx_base_args[@]}"
+			-ss
+			-sr
+			-srd "$response_dir"
+			-st "$screenshot_timeout"
+		)
+		if [[ -n "$chrome_flag" ]]; then
+			httpx_screenshot_args+=("$chrome_flag")
+		fi
+
 		# grab screenshots and bodies so the report has something pretty to show
-		httpx -silent \
-	   	-t 5 \
-		  -rl 15 \
-		  -timeout 15 \
-		  -retries 2 \
-			-l "$final_urls_ports" \
-			-ss \
-			>/dev/null || true
+		httpx "${httpx_screenshot_args[@]}" >/dev/null || true
+
+		local screenshot_count=0
+		if [[ -d "$screenshot_staging_dir" ]]; then
+			screenshot_count=$(find "$screenshot_staging_dir" -type f -iname '*.png' 2>/dev/null | wc -l | tr -d '[:space:]' || echo 0)
+			rm -rf "$RUN_DIR/screenshot"
+			if ! mv "$screenshot_staging_dir" "$RUN_DIR/"; then
+				warning "Failed to relocate screenshots into $RUN_DIR. Report links may be broken."
+			fi
+		fi
+
+		if [[ -d "$legacy_response_dir" ]]; then
+			rm -rf "$legacy_response_dir"
+		fi
+		if [[ ! -d "$RUN_DIR/screenshot" ]]; then
+			mkdir -p "$RUN_DIR/screenshot"
+		fi
+
+		if [[ "$screenshot_count" -gt 0 ]]; then
+			info "Captured ${screenshot_count} web screenshots."
+		elif [[ "$HTTPX_LIVE_COUNT" -gt 0 ]]; then
+			warning "httpx scraped ${HTTPX_LIVE_COUNT} live endpoints but produced no screenshots. Check Chrome/Chromium dependencies if you expect captures."
+		fi
 
 		# quick pulse check to catch rate limits or blocking
 		local naabu_target_count
@@ -1164,26 +1218,111 @@ fi
 gather_screenshots() {
 	local screenshot_map_file="$RUN_DIR/screenshot_map.json"
 	local screenshot_dir="$RUN_DIR/screenshot"
+	local response_screenshot_dir="$RUN_DIR/response/screenshot"
 
+	mkdir -p "$screenshot_dir"
 	printf '{\n' >"$screenshot_map_file"
 
-	local sep=""
-	for folder in "$screenshot_dir"/*/; do
-		[ -d "$folder" ] || continue
-		local host="$(basename "$folder")"
+	local first=true
+	declare -A seen_keys=()
+	local -a search_roots=()
 
-		local png
-		png=$(find "$folder" -maxdepth 1 -type f -iname '*.png' | head -n1)
-		[ -z "$png" ] && continue # nothing to map if there isn't a shot
+	if [[ -d "$screenshot_dir" ]]; then
+		search_roots+=("$screenshot_dir")
+	fi
+	if [[ -d "$response_screenshot_dir" ]]; then
+		search_roots+=("$response_screenshot_dir")
+	fi
 
+	if [[ ${#search_roots[@]} -eq 0 ]]; then
+		printf '}\n' >>"$screenshot_map_file"
+		return
+	fi
+
+	derive_screenshot_key() {
+		local path="$1"
+		local parent_dir base_name
+		parent_dir=$(basename "$(dirname "$path")")
+		base_name="$(basename "$path")"
+		base_name="${base_name%.png}"
+
+		local candidates=()
+		candidates+=("$parent_dir")
+		candidates+=("$base_name")
+
+		for candidate in "${candidates[@]}"; do
+			[[ -z "$candidate" || "$candidate" == "." || "$candidate" == "screenshot" ]] && continue
+
+			local raw="$candidate"
+			local scheme=""
+			if [[ "$raw" == https___* ]]; then
+				scheme="https"
+				raw="${raw#https___}"
+			elif [[ "$raw" == http___* ]]; then
+				scheme="http"
+				raw="${raw#http___}"
+			fi
+
+			raw="${raw%_screenshot}"
+			raw="${raw%_full}"
+			raw="${raw//:/_}"
+			raw="${raw//\[/}"
+			raw="${raw//\]/}"
+			raw="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | tr -s '_' '_')"
+			raw="${raw##_}"
+			raw="${raw%_}"
+			[[ -z "$raw" ]] && continue
+
+			if [[ "$raw" =~ ^(.+)_([0-9]{1,5})$ ]]; then
+				local host="${BASH_REMATCH[1]}"
+				local port="${BASH_REMATCH[2]}"
+				if [[ -n "$host" && -n "$port" ]]; then
+					echo "${host}_${port}"
+					return 0
+				fi
+			else
+				if [[ "$scheme" == "https" ]]; then
+					echo "${raw}_443"
+					return 0
+				elif [[ "$scheme" == "http" ]]; then
+					echo "${raw}_80"
+					return 0
+				fi
+			fi
+		done
+
+		return 1
+	}
+
+	while IFS= read -r png; do
+		[[ -f "$png" ]] || continue
 		local relpath="${png#$RUN_DIR/}"
+		if [[ "$relpath" == "$png" ]]; then
+			relpath="$(basename "$png")"
+		fi
+		local key
+		if ! key="$(derive_screenshot_key "$png")"; then
+			key=""
+		fi
 
-		printf '%s' "$sep" >>"$screenshot_map_file"
-		printf '  "%s": "%s"\n' "$host" "$relpath" >>"$screenshot_map_file"
+		if [[ -z "$key" ]]; then
+			continue
+		fi
 
-		sep=","
-	done
+		[[ -n "${seen_keys[$key]:-}" ]] && continue
+		seen_keys["$key"]=1
 
+		if [[ "$first" == false ]]; then
+			printf ',\n' >>"$screenshot_map_file"
+		else
+			first=false
+		fi
+		printf '  "%s": "%s"' "$key" "$relpath" >>"$screenshot_map_file"
+		done < <(find "${search_roots[@]}" -type f -iname '*.png' -print 2>/dev/null | sort)
+
+	if [[ "$first" == false ]]; then
+		printf '\n' >>"$screenshot_map_file"
+	fi
 	printf '}\n' >>"$screenshot_map_file"
 }
 
@@ -2510,8 +2649,6 @@ main() {
 	generate_ip_intel
 	run_httpx
 	run_katana
-	[[ -d output/response ]] && mv output/response "$RUN_DIR/"
-	[[ -d output/screenshot ]] && mv output/screenshot "$RUN_DIR/"
 	gather_screenshots
 	run_login_detection
 	run_tls_inventory
