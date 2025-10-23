@@ -4676,6 +4676,23 @@ function buildInsightsCharts({
         return filterRow;
       }
 
+      function decorateTableFilterSelects(tableId, selects) {
+        if (!Array.isArray(selects)) return;
+        if (tableId === "endpoints-table") {
+          const screenshotSelect = selects.find(select => select.dataset.columnIndex === "5");
+          if (screenshotSelect) {
+            screenshotSelect.id = "endpoints-screenshot-filter";
+            screenshotSelect.dataset.filterRole = "screenshot";
+          }
+        } else if (tableId === "domain-table") {
+          selects.forEach(select => {
+            if (select.id === "screenshot-filter") {
+              select.dataset.filterRole = "screenshot";
+            }
+          });
+        }
+      }
+
       function setupTableFilter(tableId, getRowsFn, renderFn) {
         if (tableFilterControllers[tableId]) {
           const controller = tableFilterControllers[tableId];
@@ -4697,6 +4714,7 @@ function buildInsightsCharts({
         const filterRow = ensureTableFilterRow(tableId);
         if (!filterRow) return;
         const selects = Array.from(filterRow.querySelectorAll("select"));
+        decorateTableFilterSelects(tableId, selects);
         const filterState = selects.map(() => "");
         const controller = {
           tableId,
@@ -4733,17 +4751,61 @@ function buildInsightsCharts({
         const { selects, filterState } = controller;
         if (!selects.length) return;
         const uniquePerColumn = selects.map(() => new Set());
+        const screenshotStatsByIndex = new Map();
         rows.forEach(row => {
           const cells = row.cells || [];
-          selects.forEach((_, idx) => {
+          selects.forEach((select, idx) => {
             const cell = cells[idx];
             if (!cell) return;
+            const isScreenshotFilter = Boolean(select && (select.id === "screenshot-filter" || select.dataset.filterRole === "screenshot"));
+            if (isScreenshotFilter) {
+              const hasImage = !!cell.querySelector("img");
+              const stats = screenshotStatsByIndex.get(idx) || { has: 0, none: 0 };
+              if (hasImage) {
+                stats.has += 1;
+              } else {
+                stats.none += 1;
+              }
+              screenshotStatsByIndex.set(idx, stats);
+              return;
+            }
             const text = getCellContentText(cell);
             if (!text) return;
             uniquePerColumn[idx].add(text);
           });
         });
         selects.forEach((select, idx) => {
+          const isScreenshotFilter = Boolean(select && (select.id === "screenshot-filter" || select.dataset.filterRole === "screenshot"));
+          if (isScreenshotFilter) {
+            const currentValue = select.value;
+            const stats = screenshotStatsByIndex.get(idx) || { has: 0, none: 0 };
+            const screenshotOptions = [
+              { value: "", label: "All" },
+              {
+                value: "has screenshot",
+                label: stats.has > 0 ? `Has screenshot (${stats.has})` : "Has screenshot"
+              },
+              {
+                value: "no screenshot",
+                label: stats.none > 0 ? `No screenshot (${stats.none})` : "No screenshot"
+              }
+            ];
+            select.innerHTML = "";
+            screenshotOptions.forEach(optionConfig => {
+              const option = document.createElement("option");
+              option.value = optionConfig.value;
+              option.textContent = optionConfig.label;
+              select.appendChild(option);
+            });
+            if (screenshotOptions.some(option => option.value === currentValue)) {
+              select.value = currentValue;
+              filterState[idx] = currentValue.toLowerCase();
+            } else {
+              select.value = "";
+              filterState[idx] = "";
+            }
+            return;
+          }
           const currentValue = select.value;
           Array.from(select.options).slice(1).forEach(opt => opt.remove());
           const values = Array.from(uniquePerColumn[idx]).sort((a, b) => a.localeCompare(b));
@@ -4790,7 +4852,8 @@ function buildInsightsCharts({
             const cell = cells[idx];
             if (!cell) return false;
             const select = selects[idx];
-            if (select && select.id === "screenshot-filter") {
+            const isScreenshotFilter = Boolean(select && (select.id === "screenshot-filter" || select.dataset.filterRole === "screenshot"));
+            if (isScreenshotFilter) {
               const hasImage = !!cell.querySelector("img");
               if (filterValue === "has screenshot" && !hasImage) return false;
               if (filterValue === "no screenshot" && hasImage) return false;
@@ -4911,6 +4974,7 @@ function buildInsightsCharts({
       function populateColumnFilters() {
         const filterSelects = Array.from(document.querySelectorAll("#filter-row select"));
         const uniqueValuesByColumn = new Map();
+        const screenshotStats = { has: 0, none: 0 };
         filterSelects.forEach(select => {
           const columnIndex = Number(select.dataset.columnIndex || "0");
           uniqueValuesByColumn.set(columnIndex, new Set());
@@ -4925,7 +4989,11 @@ function buildInsightsCharts({
             if (!cell) return;
             if (select.id === "screenshot-filter") {
               const hasImage = !!cell.querySelector("img");
-              values.add(hasImage ? "Has screenshot" : "No screenshot");
+              if (hasImage) {
+                screenshotStats.has += 1;
+              } else {
+                screenshotStats.none += 1;
+              }
               return;
             }
             const text = getCellContentText(cell);
@@ -4933,7 +5001,34 @@ function buildInsightsCharts({
           });
         });
         filterSelects.forEach(select => {
-          if (select.id === "screenshot-filter") return; // preserve static options
+          const isScreenshotFilter = Boolean(select && (select.id === "screenshot-filter" || select.dataset.filterRole === "screenshot"));
+          if (isScreenshotFilter) {
+            const currentValue = select.value;
+            const screenshotOptions = [
+              { value: "", label: "All" },
+              {
+                value: "has screenshot",
+                label: screenshotStats.has > 0 ? `Has screenshot (${screenshotStats.has})` : "Has screenshot"
+              },
+              {
+                value: "no screenshot",
+                label: screenshotStats.none > 0 ? `No screenshot (${screenshotStats.none})` : "No screenshot"
+              }
+            ];
+            select.innerHTML = "";
+            screenshotOptions.forEach(optionConfig => {
+              const option = document.createElement("option");
+              option.value = optionConfig.value;
+              option.textContent = optionConfig.label;
+              select.appendChild(option);
+            });
+            if (screenshotOptions.some(option => option.value === currentValue)) {
+              select.value = currentValue;
+            } else {
+              select.value = "";
+            }
+            return;
+          }
           const columnIndex = Number(select.dataset.columnIndex || "0");
           const valueSet = uniqueValuesByColumn.get(columnIndex) || new Set();
           const currentValue = select.value;
