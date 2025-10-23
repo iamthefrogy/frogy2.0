@@ -31,8 +31,28 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
       ca-certificates curl zip unzip jq sed python3 python3-pip python3-venv whois dnsutils openssl \
-      bash libpcap0.8 \
+      bash libpcap0.8 fonts-liberation xdg-utils \
+      libasound2t64 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcairo2 libcups2 libdbus-1-3 \
+      libdrm2 libgbm1 libgdk-pixbuf-2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libnss3 \
+      libpango-1.0-0 libpangocairo-1.0-0 libu2f-udev libx11-6 libx11-xcb1 libxcb1 libxcomposite1 \
+      libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxkbcommon0 libxrandr2 libxrender1 libxss1 libxtst6 \
+      libxshmfence1 \
   && rm -rf /var/lib/apt/lists/*
+
+# Install a system Chromium browser when available (amd64); otherwise rely on httpx's bundled engine
+RUN arch="$(dpkg --print-architecture)" \
+ && if [ "$arch" = "amd64" ]; then \
+      apt-get update -qq \
+      && apt-get install -y --no-install-recommends gnupg wget apt-transport-https \
+      && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-linux.gpg \
+      && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux.gpg] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+      && apt-get update -qq \
+      && apt-get install -y --no-install-recommends google-chrome-stable \
+      && apt-get purge -y --auto-remove gnupg wget apt-transport-https \
+      && rm -rf /var/lib/apt/lists/*; \
+    else \
+      echo "Skipping system Chrome install for architecture ${arch}; httpx will download a bundled browser."; \
+    fi
 
 WORKDIR /opt/frogy
 
@@ -48,8 +68,9 @@ RUN sed -i 's/\r$//' frogy.sh || true \
 
 COPY --from=builder /out/* /usr/local/bin/
 ENV PATH=/opt/frogy/.venv/bin:/usr/local/bin:$PATH
+ENV XDG_CACHE_HOME=/opt/frogy/.cache
 
-RUN mkdir -p /opt/frogy/output
+RUN mkdir -p /opt/frogy/output /opt/frogy/.cache
 
 ENV FROGY_WEB_PORT=8787
 EXPOSE 8787
