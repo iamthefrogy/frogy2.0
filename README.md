@@ -201,9 +201,9 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Completed ✅ ~~Colourised error output; clearer progress steps (e.g., [n/15]).~~
 - Completed ✅ ~~Completeley revamped design for easy navigation.~~
 - Completed ✅ ~~Added side panel to distribute data among Domain intel, application intel, cert intel, IP intel and cloud intel.~~
-- Enforce data quality checks (valid domain syntax, duplicate detection, enrichment completion) before persisting records.
-- Provide an option to hide the side panel.
-- Export report in CSV + JSON format.
-- Add the same search bar to all side panel reporting.
-- User should be allowed to directly open UI and add targets there only.
-
+- Completed ✅ ~~Enforce data quality checks (valid domain syntax, duplicate detection, enrichment completion) before persisting records.~~
+- Completed ✅ ~~Provide an option to hide the side panel.~~
+- Completed ✅ ~~Export report in CSV + JSON format.~~
+- Completed ✅ ~~Add the same search bar to all side panel reporting.~~
+- Completed ✅ ~~User should be allowed to directly open UI and add targets there only.~~
+- Implement alterx from project discovery~~
