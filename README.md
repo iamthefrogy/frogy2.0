@@ -207,3 +207,7 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Completed ✅ ~~Add the same search bar to all side panel reporting.~~
 - Completed ✅ ~~User should be allowed to directly open UI and add targets there only.~~
 - Implement alterx from project discovery~~
+
+
+# Thanksgiving
+Special thanks to the Project Discovery team and all the creators who helped me achieve this. Keep rocking the community!
