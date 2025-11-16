@@ -9,9 +9,9 @@
   <header class="top-bar">
     <div class="brand">
       <div class="brand-title">
-        <h1>External Attack Surface Intelligence – Crafted by <a href="https://chintangurjar.com" target="_blank" rel="noopener noreferrer">Frogy</a></h1>
+        <h1>Frogy <span class="brand-version">2.0</span></h1>
       </div>
-      <p class="tagline">Unified visibility across internet-exposed assets, live services, and defensive readiness indicators.</p>
+      <p class="tagline">Attack Surface Management & External Reconnaissance Platform</p>
     </div>
     <div class="top-actions">
       <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle theme">🌙</button>
@@ -76,18 +76,35 @@
       </header>
       <form id="modal-form">
         <div class="modal-field">
-          <label for="modal-project-name">Company name</label>
-          <input id="modal-project-name" name="project-name" type="text" placeholder="acme-security" required>
+          <label for="modal-project-name">Project name</label>
+          <input id="modal-project-name" name="project-name" type="text" placeholder="my-security-assessment" required>
         </div>
         <div class="modal-field">
-          <label for="modal-targets">Primary domains <small>(one per line)</small></label>
-          <textarea id="modal-targets" name="targets" rows="8" placeholder="example.com&#10;api.example.com" required></textarea>
-        </div>
-        <div class="modal-field">
-          <label style="display: flex; align-items: center; cursor: pointer;">
-            <input id="modal-skip-subdomain-discovery" name="skip-subdomain-discovery" type="checkbox" style="margin-right: 8px;">
-            <span>Domain-only scan <small>(skip subdomain discovery)</small></span>
+          <label for="modal-targets">
+            Target domains
+            <span class="label-hint">One domain per line</span>
           </label>
+          <textarea id="modal-targets" name="targets" rows="8" placeholder="example.com&#10;api.example.com&#10;app.example.com" required></textarea>
+          <div class="field-help">
+            <div class="help-item">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+              </svg>
+              <span><strong>Single domain:</strong> Performs full subdomain discovery</span>
+            </div>
+            <div class="help-item">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+              </svg>
+              <span><strong>Multiple domains:</strong> Scans only specified targets (in-scope mode)</span>
+            </div>
+          </div>
+        </div>
+        <div class="scan-mode-indicator" id="scan-mode-indicator">
+          <span class="mode-icon">⚡</span>
+          <span class="mode-text" id="mode-text">Enter domains to see scan mode</span>
         </div>
         <div class="modal-field hidden" id="modal-schedule-field">
           <label for="modal-schedule">Schedule start</label>

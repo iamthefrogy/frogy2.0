@@ -24,7 +24,8 @@ const elements = {
   modalForm: document.getElementById("modal-form"),
   modalName: document.getElementById("modal-project-name"),
   modalTargets: document.getElementById("modal-targets"),
-  modalSkipSubdomainDiscovery: document.getElementById("modal-skip-subdomain-discovery"),
+  scanModeIndicator: document.getElementById("scan-mode-indicator"),
+  modeText: document.getElementById("mode-text"),
   modalScheduleField: document.getElementById("modal-schedule-field"),
   modalSchedule: document.getElementById("modal-schedule"),
   modalFeedback: document.getElementById("modal-feedback"),
@@ -58,6 +59,24 @@ function refreshFlash(message, type = "info") {
 function setModalFeedback(message, isError = false) {
   elements.modalFeedback.textContent = message || "";
   elements.modalFeedback.classList.toggle("error", Boolean(isError));
+}
+
+function updateScanMode() {
+  const targetsText = elements.modalTargets.value.trim();
+  const domains = targetsText.split(/\r?\n/).filter(line => line.trim()).map(line => line.trim());
+
+  if (domains.length === 0) {
+    elements.modeText.textContent = "Enter domains to see scan mode";
+    elements.scanModeIndicator.classList.remove("discovery-mode", "inscope-mode");
+  } else if (domains.length === 1) {
+    elements.modeText.textContent = `🔍 Discovery Mode: Will enumerate subdomains for ${domains[0]}`;
+    elements.scanModeIndicator.classList.remove("inscope-mode");
+    elements.scanModeIndicator.classList.add("discovery-mode");
+  } else {
+    elements.modeText.textContent = `📋 In-Scope Mode: Will scan ${domains.length} specific domains only`;
+    elements.scanModeIndicator.classList.remove("discovery-mode");
+    elements.scanModeIndicator.classList.add("inscope-mode");
+  }
 }
 
 function syncSelection() {
@@ -376,10 +395,10 @@ function openModal(mode, scan = null) {
   elements.modalTitle.textContent = mode === "edit" ? "Modify Scan" : "New Scan";
   elements.modalName.value = scan?.name || "";
   elements.modalTargets.value = scan?.targets || "";
-  elements.modalSkipSubdomainDiscovery.checked = scan?.skip_subdomain_discovery || false;
   elements.modalSchedule.value = "";
   elements.modalScheduleField.classList.add("hidden");
   setModalFeedback("");
+  updateScanMode();
   elements.modal.classList.remove("hidden");
   elements.modal.classList.add("show");
   elements.backdrop.classList.add("show");
@@ -463,11 +482,15 @@ async function submitScan(mode) {
     scheduledFor = iso;
   }
 
+  // Smart scan mode: single domain = discovery, multiple domains = in-scope
+  const domains = targetsText.split(/\r?\n/).filter(line => line.trim());
+  const skipSubdomainDiscovery = domains.length > 1;
+
   const payload = {
     project_name: projectName,
     targets: targetsText,
     start_mode: mode,
-    skip_subdomain_discovery: elements.modalSkipSubdomainDiscovery.checked,
+    skip_subdomain_discovery: skipSubdomainDiscovery,
   };
   if (scheduledFor) payload.scheduled_for = scheduledFor;
 
@@ -682,6 +705,8 @@ function setupEventHandlers() {
   elements.modalActionButtons.forEach((button) => {
     button.addEventListener("click", handleRunAction);
   });
+
+  elements.modalTargets.addEventListener("input", updateScanMode);
 
   elements.targetsModalClose.addEventListener("click", closeTargetsModal);
   elements.targetsModalOk.addEventListener("click", closeTargetsModal);
