@@ -138,6 +138,9 @@ USE_NAABU="true"
 USE_HTTPX="true"
 USE_GAU="true"
 
+# Set to "true" to skip subdomain discovery and scan only the exact domains provided
+SKIP_SUBDOMAIN_DISCOVERY="${SKIP_SUBDOMAIN_DISCOVERY:-false}"
+
 NAABU_SCAN_MODE="${NAABU_SCAN_MODE:-auto}"
 
 PORT_SPEC_FILE="assets/port-spec.txt"
@@ -2625,25 +2628,38 @@ show_summary() {
 # main path: run the scanners, enrich the output, and wrap it all up
 main() {
 	check_dependencies
-	run_chaos
-	run_subfinder
-	if ! run_assetfinder; then
-		warning "Assetfinder step encountered an error and was skipped."
+
+	if [[ "$SKIP_SUBDOMAIN_DISCOVERY" == "true" ]]; then
+		info "Subdomain discovery disabled. Scanning only the exact domains provided..."
+		# Skip all subdomain enumeration tools and use only the domains from the target file
+		while read -r domain; do
+			echo "$domain" >>"$ALL_TEMP"
+		done <"$PRIMARY_DOMAINS_FILE"
+		sort -u "$ALL_TEMP" >"$MASTER_SUBS"
+		tr '[:upper:]' '[:lower:]' <"$MASTER_SUBS" | sed '/^$/d' | sort -u >"$MASTER_HOST_INDEX"
+		rm -f "$ALL_TEMP"
+	else
+		# Normal mode: run subdomain discovery
+		run_chaos
+		run_subfinder
+		if ! run_assetfinder; then
+			warning "Assetfinder step encountered an error and was skipped."
+		fi
+		if ! run_crtsh; then
+			warning "crt.sh lookup step encountered an error and was skipped."
+		fi
+		if ! run_gau; then
+			warning "GAU step encountered an error and was skipped."
+		fi
+		info "[5/17] Merging subdomains..."
+		while read -r domain; do
+			echo "$domain" >>"$ALL_TEMP"
+			echo "www.$domain" >>"$ALL_TEMP"
+		done <"$PRIMARY_DOMAINS_FILE"
+		sort -u "$ALL_TEMP" >"$MASTER_SUBS"
+		tr '[:upper:]' '[:lower:]' <"$MASTER_SUBS" | sed '/^$/d' | sort -u >"$MASTER_HOST_INDEX"
+		rm -f "$ALL_TEMP"
 	fi
-	if ! run_crtsh; then
-		warning "crt.sh lookup step encountered an error and was skipped."
-	fi
-	if ! run_gau; then
-		warning "GAU step encountered an error and was skipped."
-	fi
-	info "[5/17] Merging subdomains..."
-	while read -r domain; do
-		echo "$domain" >>"$ALL_TEMP"
-		echo "www.$domain" >>"$ALL_TEMP"
-	done <"$PRIMARY_DOMAINS_FILE"
-	sort -u "$ALL_TEMP" >"$MASTER_SUBS"
-	tr '[:upper:]' '[:lower:]' <"$MASTER_SUBS" | sed '/^$/d' | sort -u >"$MASTER_HOST_INDEX"
-	rm -f "$ALL_TEMP"
 	run_dnsx
 	run_naabu
 	generate_ip_intel

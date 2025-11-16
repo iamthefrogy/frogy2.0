@@ -83,6 +83,12 @@
           <label for="modal-targets">Primary domains <small>(one per line)</small></label>
           <textarea id="modal-targets" name="targets" rows="8" placeholder="example.com&#10;api.example.com" required></textarea>
         </div>
+        <div class="modal-field">
+          <label style="display: flex; align-items: center; cursor: pointer;">
+            <input id="modal-skip-subdomain-discovery" name="skip-subdomain-discovery" type="checkbox" style="margin-right: 8px;">
+            <span>Domain-only scan <small>(skip subdomain discovery)</small></span>
+          </label>
+        </div>
         <div class="modal-field hidden" id="modal-schedule-field">
           <label for="modal-schedule">Schedule start</label>
           <input id="modal-schedule" name="schedule" type="datetime-local">

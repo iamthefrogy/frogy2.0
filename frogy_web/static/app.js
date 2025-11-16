@@ -24,6 +24,7 @@ const elements = {
   modalForm: document.getElementById("modal-form"),
   modalName: document.getElementById("modal-project-name"),
   modalTargets: document.getElementById("modal-targets"),
+  modalSkipSubdomainDiscovery: document.getElementById("modal-skip-subdomain-discovery"),
   modalScheduleField: document.getElementById("modal-schedule-field"),
   modalSchedule: document.getElementById("modal-schedule"),
   modalFeedback: document.getElementById("modal-feedback"),
@@ -375,6 +376,7 @@ function openModal(mode, scan = null) {
   elements.modalTitle.textContent = mode === "edit" ? "Modify Scan" : "New Scan";
   elements.modalName.value = scan?.name || "";
   elements.modalTargets.value = scan?.targets || "";
+  elements.modalSkipSubdomainDiscovery.checked = scan?.skip_subdomain_discovery || false;
   elements.modalSchedule.value = "";
   elements.modalScheduleField.classList.add("hidden");
   setModalFeedback("");
@@ -465,6 +467,7 @@ async function submitScan(mode) {
     project_name: projectName,
     targets: targetsText,
     start_mode: mode,
+    skip_subdomain_discovery: elements.modalSkipSubdomainDiscovery.checked,
   };
   if (scheduledFor) payload.scheduled_for = scheduledFor;
 

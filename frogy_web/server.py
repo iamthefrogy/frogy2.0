@@ -256,6 +256,7 @@ class FrogyJob:
     targets_file: Path
     start_mode: str = "immediate"
     scheduled_for: Optional[datetime] = None
+    skip_subdomain_discovery: bool = False
     id: str = field(default_factory=lambda: f"job-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}")
     created_at: datetime = field(default_factory=utc_now)
     enqueued_at: datetime = field(default_factory=utc_now)
@@ -564,6 +565,8 @@ class JobManager:
         try:
             job.open_log(inflight_log)
             env = os.environ.copy()
+            if job.skip_subdomain_discovery:
+                env["SKIP_SUBDOMAIN_DISCOVERY"] = "true"
             cmd = ["bash", str(FROGY_SCRIPT), str(job.targets_file)]
 
             def stream_reader(pipe, tag: str) -> None:
@@ -900,6 +903,7 @@ def create_app() -> Flask:
                     "is_running": status == "running",
                     "is_queued": status == "queued",
                     "is_scheduled": status == "scheduled",
+                    "skip_subdomain_discovery": bool(metadata.get("skip_subdomain_discovery", False)),
                 }
             )
 
@@ -933,6 +937,7 @@ def create_app() -> Flask:
         targets_file: Path,
         start_mode: str,
         scheduled_for: Optional[datetime],
+        skip_subdomain_discovery: bool = False,
     ) -> Tuple[FrogyJob, str]:
         job = FrogyJob(
             project_name=project_name,
@@ -941,6 +946,7 @@ def create_app() -> Flask:
             targets_file=targets_file,
             start_mode=start_mode,
             scheduled_for=scheduled_for,
+            skip_subdomain_discovery=skip_subdomain_discovery,
         )
         job.status = "pending"
         job.status_message = "Queued"
@@ -965,6 +971,7 @@ def create_app() -> Flask:
         targets_raw = payload.get("targets") or ""
         start_mode = (payload.get("start_mode") or "immediate").strip().lower()
         scheduled_raw = (payload.get("scheduled_for") or "").strip()
+        skip_subdomain_discovery = bool(payload.get("skip_subdomain_discovery", False))
 
         if not project_name:
             return jsonify({"error": "Company name is required."}), 400
@@ -997,6 +1004,7 @@ def create_app() -> Flask:
             "slug": slug,
             "created_at": isoformat(utc_now()),
             "latest_targets": targets,
+            "skip_subdomain_discovery": skip_subdomain_discovery,
             "runs": [],
         }
         save_metadata(project_dir, metadata)
@@ -1006,10 +1014,11 @@ def create_app() -> Flask:
         message = "Scan saved."
 
         if start_mode in {"immediate", "queue", "schedule"}:
-            job, message = submit_scan_job(project_name, slug, targets, targets_file, start_mode, scheduled_for)
+            job, message = submit_scan_job(project_name, slug, targets, targets_file, start_mode, scheduled_for, skip_subdomain_discovery)
             job_info = job.to_dict()
 
         metadata["latest_targets"] = targets
+        metadata["skip_subdomain_discovery"] = skip_subdomain_discovery
         save_metadata(project_dir, metadata)
 
         rows = assemble_scan_rows()
@@ -1026,6 +1035,7 @@ def create_app() -> Flask:
         targets_raw = payload.get("targets") or ""
         start_mode = (payload.get("start_mode") or "none").strip().lower()
         scheduled_raw = (payload.get("scheduled_for") or "").strip()
+        skip_subdomain_discovery = bool(payload.get("skip_subdomain_discovery", False))
 
         if not project_name:
             return jsonify({"error": "Company name is required."}), 400
@@ -1067,6 +1077,7 @@ def create_app() -> Flask:
         metadata["name"] = project_name
         metadata["slug"] = slug
         metadata["latest_targets"] = targets
+        metadata["skip_subdomain_discovery"] = skip_subdomain_discovery
         save_metadata(project_dir, metadata)
 
         targets_file = write_targets_file(project_dir, targets)
@@ -1074,7 +1085,7 @@ def create_app() -> Flask:
         message = "Scan updated."
         job_info = None
         if start_mode in {"immediate", "queue", "schedule"}:
-            job, message = submit_scan_job(project_name, slug, targets, targets_file, start_mode, scheduled_for)
+            job, message = submit_scan_job(project_name, slug, targets, targets_file, start_mode, scheduled_for, skip_subdomain_discovery)
             job_info = job.to_dict()
 
         save_metadata(project_dir, metadata)
@@ -1212,11 +1223,13 @@ def create_app() -> Flask:
         if not targets:
             return jsonify({"error": "No target list saved for this scan."}), 400
 
+        skip_subdomain_discovery = bool(metadata.get("skip_subdomain_discovery", False))
+
         project_dir = PROJECTS_DIR / slug
         project_dir.mkdir(parents=True, exist_ok=True)
         targets_file = write_targets_file(project_dir, targets)
 
-        job, message = submit_scan_job(metadata.get("name", slug), slug, targets, targets_file, "immediate", None)
+        job, message = submit_scan_job(metadata.get("name", slug), slug, targets, targets_file, "immediate", None, skip_subdomain_discovery)
         rows = assemble_scan_rows()
         scan_row = next((row for row in rows if row["slug"] == slug), None)
         return jsonify({"message": message, "scan": scan_row, "job": job.to_dict()})
