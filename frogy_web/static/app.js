@@ -514,8 +514,15 @@ async function submitScan(mode) {
     targets: targetsText,
     start_mode: mode,
     skip_subdomain_discovery: skipSubdomainDiscovery,
+    group: elements.modalGroup ? elements.modalGroup.value : null,
   };
   if (scheduledFor) payload.scheduled_for = scheduledFor;
+
+  // Add recurring schedule if checked
+  if (mode === "schedule" && elements.modalRecurring && elements.modalRecurring.checked) {
+    payload.recurring = true;
+    payload.recurrence = elements.modalRecurrence ? elements.modalRecurrence.value : "daily";
+  }
 
   const slug = state.modalMode === "edit" ? state.editingSlug : null;
   const endpoint = slug ? `/api/scans/${encodeURIComponent(slug)}` : "/api/scans";
@@ -800,9 +807,104 @@ function setupEventHandlers() {
   }
 }
 
+// Load groups
+async function loadGroups() {
+  try {
+    const response = await fetch("/api/groups");
+    const data = await response.json();
+    state.groups = data.groups || [];
+    populateGroupDropdown();
+    renderGroupsGrid();
+  } catch (error) {
+    console.error("Failed to load groups:", error);
+  }
+}
+
+function populateGroupDropdown() {
+  if (!elements.modalGroup) return;
+  elements.modalGroup.innerHTML = '<option value="">No group</option>';
+  state.groups.forEach(group => {
+    const option = document.createElement("option");
+    option.value = group.id;
+    option.textContent = group.name;
+    elements.modalGroup.appendChild(option);
+  });
+}
+
+function renderGroupsGrid() {
+  if (!elements.groupsGrid) return;
+  if (state.groups.length === 0) {
+    elements.groupsGrid.innerHTML = '<div class="empty-state"><p>No groups yet. Create one with <strong>New Group</strong>.</p></div>';
+    return;
+  }
+  elements.groupsGrid.innerHTML = "";
+  state.groups.forEach(group => {
+    const card = document.createElement("div");
+    card.className = "group-card";
+    card.innerHTML = "<div class=\"group-card-header\"><h3 class=\"group-name\">" + group.name + "</h3><span class=\"group-badge " + group.color + "\"></span></div>" + (group.description ? "<p class=\"group-description\">" + group.description + "</p>" : "") + "<div class=\"group-stats\"><span>" + (group.scan_count || 0) + " scans</span></div>";
+    elements.groupsGrid.appendChild(card);
+  });
+}
+
+// Wire up groups
+if (elements.newGroupBtn) {
+  elements.newGroupBtn.addEventListener("click", () => openGroupModal());
+}
+
+if (elements.groupCreateBtn) {
+  elements.groupCreateBtn.addEventListener("click", createGroup);
+}
+
+if (elements.groupCancelBtn && elements.groupModalClose) {
+  elements.groupCancelBtn.addEventListener("click", closeGroupModal);
+  elements.groupModalClose.addEventListener("click", closeGroupModal);
+}
+
+function openGroupModal() {
+  if (!elements.groupModal) return;
+  elements.groupName.value = "";
+  elements.groupDescription.value = "";
+  elements.groupColor.value = "blue";
+  elements.groupModalFeedback.textContent = "";
+  elements.groupModal.classList.remove("hidden");
+  elements.groupModal.classList.add("show");
+  elements.backdrop.classList.add("show");
+}
+
+function closeGroupModal() {
+  if (!elements.groupModal) return;
+  elements.groupModal.classList.remove("show");
+  setTimeout(() => { elements.groupModal.classList.add("hidden"); }, 200);
+}
+
+async function createGroup() {
+  const name = elements.groupName.value.trim();
+  const description = elements.groupDescription.value.trim();
+  const color = elements.groupColor.value;
+  if (!name) {
+    elements.groupModalFeedback.textContent = "Group name is required.";
+    return;
+  }
+  try {
+    const response = await fetch("/api/groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description, color }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Failed to create group");
+    closeGroupModal();
+    refreshFlash(data.message || "Group created successfully.", "success");
+    await loadGroups();
+  } catch (error) {
+    elements.groupModalFeedback.textContent = error.message;
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   setupTheme();
   setupEventHandlers();
   await loadScans();
+  await loadGroups();
   startPolling();
 });
