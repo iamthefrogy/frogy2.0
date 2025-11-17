@@ -22,11 +22,15 @@
     <section class="panel">
       <div class="panel-header">
         <div>
-          <h2>Scan History</h2>
-          <p class="panel-subtitle">Select a scan to modify, rerun, or clean up results.</p>
+          <div class="tabs">
+            <button class="tab-btn active" data-tab="scans">All Scans</button>
+            <button class="tab-btn" data-tab="groups">Scan Groups</button>
+            <button class="tab-btn" data-tab="scheduler">Scheduler</button>
+          </div>
         </div>
         <div class="panel-actions">
           <button id="new-scan-btn" type="button">New Scan</button>
+          <button id="new-group-btn" type="button">New Group</button>
           <button id="modify-scan-btn" type="button" disabled>Modify</button>
           <button id="delete-scan-btn" type="button" disabled>Delete</button>
         </div>
@@ -34,30 +38,52 @@
 
       <div id="flash-message" class="flash" aria-live="polite"></div>
 
-      <div class="table-wrapper">
-        <table id="scan-table">
-          <thead>
-            <tr>
-              <th scope="col" class="select-col">
-                <input type="checkbox" id="select-all" aria-label="Select all scans">
-              </th>
-              <th scope="col">#</th>
-              <th scope="col">Project</th>
-              <th scope="col">Targets</th>
-              <th scope="col">Progress</th>
-              <th scope="col">Last Run</th>
-              <th scope="col">Status</th>
-              <th scope="col">View Results</th>
-              <th scope="col" class="download-col">Download Report</th>
-              <th scope="col" class="actions-col">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="scan-table-body">
-            <tr class="empty">
-              <td colspan="10">No scans yet. Start with <strong>New Scan</strong>.</td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- All Scans Tab -->
+      <div id="scans-tab" class="tab-content active">
+        <div class="table-wrapper">
+          <table id="scan-table">
+            <thead>
+              <tr>
+                <th scope="col" class="select-col">
+                  <input type="checkbox" id="select-all" aria-label="Select all scans">
+                </th>
+                <th scope="col">#</th>
+                <th scope="col">Project</th>
+                <th scope="col">Group</th>
+                <th scope="col">Targets</th>
+                <th scope="col">Progress</th>
+                <th scope="col">Last Run</th>
+                <th scope="col">Status</th>
+                <th scope="col">View Results</th>
+                <th scope="col" class="download-col">Download Report</th>
+                <th scope="col" class="actions-col">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="scan-table-body">
+              <tr class="empty">
+                <td colspan="11">No scans yet. Start with <strong>New Scan</strong>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Scan Groups Tab -->
+      <div id="groups-tab" class="tab-content hidden">
+        <div class="groups-grid" id="groups-grid">
+          <div class="empty-state">
+            <p>No groups yet. Create one with <strong>New Group</strong>.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scheduler Tab -->
+      <div id="scheduler-tab" class="tab-content hidden">
+        <div class="scheduler-list" id="scheduler-list">
+          <div class="empty-state">
+            <p>No scheduled scans. Create recurring scans from the scan modal.</p>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -68,6 +94,7 @@
 
   <div id="modal-backdrop" class="modal-backdrop hidden"></div>
 
+  <!-- Scan Modal -->
   <section id="scan-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-content">
       <header class="modal-header">
@@ -78,6 +105,12 @@
         <div class="modal-field">
           <label for="modal-project-name">Project name</label>
           <input id="modal-project-name" name="project-name" type="text" placeholder="my-security-assessment" required>
+        </div>
+        <div class="modal-field">
+          <label for="modal-group">Group <span class="label-hint">(optional)</span></label>
+          <select id="modal-group" name="group">
+            <option value="">No group</option>
+          </select>
         </div>
         <div class="modal-field">
           <label for="modal-targets">
@@ -109,6 +142,21 @@
         <div class="modal-field hidden" id="modal-schedule-field">
           <label for="modal-schedule">Schedule start</label>
           <input id="modal-schedule" name="schedule" type="datetime-local">
+          <div class="modal-field" style="margin-top: 12px;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input id="modal-recurring" name="recurring" type="checkbox" style="margin-right: 8px;">
+              <span>Recurring scan</span>
+            </label>
+          </div>
+          <div class="modal-field hidden" id="modal-recurrence-field">
+            <label for="modal-recurrence">Recurrence</label>
+            <select id="modal-recurrence" name="recurrence">
+              <option value="hourly">Every Hour</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
         </div>
         <div id="modal-feedback" class="feedback" aria-live="polite"></div>
         <div class="modal-actions">
@@ -121,6 +169,61 @@
     </div>
   </section>
 
+  <!-- Group Modal -->
+  <section id="group-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="group-modal-title">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="group-modal-title">New Scan Group</h2>
+        <button id="group-modal-close" type="button" aria-label="Close">&times;</button>
+      </header>
+      <form id="group-modal-form">
+        <div class="modal-field">
+          <label for="group-name">Group name</label>
+          <input id="group-name" name="group-name" type="text" placeholder="Production Scans" required>
+        </div>
+        <div class="modal-field">
+          <label for="group-description">Description <span class="label-hint">(optional)</span></label>
+          <textarea id="group-description" name="group-description" rows="3" placeholder="Scans for production infrastructure"></textarea>
+        </div>
+        <div class="modal-field">
+          <label for="group-color">Color</label>
+          <select id="group-color" name="group-color">
+            <option value="blue">Blue</option>
+            <option value="purple">Purple</option>
+            <option value="green">Green</option>
+            <option value="orange">Orange</option>
+            <option value="red">Red</option>
+            <option value="cyan">Cyan</option>
+          </select>
+        </div>
+        <div id="group-modal-feedback" class="feedback" aria-live="polite"></div>
+        <div class="modal-actions">
+          <button type="button" id="group-create-btn">Create Group</button>
+          <button type="button" id="group-cancel-btn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Scan History Modal -->
+  <section id="history-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
+    <div class="modal-content modal-large">
+      <header class="modal-header">
+        <h2 id="history-modal-title">Scan History</h2>
+        <button id="history-modal-close" type="button" aria-label="Close">&times;</button>
+      </header>
+      <div class="history-body">
+        <div id="history-list" class="history-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="history-modal-ok">Close</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Targets Modal -->
   <section id="targets-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="targets-modal-title">
     <div class="modal-content">
       <header class="modal-header">

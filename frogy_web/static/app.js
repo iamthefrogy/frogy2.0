@@ -197,6 +197,14 @@ function renderTable(scans) {
     }
     row.appendChild(projectCell);
 
+    // Group column
+    const groupCell = document.createElement("td");
+    const groupText = scan.group || "-";
+    groupCell.textContent = groupText;
+    groupCell.style.color = "var(--muted)";
+    groupCell.style.fontSize = "0.9rem";
+    row.appendChild(groupCell);
+
     const targetsCell = document.createElement("td");
     const targetsContent = document.createElement("div");
     targetsContent.className = "targets-content";
@@ -731,6 +739,50 @@ function setupEventHandlers() {
   });
 
   elements.themeToggle.addEventListener("click", toggleTheme);
+
+  // Tab switching
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tabName = btn.dataset.tab;
+
+      // Update tab buttons
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      // Update tab content
+      document.querySelectorAll(".tab-content").forEach(content => {
+        content.classList.remove("active");
+        content.classList.add("hidden");
+      });
+
+      const activeTab = document.getElementById(`${tabName}-tab`);
+      if (activeTab) {
+        activeTab.classList.add("active");
+        activeTab.classList.remove("hidden");
+      }
+    });
+  });
+
+  // New Group button (placeholder - full implementation needs backend)
+  const newGroupBtn = document.getElementById("new-group-btn");
+  if (newGroupBtn) {
+    newGroupBtn.addEventListener("click", () => {
+      refreshFlash("Scan Groups feature coming soon! Groups will help organize your scans.", "info");
+    });
+  }
+
+  // Recurring schedule checkbox
+  const recurringCheckbox = document.getElementById("modal-recurring");
+  const recurrenceField = document.getElementById("modal-recurrence-field");
+  if (recurringCheckbox && recurrenceField) {
+    recurringCheckbox.addEventListener("change", () => {
+      if (recurringCheckbox.checked) {
+        recurrenceField.classList.remove("hidden");
+      } else {
+        recurrenceField.classList.add("hidden");
+      }
+    });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
