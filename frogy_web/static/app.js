@@ -2,6 +2,8 @@ const domainPattern = /^[A-Za-z0-9.-]+$/;
 
 const state = {
   scans: [],
+  groups: [],
+  schedules: [],
   selected: new Set(),
   pollTimer: null,
   pollInterval: 5000,
@@ -23,11 +25,14 @@ const elements = {
   modalTitle: document.getElementById("modal-title"),
   modalForm: document.getElementById("modal-form"),
   modalName: document.getElementById("modal-project-name"),
+  modalGroup: document.getElementById("modal-group"),
   modalTargets: document.getElementById("modal-targets"),
   scanModeIndicator: document.getElementById("scan-mode-indicator"),
   modeText: document.getElementById("mode-text"),
   modalScheduleField: document.getElementById("modal-schedule-field"),
   modalSchedule: document.getElementById("modal-schedule"),
+  modalRecurring: document.getElementById("modal-recurring"),
+  modalRecurrence: document.getElementById("modal-recurrence"),
   modalFeedback: document.getElementById("modal-feedback"),
   modalClose: document.getElementById("modal-close"),
   modalCancel: document.getElementById("modal-cancel"),
@@ -37,6 +42,16 @@ const elements = {
   targetsModalOk: document.getElementById("targets-modal-ok"),
   targetsList: document.getElementById("targets-list"),
   targetsCount: document.getElementById("targets-count"),
+  groupsGrid: document.getElementById("groups-grid"),
+  schedulerList: document.getElementById("scheduler-list"),
+  groupModal: document.getElementById("group-modal"),
+  groupModalClose: document.getElementById("group-modal-close"),
+  groupName: document.getElementById("group-name"),
+  groupDescription: document.getElementById("group-description"),
+  groupColor: document.getElementById("group-color"),
+  groupCreateBtn: document.getElementById("group-create-btn"),
+  groupCancelBtn: document.getElementById("group-cancel-btn"),
+  groupModalFeedback: document.getElementById("group-modal-feedback"),
 };
 
 function refreshFlash(message, type = "info") {

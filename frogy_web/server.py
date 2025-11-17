@@ -31,6 +31,8 @@ BASE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BASE_DIR.parent
 OUTPUT_DIR = REPO_ROOT / "output"
 PROJECTS_DIR = OUTPUT_DIR / "projects"
+GROUPS_DIR = OUTPUT_DIR / "groups"
+SCHEDULES_DIR = OUTPUT_DIR / "schedules"
 FROGY_SCRIPT = REPO_ROOT / "frogy.sh"
 
 TOTAL_PIPELINE_STEPS = 17
@@ -89,6 +91,8 @@ def ensure_unique_slug(base: str) -> str:
 def ensure_structure() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+    GROUPS_DIR.mkdir(parents=True, exist_ok=True)
+    SCHEDULES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def parse_targets(raw: str) -> List[str]:
@@ -128,6 +132,81 @@ def load_metadata(project_dir: Path) -> Dict:
 def save_metadata(project_dir: Path, data: Dict) -> None:
     meta_file = project_dir / "metadata.json"
     meta_file.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def load_all_groups() -> List[Dict]:
+    """Load all scan groups from disk"""
+    groups = []
+    if not GROUPS_DIR.exists():
+        return groups
+    for group_file in GROUPS_DIR.glob("*.json"):
+        try:
+            group_data = json.loads(group_file.read_text(encoding="utf-8"))
+            groups.append(group_data)
+        except (json.JSONDecodeError, OSError):
+            continue
+    return sorted(groups, key=lambda g: g.get("name", ""))
+
+
+def load_group(group_id: str) -> Optional[Dict]:
+    """Load a specific group by ID"""
+    group_file = GROUPS_DIR / f"{group_id}.json"
+    if not group_file.exists():
+        return None
+    try:
+        return json.loads(group_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def save_group(group_data: Dict) -> None:
+    """Save a group to disk"""
+    group_id = group_data.get("id")
+    if not group_id:
+        return
+    group_file = GROUPS_DIR / f"{group_id}.json"
+    group_file.write_text(json.dumps(group_data, indent=2), encoding="utf-8")
+
+
+def delete_group(group_id: str) -> bool:
+    """Delete a group from disk"""
+    group_file = GROUPS_DIR / f"{group_id}.json"
+    if group_file.exists():
+        group_file.unlink()
+        return True
+    return False
+
+
+def load_all_schedules() -> List[Dict]:
+    """Load all recurring schedules from disk"""
+    schedules = []
+    if not SCHEDULES_DIR.exists():
+        return schedules
+    for schedule_file in SCHEDULES_DIR.glob("*.json"):
+        try:
+            schedule_data = json.loads(schedule_file.read_text(encoding="utf-8"))
+            schedules.append(schedule_data)
+        except (json.JSONDecodeError, OSError):
+            continue
+    return sorted(schedules, key=lambda s: s.get("created_at", ""))
+
+
+def save_schedule(schedule_data: Dict) -> None:
+    """Save a recurring schedule to disk"""
+    schedule_id = schedule_data.get("id")
+    if not schedule_id:
+        return
+    schedule_file = SCHEDULES_DIR / f"{schedule_id}.json"
+    schedule_file.write_text(json.dumps(schedule_data, indent=2), encoding="utf-8")
+
+
+def delete_schedule(schedule_id: str) -> bool:
+    """Delete a schedule from disk"""
+    schedule_file = SCHEDULES_DIR / f"{schedule_id}.json"
+    if schedule_file.exists():
+        schedule_file.unlink()
+        return True
+    return False
 
 
 def load_json_file(path: Path) -> Any:
@@ -883,6 +962,14 @@ def create_app() -> Flask:
                 if raw_scheduled:
                     scheduled_for_display = format_status_time(raw_scheduled)
 
+            # Get group name if group ID exists
+            group_id = metadata.get("group")
+            group_name = None
+            if group_id:
+                group_data = load_group(group_id)
+                if group_data:
+                    group_name = group_data.get("name")
+
             rows.append(
                 {
                     "slug": slug,
@@ -904,6 +991,8 @@ def create_app() -> Flask:
                     "is_queued": status == "queued",
                     "is_scheduled": status == "scheduled",
                     "skip_subdomain_discovery": bool(metadata.get("skip_subdomain_discovery", False)),
+                    "group": group_name,
+                    "group_id": group_id,
                 }
             )
 
@@ -972,6 +1061,9 @@ def create_app() -> Flask:
         start_mode = (payload.get("start_mode") or "immediate").strip().lower()
         scheduled_raw = (payload.get("scheduled_for") or "").strip()
         skip_subdomain_discovery = bool(payload.get("skip_subdomain_discovery", False))
+        group_id = (payload.get("group") or "").strip() or None
+        recurring = bool(payload.get("recurring", False))
+        recurrence = (payload.get("recurrence") or "daily").strip()
 
         if not project_name:
             return jsonify({"error": "Company name is required."}), 400
@@ -1005,6 +1097,7 @@ def create_app() -> Flask:
             "created_at": isoformat(utc_now()),
             "latest_targets": targets,
             "skip_subdomain_discovery": skip_subdomain_discovery,
+            "group": group_id,
             "runs": [],
         }
         save_metadata(project_dir, metadata)
@@ -1017,8 +1110,27 @@ def create_app() -> Flask:
             job, message = submit_scan_job(project_name, slug, targets, targets_file, start_mode, scheduled_for, skip_subdomain_discovery)
             job_info = job.to_dict()
 
+        # Create recurring schedule if requested
+        if recurring and start_mode == "schedule" and scheduled_for:
+            import uuid
+            schedule_id = f"schedule-{uuid.uuid4().hex[:8]}"
+            schedule_data = {
+                "id": schedule_id,
+                "project_slug": slug,
+                "project_name": project_name,
+                "recurrence": recurrence,
+                "start_time": isoformat(scheduled_for),
+                "enabled": True,
+                "created_at": isoformat(utc_now()),
+                "last_run": None,
+                "next_run": isoformat(scheduled_for),
+            }
+            save_schedule(schedule_data)
+            message += f" Recurring {recurrence} scan scheduled."
+
         metadata["latest_targets"] = targets
         metadata["skip_subdomain_discovery"] = skip_subdomain_discovery
+        metadata["group"] = group_id
         save_metadata(project_dir, metadata)
 
         rows = assemble_scan_rows()
@@ -1233,6 +1345,177 @@ def create_app() -> Flask:
         rows = assemble_scan_rows()
         scan_row = next((row for row in rows if row["slug"] == slug), None)
         return jsonify({"message": message, "scan": scan_row, "job": job.to_dict()})
+
+    # ===== GROUPS API =====
+
+    @app.route("/api/groups", methods=["GET"])
+    def api_get_groups():
+        """Get all scan groups"""
+        groups = load_all_groups()
+        # Add scan counts for each group
+        for group in groups:
+            group_id = group.get("id")
+            scan_count = 0
+            for project_dir in PROJECTS_DIR.glob("*"):
+                if not project_dir.is_dir():
+                    continue
+                metadata = load_metadata(project_dir)
+                if metadata.get("group") == group_id:
+                    scan_count += 1
+            group["scan_count"] = scan_count
+        return jsonify({"groups": groups})
+
+    @app.route("/api/groups", methods=["POST"])
+    def api_create_group():
+        """Create a new scan group"""
+        payload = request.get_json(force=True, silent=False) or {}
+        name = (payload.get("name") or "").strip()
+        description = (payload.get("description") or "").strip()
+        color = (payload.get("color") or "blue").strip()
+
+        if not name:
+            return jsonify({"error": "Group name is required."}), 400
+
+        # Generate unique ID
+        import uuid
+        group_id = f"group-{uuid.uuid4().hex[:8]}"
+
+        group_data = {
+            "id": group_id,
+            "name": name,
+            "description": description,
+            "color": color,
+            "created_at": isoformat(utc_now()),
+        }
+
+        save_group(group_data)
+        return jsonify({"message": "Group created.", "group": group_data}), 201
+
+    @app.route("/api/groups/<group_id>", methods=["DELETE"])
+    def api_delete_group(group_id: str):
+        """Delete a scan group"""
+        if delete_group(group_id):
+            # Remove group from all scans
+            for project_dir in PROJECTS_DIR.glob("*"):
+                if not project_dir.is_dir():
+                    continue
+                metadata = load_metadata(project_dir)
+                if metadata.get("group") == group_id:
+                    metadata["group"] = None
+                    save_metadata(project_dir, metadata)
+            return jsonify({"message": "Group deleted."})
+        return jsonify({"error": "Group not found."}), 404
+
+    # ===== SCHEDULES API =====
+
+    @app.route("/api/schedules", methods=["GET"])
+    def api_get_schedules():
+        """Get all recurring schedules"""
+        schedules = load_all_schedules()
+        return jsonify({"schedules": schedules})
+
+    @app.route("/api/schedules", methods=["POST"])
+    def api_create_schedule():
+        """Create a recurring scan schedule"""
+        payload = request.get_json(force=True, silent=False) or {}
+
+        project_slug = payload.get("project_slug")
+        recurrence = payload.get("recurrence", "daily")  # hourly, daily, weekly, monthly
+        start_time = payload.get("start_time")  # ISO datetime
+        enabled = payload.get("enabled", True)
+
+        if not project_slug:
+            return jsonify({"error": "project_slug is required."}), 400
+
+        try:
+            metadata = load_project_metadata(project_slug)
+        except FileNotFoundError:
+            return jsonify({"error": "Project not found."}), 404
+
+        import uuid
+        schedule_id = f"schedule-{uuid.uuid4().hex[:8]}"
+
+        schedule_data = {
+            "id": schedule_id,
+            "project_slug": project_slug,
+            "project_name": metadata.get("name", project_slug),
+            "recurrence": recurrence,
+            "start_time": start_time,
+            "enabled": enabled,
+            "created_at": isoformat(utc_now()),
+            "last_run": None,
+            "next_run": start_time,
+        }
+
+        save_schedule(schedule_data)
+        return jsonify({"message": "Schedule created.", "schedule": schedule_data}), 201
+
+    @app.route("/api/schedules/<schedule_id>", methods=["DELETE"])
+    def api_delete_schedule(schedule_id: str):
+        """Delete a recurring schedule"""
+        if delete_schedule(schedule_id):
+            return jsonify({"message": "Schedule deleted."})
+        return jsonify({"error": "Schedule not found."}), 404
+
+    @app.route("/api/schedules/<schedule_id>/toggle", methods=["POST"])
+    def api_toggle_schedule(schedule_id: str):
+        """Enable/disable a schedule"""
+        schedule_file = SCHEDULES_DIR / f"{schedule_id}.json"
+        if not schedule_file.exists():
+            return jsonify({"error": "Schedule not found."}), 404
+
+        schedule_data = json.loads(schedule_file.read_text(encoding="utf-8"))
+        schedule_data["enabled"] = not schedule_data.get("enabled", True)
+        save_schedule(schedule_data)
+
+        status = "enabled" if schedule_data["enabled"] else "disabled"
+        return jsonify({"message": f"Schedule {status}.", "schedule": schedule_data})
+
+    # ===== SCAN HISTORY API =====
+
+    @app.route("/api/scans/<slug>/history", methods=["GET"])
+    def api_scan_history(slug: str):
+        """Get all previous runs for a scan"""
+        project_dir = PROJECTS_DIR / slug
+        if not project_dir.exists():
+            return jsonify({"error": "Scan not found."}), 404
+
+        metadata = load_metadata(project_dir)
+        runs = metadata.get("runs", [])
+
+        # Enrich with run data
+        history = []
+        for run in runs:
+            run_id = run.get("id")
+            run_dir = project_dir / run_id
+
+            history_item = {
+                "run_id": run_id,
+                "started_at": run.get("started_at"),
+                "completed_at": run.get("completed_at"),
+                "status": run.get("status", "unknown"),
+                "error": run.get("error"),
+                "report": run.get("report"),
+            }
+
+            # Check if report exists
+            if run_dir.exists() and (run_dir / "report.html").exists():
+                history_item["has_report"] = True
+                history_item["report_url"] = f"/projects/{slug}/runs/{run_id}/report"
+            else:
+                history_item["has_report"] = False
+
+            history.append(history_item)
+
+        # Sort by completed_at descending (most recent first)
+        history.sort(key=lambda x: x.get("completed_at") or x.get("started_at") or "", reverse=True)
+
+        return jsonify({
+            "project_name": metadata.get("name", slug),
+            "slug": slug,
+            "history": history,
+            "total_runs": len(history)
+        })
 
     @app.route("/projects/<slug>/runs/<run_id>/report", methods=["GET"])
     def serve_report(slug: str, run_id: str):
