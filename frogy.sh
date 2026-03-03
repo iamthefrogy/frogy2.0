@@ -748,7 +748,7 @@ run_chaos() {
 # bread-and-butter subdomain discovery via subfinder
 run_subfinder() {
 	if [[ "$USE_SUBFINDER" == "true" ]]; then
-		info "[1/17] Running Subfinder..."
+		info "[1/22] Running Subfinder..."
 		subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent -all -o "$RUN_DIR/subfinder.txt" >/dev/null 2>&1 || true
 		merge_and_count "$RUN_DIR/subfinder.txt" "Subfinder"
 	fi
@@ -759,7 +759,7 @@ run_assetfinder() {
 	if [[ "$USE_ASSETFINDER" != "true" ]]; then
 		return 0
 	fi
-info "[2/17] Running Assetfinder..."
+info "[2/22] Running Assetfinder..."
 	local assetfinder_output="$RUN_DIR/assetfinder.txt"
 	>"$assetfinder_output"
 	local asset_status=0
@@ -777,7 +777,7 @@ info "[2/17] Running Assetfinder..."
 
 # leaning on crt.sh to shake out certificate-disclosed hosts
 run_crtsh() {
-info "[3/17] Running crt.sh..."
+info "[3/22] Running crt.sh..."
 	local crt_file="$RUN_DIR/whois.txt"
 	>"$crt_file"
 	local crt_status=0
@@ -821,7 +821,7 @@ run_gau() {
 	if [[ "$USE_GAU" != "true" ]]; then
 		return 0
 	fi
-info "[4/17] Running GAU…"
+info "[4/22] Running GAU…"
 
 	mkdir -p "$RUN_DIR/raw_output/gau"
 	local raw_urls="$RUN_DIR/raw_output/gau/urls.txt"
@@ -866,7 +866,7 @@ info "[4/17] Running GAU…"
 # quick DNS sweep to see what actually resolves
 run_dnsx() {
 	if [[ "$USE_DNSX" == "true" ]]; then
-		info "[6/17] Running dnsx..."
+		info "[6/22] Running dnsx..."
 		dnsx -silent \
 			-rl 50 \
 			-t 25 \
@@ -886,7 +886,7 @@ run_dnsx() {
 # port scan time; naabu checks which services even bother replying
 run_naabu() {
 	if [[ "$USE_NAABU" == "true" ]]; then
-		info "[7/17] Running naabu..."
+		info "[8/22] Running naabu..."
 		if [ ! -s "$MASTER_SUBS" ]; then
 			warning "Master subdomains file is empty. Skipping naabu."
 			return
@@ -972,7 +972,73 @@ generate_portscan_summary() {
 }
 
 # pulling rDNS and ASN notes so the report has context on each IP
+# parallelised: 8 concurrent workers via xargs
+_ip_intel_worker() {
+	local ip="$1"
+	[[ -z "$ip" ]] && return
+	local safe_ip
+	safe_ip=$(printf '%s' "$ip" | tr '/: ' '___')
+
+	local ptr_records=""
+	local ptr_raw
+	ptr_raw=$(dig +short -x "$ip" 2>/dev/null | sed 's/\.$//' || true)
+	[[ -n "$ptr_raw" ]] && ptr_records=$(printf '%s\n' "$ptr_raw" | paste -sd ', ' -)
+
+	local cymru_line=""
+	local cymru_output
+	cymru_output=$(whois -h whois.cymru.com " -v $ip" 2>/dev/null || true)
+	if [[ -n "$cymru_output" ]]; then
+		cymru_line=$(printf '%s\n' "$cymru_output" | awk -F'|' '
+			NR>1 && $1 ~ /[0-9]/ {
+				for(i=1;i<=NF;i++) gsub(/^[ \t]+|[ \t]+$/, "", $i);
+				printf "%s|%s|%s\n",$1,$3,$7;
+				exit
+			}' || true)
+	fi
+
+	local asn="" network="" provider=""
+	if [[ -n "$cymru_line" ]]; then
+		asn=$(echo "$cymru_line" | cut -d'|' -f1)
+		network=$(echo "$cymru_line" | cut -d'|' -f2)
+		provider=$(echo "$cymru_line" | cut -d'|' -f3)
+	fi
+
+	local whois_file
+	whois_file=$(mktemp)
+	if [[ -n "${WHOIS_LOCK:-}" ]]; then
+		(flock -x 200; whois "$ip" 2>/dev/null || true) 200>"$WHOIS_LOCK" >"$whois_file" || whois "$ip" >"$whois_file" 2>/dev/null || true
+	else
+		whois "$ip" >"$whois_file" 2>/dev/null || true
+	fi
+
+	if [[ -z "$network" ]]; then
+		network=$(awk -F: '/^[Cc][Ii][Dd][Rr]/ {print $2; exit}' "$whois_file" | xargs 2>/dev/null || true)
+		[[ -z "$network" ]] && network=$(awk -F: '/^NetRange/ {print $2; exit}' "$whois_file" | xargs 2>/dev/null || true)
+	fi
+	[[ -z "$asn" ]] && asn=$(awk -F: '/^origin/ {print $2; exit}' "$whois_file" | xargs 2>/dev/null || true)
+	[[ -z "$provider" ]] && provider=$(awk -F: '/^(OrgName|Org-name|descr|owner)/ {print $2; exit}' "$whois_file" | xargs 2>/dev/null || true)
+	rm -f "$whois_file"
+
+	[[ -n "$asn" && "$asn" != AS* ]] && asn="AS${asn}"
+
+	jq -n \
+		--arg ip "$ip" \
+		--arg ptr "${ptr_records:-}" \
+		--arg asn "${asn:-}" \
+		--arg provider "${provider:-}" \
+		--arg network "${network:-}" \
+		'{
+			ip: $ip,
+			ptr: ($ptr | select(length>0)),
+			asn: ($asn | select(length>0)),
+			provider: ($provider | select(length>0)),
+			network: ($network | select(length>0))
+		}' >"${IP_INTEL_TMP_DIR}/${safe_ip}.json" 2>/dev/null || true
+}
+export -f _ip_intel_worker
+
 generate_ip_intel() {
+	info "[9/22] Enriching IP intelligence (parallel workers)..."
 	local intel_file="$RUN_DIR/ip_enrichment.json"
 	local ip_candidates="$RUN_DIR/ip_candidates.txt"
 	>"$ip_candidates"
@@ -990,97 +1056,39 @@ generate_ip_intel() {
 	if [[ ! -s "$ip_candidates" ]]; then
 		echo "[]" >"$intel_file"
 		quality_check_json_array "IP enrichment" "$intel_file"
+		rm -f "$ip_candidates"
 		return
 	fi
 
 	sort -u "$ip_candidates" | sed '/^$/d' >"$ip_candidates.sorted"
 	mv "$ip_candidates.sorted" "$ip_candidates"
 
-	echo "[" >"$intel_file"
-	local first_entry=true
-	while IFS= read -r ip; do
-		[[ -z "$ip" ]] && continue
-		local ptr_records
-		local ptr_raw
-		ptr_raw=$(dig +short -x "$ip" 2>/dev/null | sed 's/\.$//' || true)
-		if [[ -n "$ptr_raw" ]]; then
-			ptr_records=$(printf '%s\n' "$ptr_raw" | paste -sd ', ' -)
-		else
-			ptr_records=""
-		fi
+	export IP_INTEL_TMP_DIR="$RUN_DIR/ip_intel_tmp"
+	mkdir -p "$IP_INTEL_TMP_DIR"
+	# export a global WHOIS lock file for rate-limiting
+	export WHOIS_LOCK="$RUN_DIR/.whois_ip.lock"
+	touch "$WHOIS_LOCK"
+	export RUN_DIR
 
-		local cymru_line=""
-		local cymru_output
-		cymru_output=$(whois -h whois.cymru.com " -v $ip" 2>/dev/null || true)
-		if [[ -n "$cymru_output" ]]; then
-			cymru_line=$(printf '%s\n' "$cymru_output" | awk -F'|' '
-				NR>1 && $1 ~ /[0-9]/ {
-					for(i=1;i<=NF;i++) gsub(/^[ \t]+|[ \t]+$/, "", $i);
-					printf "%s|%s|%s\n",$1,$3,$7;
-					exit
-				}' || true)
-		fi
+	# run 8 workers in parallel
+	cat "$ip_candidates" | xargs -P 8 -I {} bash -c '_ip_intel_worker "$@"' _ {}
 
-		local asn="" network="" provider=""
-		if [[ -n "$cymru_line" ]]; then
-			asn=$(echo "$cymru_line" | cut -d'|' -f1)
-			network=$(echo "$cymru_line" | cut -d'|' -f2)
-			provider=$(echo "$cymru_line" | cut -d'|' -f3)
-		fi
+	# merge per-IP JSON files into the final array
+	if ls "$IP_INTEL_TMP_DIR"/*.json >/dev/null 2>&1; then
+		jq -cs '.' "$IP_INTEL_TMP_DIR"/*.json >"$intel_file" 2>/dev/null || echo "[]" >"$intel_file"
+	else
+		echo "[]" >"$intel_file"
+	fi
 
-		local whois_file
-		whois_file=$(mktemp)
-		whois "$ip" >"$whois_file" 2>/dev/null || true
-
-		if [[ -z "$network" ]]; then
-			network=$(awk -F: '/^[Cc][Ii][Dd][Rr]/ {print $2; exit}' "$whois_file" | xargs)
-			if [[ -z "$network" ]]; then
-				network=$(awk -F: '/^NetRange/ {print $2; exit}' "$whois_file" | xargs)
-			fi
-		fi
-		if [[ -z "$asn" ]]; then
-			asn=$(awk -F: '/^origin/ {print $2; exit}' "$whois_file" | xargs)
-		fi
-		if [[ -z "$provider" ]]; then
-			provider=$(awk -F: '/^(OrgName|Org-name|descr|owner)/ {print $2; exit}' "$whois_file" | xargs)
-		fi
-		rm -f "$whois_file"
-
-		if [[ -n "$asn" && "$asn" != AS* ]]; then
-			asn="AS${asn}"
-		fi
-
-		local json_entry
-		json_entry=$(jq -n \
-			--arg ip "$ip" \
-			--arg ptr "${ptr_records:-}" \
-			--arg asn "${asn:-}" \
-			--arg provider "${provider:-}" \
-			--arg network "${network:-}" \
-			'{
-				ip: $ip,
-				ptr: ($ptr | select(length>0)),
-				asn: ($asn | select(length>0)),
-				provider: ($provider | select(length>0)),
-				network: ($network | select(length>0))
-			}')
-
-		if [[ "$first_entry" == true ]]; then
-			first_entry=false
-		else
-			echo "," >>"$intel_file"
-		fi
-		echo "  $json_entry" >>"$intel_file"
-	done <"$ip_candidates"
-	echo "]" >>"$intel_file"
+	rm -rf "$IP_INTEL_TMP_DIR"
+	rm -f "$ip_candidates" "$WHOIS_LOCK"
 	quality_check_json_array "IP enrichment" "$intel_file"
-	rm -f "$ip_candidates"
 }
 
 # httpx tells us which services are actually talking over HTTP/S
 run_httpx() {
 	if [[ "$USE_HTTPX" == "true" ]]; then
-		info "[8/17] Running httpx..."
+		info "[10/22] Running httpx..."
 		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 		local httpx_json_file="$RUN_DIR/httpx.json"
 
@@ -1098,6 +1106,7 @@ run_httpx() {
 			-rl 15
 			-timeout 15
 			-retries 2
+			-follow-redirects
 			-l "$final_urls_ports"
 		)
 
@@ -1216,6 +1225,7 @@ fi
 
 # mapping screenshots so the HTML can reference them quickly
 gather_screenshots() {
+	info "[14/22] Gathering screenshots..."
 	local screenshot_map_file="$RUN_DIR/screenshot_map.json"
 	local screenshot_dir="$RUN_DIR/screenshot"
 	local response_screenshot_dir="$RUN_DIR/response/screenshot"
@@ -1328,7 +1338,7 @@ gather_screenshots() {
 
 # quick crawl with katana to widen the URL funnel
 run_katana() {
-info "[9/17] Crawling links with Katana..."
+info "[12/22] Crawling links with Katana..."
 	local httpx_file="$RUN_DIR/httpx.json"
 	local output_file="$RUN_DIR/katana_links.json"
 
@@ -1363,16 +1373,130 @@ info "[9/17] Crawling links with Katana..."
 	echo "}" >>"$output_file"
 }
 
-# sniffing out login flows so folks know where auth might live
+# sniffing out login flows - parallelised with 10 workers, 2+ signal FP reduction
+_login_check_worker() {
+	local url="$1"
+	[[ -z "$url" ]] && return
+	local url_hash
+	url_hash=$(printf '%s' "$url" | cksum | cut -d' ' -f1)
+	local out_file="${LOGIN_TMP_DIR}/${url_hash}.json"
+
+	local headers_file body_file curl_err
+	headers_file=$(mktemp)
+	body_file=$(mktemp)
+	curl_err=$(mktemp)
+
+	if ! curl -s -S -L \
+		--connect-timeout "${CURL_CONNECT_TIMEOUT:-10}" \
+		--max-time "${CURL_MAX_TIME:-25}" \
+		-D "$headers_file" \
+		-o "$body_file" \
+		"$url" \
+		2>"$curl_err"; then
+		local curl_exit=$?
+		rm -f "$headers_file" "$body_file" "$curl_err"
+		if [[ $curl_exit -ne 35 ]]; then
+			jq -n --arg url "$url" '{ url: $url, final_url: "", login_detection: { login_found: "No", login_details: [] } }' >"$out_file" 2>/dev/null || true
+		fi
+		return
+	fi
+	rm -f "$curl_err"
+
+	set +e
+	local final_url
+	final_url=$(curl -s -S -L \
+		--connect-timeout "${CURL_CONNECT_TIMEOUT:-10}" \
+		--max-time "${CURL_MAX_TIME:-25}" \
+		-o /dev/null -w "%{url_effective}" "$url" 2>/dev/null)
+	set -e
+	[[ -z "$final_url" ]] && final_url="$url"
+
+	local -a reasons=()
+	local -a strong_reasons=()
+
+	# --- STRONG signals (each alone sufficient) ---
+	if grep -qi -E '<input[^>]*type=["'"'"']password["'"'"']' "$body_file" 2>/dev/null; then
+		strong_reasons+=("Found password field")
+	fi
+	if grep -qi -E '^HTTP/.*[[:space:]]+(401|407)' "$headers_file" 2>/dev/null; then
+		strong_reasons+=("HTTP 401/407 authentication required")
+	fi
+	if grep -qi 'WWW-Authenticate' "$headers_file" 2>/dev/null; then
+		strong_reasons+=("Found WWW-Authenticate header")
+	fi
+
+	# --- WEAK signals (need 2+ to fire) ---
+	if grep -qi -E '<input[^>]*(name|id)=["'"'"']?(username|user|email|userid|loginid)' "$body_file" 2>/dev/null; then
+		reasons+=("Found username/email field")
+	fi
+	if grep -qi -E '<form[^>]*(action|id|name)[[:space:]]*=[[:space:]]*["'"'"'][^"'"'"'>]*(login|log[-]?in|signin|auth|session|passwd|pwd|credential|oauth|token|sso)' "$body_file" 2>/dev/null; then
+		reasons+=("Found form with login-related attributes")
+	fi
+	if grep -qi -E '(<input[^>]*type=["'"'"']submit["'"'"'][^>]*value=["'"'"']?(login|sign[[:space:]]*in|authenticate)|<button[^>]*>([[:space:]]*)?(login|sign[[:space:]]*in|authenticate))' "$body_file" 2>/dev/null; then
+		reasons+=("Found submit button with login text")
+	fi
+	if grep -qi -E 'Forgot[[:space:]]*Password|Reset[[:space:]]*Password' "$body_file" 2>/dev/null; then
+		reasons+=("Found password reset text")
+	fi
+	if grep -qi -E '<input[^>]*type=["'"'"']hidden["'"'"'][^>]*(csrf|token|authenticity|nonce|xsrf)' "$body_file" 2>/dev/null; then
+		reasons+=("Found hidden CSRF/token field")
+	fi
+	if grep -qi -E '(recaptcha|g-recaptcha|hcaptcha)' "$body_file" 2>/dev/null; then
+		reasons+=("Found CAPTCHA widget")
+	fi
+	if grep -qi -E '(loginModal|modal[-_]?login|popup[-_]?login)' "$body_file" 2>/dev/null; then
+		reasons+=("Found modal/popup login hint")
+	fi
+	if grep -qi -E '(firebase\.auth|Auth0\.WebAuth|passport\.authenticate)' "$body_file" 2>/dev/null; then
+		reasons+=("Found JavaScript auth library reference")
+	fi
+	if grep -qi -E 'Set-Cookie:[[:space:]]*(sessionid|PHPSESSID|JSESSIONID|auth_token|jwt)' "$headers_file" 2>/dev/null; then
+		reasons+=("Found session cookie in response")
+	fi
+	if grep -qi -E 'Location:.*(login|signin|auth)' "$headers_file" 2>/dev/null; then
+		reasons+=("Found redirect to login URL")
+	fi
+	if echo "$final_url" | grep -qiE '/(login|signin|auth|wp-login\.php|wp-admin|users/sign_in|member/login|login\.aspx|signin\.aspx)' 2>/dev/null; then
+		reasons+=("Final URL path suggests login endpoint")
+	fi
+	if grep -qi -E '(iniciar[[:space:]]+sesi|connexion|anmelden|accedi|entrar|inloggen)' "$body_file" 2>/dev/null; then
+		reasons+=("Found multi-language login keyword")
+	fi
+
+	rm -f "$headers_file" "$body_file"
+
+	# --- decision: strong single OR 2+ weak signals ---
+	local login_found="No"
+	local -a all_reasons=("${strong_reasons[@]}")
+	if [[ "${#strong_reasons[@]}" -gt 0 ]]; then
+		login_found="Yes"
+	elif [[ "${#reasons[@]}" -ge 2 ]]; then
+		login_found="Yes"
+		all_reasons+=("${reasons[@]}")
+	fi
+
+	local json_details
+	json_details=$(printf '%s\n' "${all_reasons[@]:-none}" | grep -v '^none$' | jq -R . 2>/dev/null | jq -s . 2>/dev/null || echo '[]')
+
+	jq -n \
+		--arg url "$url" \
+		--arg final_url "$final_url" \
+		--arg login_found "$login_found" \
+		--argjson details "$json_details" \
+		'{ url: $url, final_url: $final_url, login_detection: { login_found: $login_found, login_details: $details } }' \
+		>"$out_file" 2>/dev/null || true
+}
+export -f _login_check_worker
+
 run_login_detection() {
-	info "[10/17] Detecting Login panels..."
+	info "[15/22] Detecting Login panels (parallel workers)..."
 	local input_file="$RUN_DIR/httpx.json"
 	local output_file="$RUN_DIR/login.json"
 
 	: "${CURL_CONNECT_TIMEOUT:=10}"
 	: "${CURL_MAX_TIME:=25}"
 
-	if [ ! -f "$input_file" ]; then
+	if [[ ! -f "$input_file" ]]; then
 		echo "[]" >"$output_file"
 		quality_check_json_array "Login detection" "$output_file"
 		return
@@ -1383,158 +1507,35 @@ run_login_detection() {
 		return
 	fi
 
-	local urls
-	urls=$(jq -r '.url' "$input_file")
-	local tmp_dir
-	tmp_dir=$(mktemp -d) || {
-		error "mktemp failed"
-		return
-	}
-	echo "[" >"$output_file"
-	local first_entry=true
+	export LOGIN_TMP_DIR="$RUN_DIR/login_tmp"
+	mkdir -p "$LOGIN_TMP_DIR"
+	export CURL_CONNECT_TIMEOUT CURL_MAX_TIME RUN_DIR
 
-	detect_login() {
-		local headers_file="$1"
-		local body_file="$2"
-		local final_url="$3"
-		local -a reasons=()
+	local urls_file="$RUN_DIR/login_urls.txt"
+	jq -r 'if type=="array" then .[].url else .url end' "$input_file" 2>/dev/null | grep -v '^null$' | sort -u >"$urls_file" || true
 
-		if grep -qi -E '<input[^>]*type=["'"'"']password["'"'"']' "$body_file"; then
-			reasons+=("Found password field")
-		fi
-		if grep -qi -E '<input[^>]*(name|id)=["'"'"']?(username|user|email|userid|loginid)' "$body_file"; then
-			reasons+=("Found username/email field")
-		fi
-		if grep -qi -E '<form[^>]*(action|id|name)[[:space:]]*=[[:space:]]*["'"'"'][^"'"'"'>]*(login|log[-]?in|signin|auth|session|user|passwd|pwd|credential|verify|oauth|token|sso)' "$body_file"; then
-			reasons+=("Found form with login-related attributes")
-		fi
-		if grep -qi -E '(<input[^>]*type=["'"'"']submit["'"'"'][^>]*value=["'"'"']?(login|sign[[:space:]]*in|authenticate)|<button[^>]*>([[:space:]]*)?(login|sign[[:space:]]*in|authenticate))' "$body_file"; then
-			reasons+=("Found submit button with login text")
-		fi
-		if grep -qi -E 'Forgot[[:space:]]*Password|Reset[[:space:]]*Password|Sign[[:space:]]*in|Log[[:space:]]*in' "$body_file"; then
-			reasons+=("Found textual indicators for login")
-		fi
-		if grep -qi -E '<input[^>]*type=["'"'"']hidden["'"'"'][^>]*(csrf|token|authenticity|nonce|xsrf)' "$body_file"; then
-			reasons+=("Found hidden token field")
-		fi
-		if grep -qi -E '<meta[^>]+content=["'"'"'][^"'"'"']*(login|sign[[:space:]]*in)[^"'"'"']*["'"'"']' "$body_file"; then
-			reasons+=("Found meta tag mentioning login")
-		fi
-		if grep -qi -E '(recaptcha|g-recaptcha|hcaptcha)' "$body_file"; then
-			reasons+=("Found CAPTCHA widget")
-		fi
-		if grep -qi -E '(loginModal|modal[-_]?login|popup[-_]?login)' "$body_file"; then
-			reasons+=("Found modal/popup login hint")
-		fi
-		if grep -qi -E '(iniciar[[:space:]]+sesiÃ³n|connexion|anmelden|accedi|entrar|inloggen)' "$body_file"; then
-			reasons+=("Found multi-language login keyword")
-		fi
-		if grep -qi -E '(firebase\.auth|Auth0|passport)' "$body_file"; then
-			reasons+=("Found JavaScript auth library reference")
-		fi
-		if grep -qi -E '^HTTP/.*[[:space:]]+(401|403|407)' "$headers_file"; then
-			reasons+=("HTTP header indicates authentication requirement")
-		fi
-		if grep -qi 'WWW-Authenticate' "$headers_file"; then
-			reasons+=("Found WWW-Authenticate header")
-		fi
-		if grep -qi -E 'Set-Cookie:[[:space:]]*(sessionid|PHPSESSID|JSESSIONID|auth_token|jwt)' "$headers_file"; then
-			reasons+=("Found session cookie in headers")
-		fi
-		if grep -qi -E 'Location:.*(login|signin|auth)' "$headers_file"; then
-			reasons+=("Found redirection to login in headers")
-		fi
-		if echo "$final_url" | grep -qiE '/(login|signin|auth|account|admin|wp-login\.php|wp-admin|users/sign_in|member/login|login\.aspx|signin\.aspx)'; then
-			reasons+=("Final URL path suggests login endpoint")
-		fi
-		if echo "$final_url" | grep -qiE '[?&](redirect|action|auth|callback)='; then
-			reasons+=("Final URL query parameters indicate login action")
-		fi
+	if [[ -s "$urls_file" ]]; then
+		cat "$urls_file" | xargs -P 10 -I {} bash -c '_login_check_worker "$@"' _ {}
+	fi
+	rm -f "$urls_file"
 
-		local login_found="No"
-		if [ "${#reasons[@]}" -gt 0 ]; then
-			login_found="Yes"
-		fi
+	# merge per-URL results
+	if ls "$LOGIN_TMP_DIR"/*.json >/dev/null 2>&1; then
+		local count
+		count=$(ls "$LOGIN_TMP_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ')
+		LOGIN_FOUND_COUNT=$(grep -l '"login_found": "Yes"' "$LOGIN_TMP_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+		jq -cs '.' "$LOGIN_TMP_DIR"/*.json >"$output_file" 2>/dev/null || echo "[]" >"$output_file"
+	else
+		echo "[]" >"$output_file"
+	fi
 
-		local json_details
-		json_details=$(printf '%s\n' "${reasons[@]:-}" | jq -R . | jq -s .)
-
-		jq -n --arg login_found "$login_found" --argjson details "$json_details" \
-			'{login_found: $login_found, login_details: $details}'
-	}
-
-	for url in $urls; do
-		local headers_file
-		headers_file="$(mktemp -p "$tmp_dir" headers.XXXXXX)"
-		local body_file
-		body_file="$(mktemp -p "$tmp_dir" body.XXXXXX)"
-		local curl_err
-		curl_err="$(mktemp -p "$tmp_dir" curl.XXXXXX)"
-
-		if ! curl -s -S -L \
-			--connect-timeout "$CURL_CONNECT_TIMEOUT" \
-			--max-time "$CURL_MAX_TIME" \
-			-D "$headers_file" \
-			-o "$body_file" \
-			"$url" \
-			2>"$curl_err"; then
-			curl_exit=$?
-			if [ $curl_exit -eq 35 ]; then
-				rm -f "$headers_file" "$body_file" "$curl_err"
-				continue
-			fi
-			if [ "$first_entry" = true ]; then
-				first_entry=false
-			else
-				echo "," >>"$output_file"
-			fi
-			echo " { \"url\": \"${url}\", \"final_url\": \"\", \"login_detection\": { \"login_found\": \"No\", \"login_details\": [] } }" >>"$output_file"
-			rm -f "$headers_file" "$body_file" "$curl_err"
-			continue
-		fi
-		rm -f "$curl_err"
-
-		# follow redirects so we log where folks actually land
-		set +e
-		local final_url
-		final_url=$(curl -s -S -L \
-			--connect-timeout "$CURL_CONNECT_TIMEOUT" \
-			--max-time "$CURL_MAX_TIME" \
-			-o /dev/null -w "%{url_effective}" "$url")
-		local final_curl_exit=$?
-
-		# if curl choked, just stick with the original URL
-		if [ $final_curl_exit -ne 0 ] || [ -z "$final_url" ]; then
-			final_url="$url"
-		fi
-		set -e
-		local detection_json
-		detection_json=$(detect_login "$headers_file" "$body_file" "$final_url")
-
-		if echo "$detection_json" | grep -q '"login_found": "Yes"'; then
-			LOGIN_FOUND_COUNT=$((LOGIN_FOUND_COUNT + 1))
-		fi
-
-		if [ "$first_entry" = true ]; then
-			first_entry=false
-		else
-			echo "," >>"$output_file"
-		fi
-
-		echo "  { \"url\": \"${url}\", \"final_url\": \"${final_url}\", \"login_detection\": $detection_json }" >>"$output_file"
-
-		rm -f "$headers_file" "$body_file"
-	done
-
-	echo "]" >>"$output_file"
-
+	rm -rf "$LOGIN_TMP_DIR"
 	quality_check_json_array "Login detection" "$output_file"
-	rm -rf -- "$tmp_dir"
 }
 
 # using tlsx to grab cert metadata and expiry windows
 run_tls_inventory() {
-	info "[11/17] Building TLS certificate inventory..."
+	info "[16/22] Building TLS certificate inventory..."
 	local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 	local tls_json="$RUN_DIR/tls_inventory.json"
 	local tlsx_raw="$RUN_DIR/tls_inventory_raw.jsonl"
@@ -1636,29 +1637,331 @@ run_tls_inventory() {
 		echo "[]" >"$tls_json"
 	fi
 
+	# add SSL/TLS letter grade (A+ A B C D F) based on version + cipher + expiry
+	if [[ -s "$tls_json" ]]; then
+		local now_ts
+		now_ts=$(date +%s)
+		local tmp_graded
+		tmp_graded=$(mktemp)
+		jq --argjson now "$now_ts" '
+			map(
+				. as $rec |
+				($rec.TLSVersion // "") as $ver |
+				($rec.DaysUntilExpiry // 9999) as $days |
+				($rec.ProbeStatus // false) as $ok |
+				($rec.Cipher // "" | ascii_downcase) as $cipher |
+				(
+					if ($ok | not) then "F"
+					elif ($days < 0) then "F"
+					elif ($ver == "SSL 3.0") then "F"
+					elif ($ver == "TLS 1.0") then "D"
+					elif ($ver == "TLS 1.1") then "C"
+					elif ($ver == "TLS 1.2") then
+						(if ($days <= 30) then "B"
+						 elif ($cipher | test("rc4|des|null|export|anon"; "i")) then "B"
+						 else "A"
+						 end)
+					elif ($ver == "TLS 1.3") then
+						(if ($days >= 30) then "A+"
+						 else "A"
+						 end)
+					else "B"
+					end
+				) as $grade |
+				$rec + { TLSGrade: $grade }
+			)
+		' "$tls_json" >"$tmp_graded" 2>/dev/null && mv "$tmp_graded" "$tls_json" || rm -f "$tmp_graded"
+	fi
+
 	quality_check_json_array "TLS inventory" "$tls_json"
 	rm -f "$tlsx_raw"
 }
 
-# checking DNS hygiene, email auth, and handy headers in one pass
+# per-domain compliance worker (called in parallel via xargs)
+_compliance_domain_worker() {
+	local domain="$1"
+	[[ -z "$domain" ]] && return
+	local domain_key
+	domain_key=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
+	local dig_opts=("+time=3" "+tries=1")
+
+	local dns_entry
+	dns_entry=$(jq -c --arg key "$domain_key" '.[$key] // null' "$COMP_DNS_MAP" 2>/dev/null || echo null)
+	local dns_status="" dns_resolvers="" dns_a="" dns_cname=""
+	if [[ "$dns_entry" != "null" ]]; then
+		dns_status=$(echo "$dns_entry" | jq -r '.status // ""' 2>/dev/null || true)
+		dns_resolvers=$(echo "$dns_entry" | jq -r '(.resolver // []) | join("\n")' 2>/dev/null || true)
+		dns_a=$(echo "$dns_entry" | jq -r '(.a // []) | join("\n")' 2>/dev/null || true)
+		dns_cname=$(echo "$dns_entry" | jq -r '(.cname // []) | join("\n")' 2>/dev/null || true)
+	fi
+
+	local spf dkim dmarc dnskey dnssec ns txt srv ptr mx soa caa
+	local a_records aaaa_records cname_records zone_transfer whois_summary
+
+	spf=$(dig "${dig_opts[@]}" +short TXT "$domain" 2>/dev/null | grep -i "v=spf1" | head -n 1 || true)
+	[ -z "$spf" ] && spf="No SPF Record"
+	dkim=$(dig "${dig_opts[@]}" +short TXT "default._domainkey.$domain" 2>/dev/null | grep -i "v=DKIM1" | head -n 1 || true)
+	[ -z "$dkim" ] && dkim="No DKIM Record"
+	dmarc=$(dig "${dig_opts[@]}" +short TXT "_dmarc.$domain" 2>/dev/null | grep -i "v=DMARC1" | head -n 1 || true)
+	[ -z "$dmarc" ] && dmarc="No DMARC Record"
+	dnskey=$(dig "${dig_opts[@]}" +short DNSKEY "$domain" 2>/dev/null || true)
+	[[ -z "$dnskey" ]] && dnssec="DNSSEC Not Enabled" || dnssec="DNSSEC Enabled"
+	ns=$(dig "${dig_opts[@]}" +short NS "$domain" 2>/dev/null || true)
+	[ -z "$ns" ] && ns="No NS records found"
+	txt=$(dig "${dig_opts[@]}" +short TXT "$domain" 2>/dev/null || true)
+	srv=$(dig "${dig_opts[@]}" +short SRV "$domain" 2>/dev/null || true)
+	a_records="$dns_a"
+	[ -z "$a_records" ] && a_records=$(dig "${dig_opts[@]}" +short A "$domain" 2>/dev/null | sed '/^$/d' || true)
+	local a_record=""
+	ptr=""
+	[ -n "$a_records" ] && a_record=$(printf '%s\n' "$a_records" | head -n 1)
+	[ -n "$a_record" ] && ptr=$(dig "${dig_opts[@]}" +short -x "$a_record" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)
+	aaaa_records=$(dig "${dig_opts[@]}" +short AAAA "$domain" 2>/dev/null | sed '/^$/d' || true)
+	cname_records="$dns_cname"
+	[ -z "$cname_records" ] && cname_records=$(dig "${dig_opts[@]}" +short CNAME "$domain" 2>/dev/null | sed '/^$/d' || true)
+	mx=$(dig "${dig_opts[@]}" +short MX "$domain" 2>/dev/null || true)
+	soa=$(dig "${dig_opts[@]}" +short SOA "$domain" 2>/dev/null || true)
+	caa=$(dig "${dig_opts[@]}" +short CAA "$domain" 2>/dev/null || true)
+
+	zone_transfer="AXFR Not Permitted"
+	if [ -z "$ns" ] || [ "$ns" = "No NS records found" ]; then
+		zone_transfer="NS data unavailable"
+	else
+		while IFS= read -r ns_host || [ -n "$ns_host" ]; do
+			ns_host=$(echo "$ns_host" | tr -d '\r' | xargs)
+			[[ -z "$ns_host" ]] && continue
+			ns_host=${ns_host%.}
+			local axfr_output
+			axfr_output=$(timeout 6 dig +time=5 +tries=1 @"$ns_host" "$domain" AXFR 2>/dev/null | head -n 20 || true)
+			[ -z "$axfr_output" ] && continue
+			echo "$axfr_output" | grep -qiE 'transfer failed|timed out|refused|denied|not implemented|connection refused|SERVFAIL' && continue
+			if echo "$axfr_output" | grep -q $'\tIN\t'; then
+				zone_transfer="AXFR Permitted via $ns_host"
+				break
+			fi
+		done <<<"$ns"
+	fi
+
+	# rate-limited WHOIS
+	if ! command -v whois >/dev/null 2>&1; then
+		whois_summary="WHOIS client unavailable"
+	else
+		local whois_raw
+		(flock -x 200; whois "$domain" 2>/dev/null || true) 200>"${COMP_WHOIS_LOCK}" >"${RUN_DIR}/.whois_tmp_${domain_key//[^a-z0-9]/_}" 2>/dev/null || true
+		whois_raw=$(cat "${RUN_DIR}/.whois_tmp_${domain_key//[^a-z0-9]/_}" 2>/dev/null || true)
+		rm -f "${RUN_DIR}/.whois_tmp_${domain_key//[^a-z0-9]/_}"
+		if echo "$whois_raw" | grep -qiE 'limit exceeded|quota exceeded|rate limit|exceeded the maximum number|WHOIS LIMIT'; then
+			whois_summary="WHOIS query cap reached"
+		elif [ -z "$whois_raw" ]; then
+			whois_summary="WHOIS data unavailable"
+		else
+			local registrar created updated expires registrant_org registrant_country
+			for pattern in "Registrar:" "Sponsoring Registrar:" "Registrar Name:"; do
+				registrar=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+				[ -n "$registrar" ] && break
+			done
+			for pattern in "Creation Date:" "Created On:" "Registered On:"; do
+				created=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+				[ -n "$created" ] && break
+			done
+			for pattern in "Updated Date:" "Last Updated On:" "Modified:"; do
+				updated=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+				[ -n "$updated" ] && break
+			done
+			for pattern in "Expiration Date:" "Expiry Date:" "Registry Expiry Date:"; do
+				expires=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+				[ -n "$expires" ] && break
+			done
+			for pattern in "Registrant Organization:" "OrgName:"; do
+				registrant_org=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+				[ -n "$registrant_org" ] && break
+			done
+			for pattern in "Registrant Country:" "Country:"; do
+				registrant_country=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
+				[ -n "$registrant_country" ] && break
+			done
+			whois_summary=$(printf "Registrar: %s\nCreated: %s\nUpdated: %s\nExpires: %s\nOrg: %s\nCountry: %s" \
+				"${registrar:-Unknown}" "${created:-Unknown}" "${updated:-Unknown}" "${expires:-Unknown}" \
+				"${registrant_org:-Unknown}" "${registrant_country:-Unknown}")
+		fi
+	fi
+
+	local tls_entry ssl_version ssl_issuer cert_expiry
+	tls_entry=$(jq -c --arg key "$domain_key" '.[$key] // []' "$COMP_TLS_HOST_MAP" 2>/dev/null || echo '[]')
+	if [[ "$tls_entry" != "[]" ]]; then
+		ssl_version=$(echo "$tls_entry" | jq -r '[.[]? | (.TLSVersion // .HighestVersion // .VersionSummary) | select(. != null and . != "")] | first? // "N/A"' 2>/dev/null || echo "N/A")
+		ssl_issuer=$(echo "$tls_entry" | jq -r '[.[]? | (.IssuerDN // .CertificateIssuer // .IssuerCN) | select(. != null and . != "")] | first? // "N/A"' 2>/dev/null || echo "N/A")
+		cert_expiry=$(echo "$tls_entry" | jq -r '[.[]? | (.NotAfter // .ValidTo) | select(. != null and . != "")] | first? // "N/A"' 2>/dev/null || echo "N/A")
+	else
+		ssl_version="N/A"; ssl_issuer="N/A"; cert_expiry="N/A"
+	fi
+
+	local safe_key="${domain_key//[^a-z0-9._-]/_}"
+	jq -n \
+		--arg domain "$domain" \
+		--arg url "N/A" \
+		--arg spf "$spf" \
+		--arg dkim "$dkim" \
+		--arg dmarc "$dmarc" \
+		--arg dnssec "$dnssec" \
+		--arg ns "$ns" \
+		--arg txt "${txt:-}" \
+		--arg srv "${srv:-}" \
+		--arg ptr "${ptr:-}" \
+		--arg mx "${mx:-}" \
+		--arg soa "${soa:-}" \
+		--arg caa "${caa:-}" \
+		--arg arecords "${a_records:-}" \
+		--arg aaaarecords "${aaaa_records:-}" \
+		--arg cname "${cname_records:-}" \
+		--arg zonetransfer "$zone_transfer" \
+		--arg whois "$whois_summary" \
+		--arg ssl_version "$ssl_version" \
+		--arg ssl_issuer "$ssl_issuer" \
+		--arg cert_expiry "$cert_expiry" \
+		--arg dns_status "${dns_status:-}" \
+		--arg resolvers "${dns_resolvers:-}" \
+		'{
+			Domain: $domain, URL: $url,
+			"SPF Record": $spf, "DKIM Record": $dkim, "DMARC Record": $dmarc,
+			"DNSSEC Status": $dnssec, "NS Records": $ns, "TXT Records": $txt,
+			"SRV Records": $srv, "PTR Record": $ptr, "MX Records": $mx,
+			"SOA Record": $soa, "CAA Records": $caa,
+			"A Records": $arecords, "AAAA Records": $aaaarecords,
+			"CNAME Records": $cname, "Zone Transfer": $zonetransfer,
+			"WHOIS Summary": $whois,
+			"SSL/TLS Version": $ssl_version, "SSL/TLS Issuer": $ssl_issuer,
+			"Cert Expiry Date": $cert_expiry,
+			"DNS Resolver": $resolvers, "DNS Status": $dns_status
+		}' >"${COMP_COMPLIANCE_TMP}/${safe_key}.jsonl" 2>/dev/null || true
+
+	# HTTP header check per endpoint
+	local domain_http_file="${COMP_HTTPX_SPLIT}/${domain}.jsonl"
+	if [[ -f "$domain_http_file" ]]; then
+		while IFS= read -r record_line || [[ -n "$record_line" ]]; do
+			[[ -z "$record_line" ]] && continue
+			local url host port
+			url=$(jq -r '.url // ""' <<<"$record_line" 2>/dev/null || true)
+			[[ -z "$url" ]] && continue
+			if [[ "$url" =~ ^https?://([^/:]+)(:([0-9]+))? ]]; then
+				host=${BASH_REMATCH[1]}; port=${BASH_REMATCH[3]}
+			else
+				host=""; port=""
+			fi
+			if [ -z "$port" ]; then
+				[[ "$url" =~ ^https:// ]] && port="443" || port="80"
+			fi
+
+			local lookup_host
+			lookup_host=$(echo "$host" | tr '[:upper:]' '[:lower:]')
+			[[ -z "$lookup_host" ]] && lookup_host="$domain_key"
+			local endpoint_lookup="${lookup_host}|${port}"
+			local tls_endpoint
+			tls_endpoint=$(jq -c --arg key "$endpoint_lookup" '.[$key] // null' "$COMP_TLS_ENDPOINT_MAP" 2>/dev/null || echo null)
+			local ssl_version_ep ssl_issuer_ep cert_expiry_ep
+			if [[ "$tls_endpoint" != "null" ]]; then
+				ssl_version_ep=$(echo "$tls_endpoint" | jq -r '.TLSVersion // .HighestVersion // "Unknown"' 2>/dev/null || echo "Unknown")
+				ssl_issuer_ep=$(echo "$tls_endpoint" | jq -r '.IssuerDN // .CertificateIssuer // .IssuerCN // "N/A"' 2>/dev/null || echo "N/A")
+				cert_expiry_ep=$(echo "$tls_endpoint" | jq -r '.NotAfter // .ValidTo // "N/A"' 2>/dev/null || echo "N/A")
+			else
+				ssl_version_ep="No SSL/TLS"; ssl_issuer_ep="N/A"; cert_expiry_ep="N/A"
+			fi
+
+			local headers
+			headers=$(curl -s --max-time 15 --connect-timeout 5 -D - "$url" -o /dev/null 2>/dev/null || true)
+			local sts xfo csp xss rp pp acao
+			sts=$(echo "$headers" | grep -i "Strict-Transport-Security:" | cut -d':' -f2- | xargs 2>/dev/null || true)
+			xfo=$(echo "$headers" | grep -i "X-Frame-Options:" | cut -d':' -f2- | xargs 2>/dev/null || true)
+			csp=$(echo "$headers" | grep -i "Content-Security-Policy:" | cut -d':' -f2- | xargs 2>/dev/null || true)
+			xss=$(echo "$headers" | grep -i "X-XSS-Protection:" | cut -d':' -f2- | xargs 2>/dev/null || true)
+			rp=$(echo "$headers" | grep -i "Referrer-Policy:" | cut -d':' -f2- | xargs 2>/dev/null || true)
+			pp=$(echo "$headers" | grep -i "Permissions-Policy:" | cut -d':' -f2- | xargs 2>/dev/null || true)
+			acao=$(echo "$headers" | grep -i "Access-Control-Allow-Origin:" | cut -d':' -f2- | xargs 2>/dev/null || true)
+
+			# cookie security analysis
+			local cookie_secure="N/A" cookie_httponly="N/A" cookie_samesite="N/A"
+			local set_cookie_line
+			set_cookie_line=$(echo "$headers" | grep -i "^Set-Cookie:" | head -n 1 || true)
+			if [[ -n "$set_cookie_line" ]]; then
+				echo "$set_cookie_line" | grep -qi ";\s*Secure" && cookie_secure="Yes" || cookie_secure="No"
+				echo "$set_cookie_line" | grep -qi ";\s*HttpOnly" && cookie_httponly="Yes" || cookie_httponly="No"
+				local ss_val
+				ss_val=$(echo "$set_cookie_line" | grep -oi "SameSite=[A-Za-z]*" | cut -d'=' -f2 || true)
+				[[ -n "$ss_val" ]] && cookie_samesite="$ss_val" || cookie_samesite="Not Set"
+			fi
+
+			# CORS status
+			local cors_status="Unconfigured"
+			if [[ -n "$acao" ]]; then
+				if [[ "$acao" == "*" ]]; then
+					cors_status="Open"
+				elif echo "$acao" | grep -qi "null"; then
+					cors_status="Null-Origin"
+				else
+					# check for reflective CORS
+					local cors_probe
+					cors_probe=$(curl -s --max-time 8 --connect-timeout 4 \
+						-H "Origin: https://evil-cors-test.com" \
+						-I "$url" 2>/dev/null | grep -i "Access-Control-Allow-Origin:" | cut -d':' -f2- | xargs 2>/dev/null || true)
+					if echo "$cors_probe" | grep -qi "evil-cors-test.com"; then
+						cors_status="Reflective"
+					else
+						cors_status="Restrictive"
+					fi
+				fi
+			fi
+
+			local url_hash
+			url_hash=$(printf '%s' "${domain_key}${url}" | cksum | cut -d' ' -f1)
+			jq -n \
+				--arg domain "$domain" \
+				--arg url "$url" \
+				--arg ssl_version "$ssl_version_ep" \
+				--arg ssl_issuer "$ssl_issuer_ep" \
+				--arg cert_expiry "$cert_expiry_ep" \
+				--arg sts "${sts:-}" \
+				--arg xfo "${xfo:-}" \
+				--arg csp "${csp:-}" \
+				--arg xss "${xss:-}" \
+				--arg rp "${rp:-}" \
+				--arg pp "${pp:-}" \
+				--arg acao "${acao:-}" \
+				--arg cookie_secure "$cookie_secure" \
+				--arg cookie_httponly "$cookie_httponly" \
+				--arg cookie_samesite "$cookie_samesite" \
+				--arg cors_status "$cors_status" \
+				'{
+					Domain: $domain, URL: $url,
+					"SSL/TLS Version": $ssl_version, "SSL/TLS Issuer": $ssl_issuer,
+					"Cert Expiry Date": $cert_expiry,
+					"Strict-Transport-Security": $sts, "X-Frame-Options": $xfo,
+					"Content-Security-Policy": $csp, "X-XSS-Protection": $xss,
+					"Referrer-Policy": $rp, "Permissions-Policy": $pp,
+					"Access-Control-Allow-Origin": $acao,
+					"Cookie-Secure": $cookie_secure,
+					"Cookie-HttpOnly": $cookie_httponly,
+					"Cookie-SameSite": $cookie_samesite,
+					"CORS-Status": $cors_status
+				}' >"${COMP_HEADERS_TMP}/${url_hash}.jsonl" 2>/dev/null || true
+		done <"$domain_http_file"
+	fi
+}
+export -f _compliance_domain_worker
+
+# checking DNS hygiene, email auth, and handy headers in one pass (parallelised)
 run_security_compliance() {
-	info "[12/17] Analyzing security hygiene using..."
+	info "[17/22] Analyzing security hygiene (parallel workers)..."
 	local compliance_output="$RUN_DIR/securitycompliance.json"
 	local headers_output="$RUN_DIR/sec_headers.json"
-	local compliance_jsonl="$RUN_DIR/securitycompliance.jsonl"
-	local headers_jsonl="$RUN_DIR/sec_headers.jsonl"
-	: >"$compliance_jsonl"
-	: >"$headers_jsonl"
-
-	local dig_opts=("+time=3" "+tries=1")
 
 	if [ ! -f "$MASTER_SUBS" ]; then
 		echo "Error: MASTER_SUBS file not found!" >&2
 		return 1
 	fi
 
-	local dns_map_file
-	dns_map_file=$(mktemp)
+	# build shared read-only map files for workers
+	export COMP_DNS_MAP
+	COMP_DNS_MAP=$(mktemp)
 	if [[ -s "$RUN_DIR/dnsx.json" ]]; then
 		jq -cs '
 			[ .[] | if type=="array" then .[] else . end | select(type=="object") ]
@@ -1675,22 +1978,21 @@ run_security_compliance() {
 			}) |
 			map(select(.key != "")) |
 			from_entries
-		' "$RUN_DIR/dnsx.json" >"$dns_map_file" || echo "{}" >"$dns_map_file"
+		' "$RUN_DIR/dnsx.json" >"$COMP_DNS_MAP" 2>/dev/null || echo "{}" >"$COMP_DNS_MAP"
 	else
-		echo "{}" >"$dns_map_file"
+		echo "{}" >"$COMP_DNS_MAP"
 	fi
 
-	local tls_host_map_file
-	local tls_endpoint_map_file
-	tls_host_map_file=$(mktemp)
-	tls_endpoint_map_file=$(mktemp)
+	export COMP_TLS_HOST_MAP COMP_TLS_ENDPOINT_MAP
+	COMP_TLS_HOST_MAP=$(mktemp)
+	COMP_TLS_ENDPOINT_MAP=$(mktemp)
 	if [[ -s "$RUN_DIR/tls_inventory.json" ]]; then
 		jq -c '
 			group_by(((.Host // .host // "") | ascii_downcase)) |
 			map({ key: (.[0].Host // .[0].host // "" | ascii_downcase), value: . }) |
 			map(select(.key != "")) |
 			from_entries
-		' "$RUN_DIR/tls_inventory.json" >"$tls_host_map_file" || echo "{}" >"$tls_host_map_file"
+		' "$RUN_DIR/tls_inventory.json" >"$COMP_TLS_HOST_MAP" 2>/dev/null || echo "{}" >"$COMP_TLS_HOST_MAP"
 		jq -c '
 			map(select(((.Host // .host // "") | length) > 0 and ((.Port // .port // "") | tostring | length) > 0)) |
 			map({
@@ -1699,326 +2001,55 @@ run_security_compliance() {
 			}) |
 			map(select(.key | length > 1)) |
 			from_entries
-		' "$RUN_DIR/tls_inventory.json" >"$tls_endpoint_map_file" || echo "{}" >"$tls_endpoint_map_file"
+		' "$RUN_DIR/tls_inventory.json" >"$COMP_TLS_ENDPOINT_MAP" 2>/dev/null || echo "{}" >"$COMP_TLS_ENDPOINT_MAP"
 	else
-		echo "{}" >"$tls_host_map_file"
-		echo "{}" >"$tls_endpoint_map_file"
+		echo "{}" >"$COMP_TLS_HOST_MAP"
+		echo "{}" >"$COMP_TLS_ENDPOINT_MAP"
 	fi
 
-	local httpx_split_dir
-	httpx_split_dir=$(mktemp -d)
+	export COMP_HTTPX_SPLIT
+	COMP_HTTPX_SPLIT=$(mktemp -d)
 	if [ -s "$RUN_DIR/httpx.json" ]; then
 		while IFS=$'\t' read -r dom record; do
 			dom=$(echo "$dom" | tr -d '\r' | xargs)
 			[[ -z "$dom" || -z "$record" ]] && continue
-			printf '%s\n' "$record" >>"$httpx_split_dir/${dom}.jsonl"
+			printf '%s\n' "$record" >>"$COMP_HTTPX_SPLIT/${dom}.jsonl"
 		done < <(jq -rc '(if type=="array" then .[] else . end) | [((.input // .url // .host // "") | sub("^https?://"; "") | split("/")[0] | split(":")[0]), tostring] | @tsv' "$RUN_DIR/httpx.json")
 	fi
 
-	while IFS= read -r domain || [[ -n "$domain" ]]; do
-		domain=$(echo "$domain" | tr -d '\r' | xargs)
-		[[ -z "$domain" ]] && continue
-		local domain_key
-		domain_key=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
+	export COMP_COMPLIANCE_TMP="$RUN_DIR/comp_compliance_tmp"
+	export COMP_HEADERS_TMP="$RUN_DIR/comp_headers_tmp"
+	mkdir -p "$COMP_COMPLIANCE_TMP" "$COMP_HEADERS_TMP"
 
-		local dns_entry
-		dns_entry=$(jq -c --arg key "$domain_key" '.[$key] // null' "$dns_map_file")
-		local dns_status dns_resolvers dns_a dns_cname
-		if [[ "$dns_entry" != "null" ]]; then
-			dns_status=$(echo "$dns_entry" | jq -r '.status // ""')
-			dns_resolvers=$(echo "$dns_entry" | jq -r '(.resolver // []) | join("\n")')
-			dns_a=$(echo "$dns_entry" | jq -r '(.a // []) | join("\n")')
-			dns_cname=$(echo "$dns_entry" | jq -r '(.cname // []) | join("\n")')
-		else
-			dns_status=""
-			dns_resolvers=""
-			dns_a=""
-			dns_cname=""
-		fi
+	export COMP_WHOIS_LOCK="$RUN_DIR/.comp_whois.lock"
+	touch "$COMP_WHOIS_LOCK"
+	export RUN_DIR MASTER_SUBS
 
-		local spf dkim dmarc dnskey dnssec ns txt srv ptr mx soa caa
-		local a_records aaaa_records cname_records zone_transfer whois_summary
+	# run 20 domain workers in parallel
+	cat "$MASTER_SUBS" | xargs -P 20 -I {} bash -c '_compliance_domain_worker "$@"' _ {}
 
-		spf=$(dig "${dig_opts[@]}" +short TXT "$domain" 2>/dev/null | grep -i "v=spf1" | head -n 1 || true)
-		[ -z "$spf" ] && spf="No SPF Record"
-
-		dkim=$(dig "${dig_opts[@]}" +short TXT "default._domainkey.$domain" 2>/dev/null | grep -i "v=DKIM1" | head -n 1 || true)
-		[ -z "$dkim" ] && dkim="No DKIM Record"
-
-		dmarc=$(dig "${dig_opts[@]}" +short TXT "_dmarc.$domain" 2>/dev/null | grep -i "v=DMARC1" | head -n 1 || true)
-		[ -z "$dmarc" ] && dmarc="No DMARC Record"
-
-		dnskey=$(dig "${dig_opts[@]}" +short DNSKEY "$domain" 2>/dev/null || true)
-		if [ -z "$dnskey" ]; then
-			dnssec="DNSSEC Not Enabled"
-		else
-			dnssec="DNSSEC Enabled"
-		fi
-
-		ns=$(dig "${dig_opts[@]}" +short NS "$domain" 2>/dev/null || true)
-		[ -z "$ns" ] && ns="No NS records found"
-
-		txt=$(dig "${dig_opts[@]}" +short TXT "$domain" 2>/dev/null || true)
-		[ -z "$txt" ] && txt=""
-
-		srv=$(dig "${dig_opts[@]}" +short SRV "$domain" 2>/dev/null || true)
-		[ -z "$srv" ] && srv=""
-
-		a_records="$dns_a"
-		if [ -z "$a_records" ]; then
-			a_records=$(dig "${dig_opts[@]}" +short A "$domain" 2>/dev/null | sed '/^$/d' || true)
-		fi
-
-		local a_record=""
-		ptr=""
-		if [ -n "$a_records" ]; then
-			a_record=$(printf '%s\n' "$a_records" | head -n 1)
-		fi
-		if [ -n "$a_record" ]; then
-			ptr=$(dig "${dig_opts[@]}" +short -x "$a_record" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)
-		fi
-		[ -z "$ptr" ] && ptr=""
-
-		aaaa_records=$(dig "${dig_opts[@]}" +short AAAA "$domain" 2>/dev/null | sed '/^$/d' || true)
-
-		cname_records="$dns_cname"
-		if [ -z "$cname_records" ]; then
-			cname_records=$(dig "${dig_opts[@]}" +short CNAME "$domain" 2>/dev/null | sed '/^$/d' || true)
-		fi
-
-		mx=$(dig "${dig_opts[@]}" +short MX "$domain" 2>/dev/null || true)
-		[ -z "$mx" ] && mx=""
-
-		soa=$(dig "${dig_opts[@]}" +short SOA "$domain" 2>/dev/null || true)
-		[ -z "$soa" ] && soa=""
-
-		caa=$(dig "${dig_opts[@]}" +short CAA "$domain" 2>/dev/null || true)
-		[ -z "$caa" ] && caa=""
-
-		zone_transfer="AXFR Not Permitted"
-		if [ -z "$ns" ] || [ "$ns" = "No NS records found" ]; then
-			zone_transfer="NS data unavailable"
-		else
-			while IFS= read -r ns_host || [ -n "$ns_host" ]; do
-				ns_host=$(echo "$ns_host" | tr -d '\r' | xargs)
-				[[ -z "$ns_host" ]] && continue
-				ns_host=${ns_host%.}
-				local axfr_output
-				axfr_output=$(timeout 6 dig +time=5 +tries=1 @"$ns_host" "$domain" AXFR 2>/dev/null | head -n 20 || true)
-				if [ -z "$axfr_output" ]; then
-					continue
-				fi
-				if echo "$axfr_output" | grep -qiE 'transfer failed|timed out|refused|denied|not implemented|connection refused|communications error|SERVFAIL'; then
-					continue
-				fi
-				if echo "$axfr_output" | grep -q $'\tIN\t'; then
-					zone_transfer="AXFR Permitted via $ns_host"
-					break
-				fi
-			done <<<"$ns"
-		fi
-
-		if ! command -v whois >/dev/null 2>&1; then
-			whois_summary="WHOIS client unavailable"
-		else
-			local whois_raw
-			whois_raw=$(whois "$domain" 2>/dev/null || true)
-			if echo "$whois_raw" | grep -qiE 'limit exceeded|quota exceeded|rate limit|exceeded the maximum number|WHOIS LIMIT'; then
-				whois_summary="WHOIS query cap reached"
-			elif [ -z "$whois_raw" ]; then
-				whois_summary="WHOIS data unavailable"
-			else
-				local registrar created updated expires registrant_org registrant_country
-				for pattern in "Registrar:" "Sponsoring Registrar:" "Registrar Name:"; do
-					registrar=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
-					[ -n "$registrar" ] && break
-				done
-
-				for pattern in "Creation Date:" "Created On:" "Domain Registration Date:" "Domain Create Date:" "Registered On:"; do
-					created=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
-					[ -n "$created" ] && break
-				done
-
-				for pattern in "Updated Date:" "Last Updated On:" "Domain Last Updated Date:" "Modified:"; do
-					updated=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
-					[ -n "$updated" ] && break
-				done
-
-				for pattern in "Expiration Date:" "Expiry Date:" "Registry Expiry Date:" "Registrar Registration Expiration Date:" "Domain Expiration Date:"; do
-					expires=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
-					[ -n "$expires" ] && break
-				done
-
-				for pattern in "Registrant Organization:" "OrgName:" "Organisation Name:"; do
-					registrant_org=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
-					[ -n "$registrant_org" ] && break
-				done
-
-				for pattern in "Registrant Country:" "Country:"; do
-					registrant_country=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
-					[ -n "$registrant_country" ] && break
-				done
-
-				whois_summary=$(printf "Registrar: %s\nCreated: %s\nUpdated: %s\nExpires: %s\nOrg: %s\nCountry: %s" \
-					"${registrar:-Unknown}" "${created:-Unknown}" "${updated:-Unknown}" "${expires:-Unknown}" \
-					"${registrant_org:-Unknown}" "${registrant_country:-Unknown}")
-			fi
-		fi
-
-		local tls_entry ssl_version ssl_issuer cert_expiry
-		tls_entry=$(jq -c --arg key "$domain_key" '.[$key] // []' "$tls_host_map_file")
-		if [[ "$tls_entry" != "[]" ]]; then
-			ssl_version=$(echo "$tls_entry" | jq -r '[.[]? | (.TLSVersion // .HighestVersion // .VersionSummary) | select(. != null and . != "")] | first? // "N/A"')
-			ssl_issuer=$(echo "$tls_entry" | jq -r '[.[]? | (.IssuerDN // .CertificateIssuer // .IssuerCN) | select(. != null and . != "")] | first? // "N/A"')
-			cert_expiry=$(echo "$tls_entry" | jq -r '[.[]? | (.NotAfter // .ValidTo) | select(. != null and . != "")] | first? // "N/A"')
-		else
-			ssl_version="N/A"
-			ssl_issuer="N/A"
-			cert_expiry="N/A"
-		fi
-
-		jq -n \
-			--arg domain "$domain" \
-			--arg url "N/A" \
-			--arg spf "$spf" \
-			--arg dkim "$dkim" \
-			--arg dmarc "$dmarc" \
-			--arg dnssec "$dnssec" \
-			--arg ns "$ns" \
-			--arg txt "$txt" \
-			--arg srv "$srv" \
-			--arg ptr "$ptr" \
-			--arg mx "$mx" \
-			--arg soa "$soa" \
-			--arg caa "$caa" \
-			--arg arecords "$a_records" \
-			--arg aaaarecords "$aaaa_records" \
-			--arg cname "$cname_records" \
-			--arg zonetransfer "$zone_transfer" \
-			--arg whois "$whois_summary" \
-			--arg ssl_version "$ssl_version" \
-			--arg ssl_issuer "$ssl_issuer" \
-			--arg cert_expiry "$cert_expiry" \
-			--arg dns_status "${dns_status:-}" \
-			--arg resolvers "${dns_resolvers:-}" \
-			'{
-        Domain: $domain,
-        URL: $url,
-        "SPF Record": $spf,
-        "DKIM Record": $dkim,
-        "DMARC Record": $dmarc,
-        "DNSSEC Status": $dnssec,
-        "NS Records": $ns,
-        "TXT Records": $txt,
-        "SRV Records": $srv,
-        "PTR Record": $ptr,
-        "MX Records": $mx,
-        "SOA Record": $soa,
-        "CAA Records": $caa,
-        "A Records": $arecords,
-        "AAAA Records": $aaaarecords,
-        "CNAME Records": $cname,
-        "Zone Transfer": $zonetransfer,
-        "WHOIS Summary": $whois,
-        "SSL/TLS Version": $ssl_version,
-        "SSL/TLS Issuer": $ssl_issuer,
-        "Cert Expiry Date": $cert_expiry,
-        "DNS Resolver": $resolvers,
-        "DNS Status": $dns_status
-      }' >>"$compliance_jsonl"
-
-		local domain_http_file="$httpx_split_dir/${domain}.jsonl"
-		if [[ -f "$domain_http_file" ]]; then
-			while IFS= read -r record_line || [[ -n "$record_line" ]]; do
-				[[ -z "$record_line" ]] && continue
-				local url host port
-				url=$(jq -r '.url // ""' <<<"$record_line")
-				[[ -z "$url" ]] && continue
-				if [[ "$url" =~ ^https?://([^/:]+)(:([0-9]+))? ]]; then
-					host=${BASH_REMATCH[1]}
-					port=${BASH_REMATCH[3]}
-				else
-					host=""
-					port=""
-				fi
-				if [ -z "$port" ]; then
-					if [[ "$url" =~ ^https:// ]]; then
-						port="443"
-					elif [[ "$url" =~ ^http:// ]]; then
-						port="80"
-					else
-						port="443"
-					fi
-				fi
-
-				local ssl_version_ep ssl_issuer_ep cert_expiry_ep
-				local lookup_host
-				lookup_host=$(echo "$host" | tr '[:upper:]' '[:lower:]')
-				[[ -z "$lookup_host" ]] && lookup_host="$domain_key"
-				local endpoint_lookup="${lookup_host}|${port}"
-				local tls_endpoint
-				tls_endpoint=$(jq -c --arg key "$endpoint_lookup" '.[$key] // null' "$tls_endpoint_map_file")
-				if [[ "$tls_endpoint" != "null" ]]; then
-					ssl_version_ep=$(echo "$tls_endpoint" | jq -r '.TLSVersion // .HighestVersion // "Unknown"')
-					ssl_issuer_ep=$(echo "$tls_endpoint" | jq -r '.IssuerDN // .CertificateIssuer // .IssuerCN // "N/A"')
-					cert_expiry_ep=$(echo "$tls_endpoint" | jq -r '.NotAfter // .ValidTo // "N/A"')
-				else
-					ssl_version_ep="No SSL/TLS"
-					ssl_issuer_ep="N/A"
-					cert_expiry_ep="N/A"
-				fi
-
-				local headers
-				headers=$(curl -s --max-time 15 --connect-timeout 5 -D - "$url" -o /dev/null || true)
-				local sts xfo csp xss rp pp acao
-				sts=$(echo "$headers" | grep -i "Strict-Transport-Security:" | cut -d':' -f2- | xargs || true)
-				xfo=$(echo "$headers" | grep -i "X-Frame-Options:" | cut -d':' -f2- | xargs || true)
-				csp=$(echo "$headers" | grep -i "Content-Security-Policy:" | cut -d':' -f2- | xargs || true)
-				xss=$(echo "$headers" | grep -i "X-XSS-Protection:" | cut -d':' -f2- | xargs || true)
-				rp=$(echo "$headers" | grep -i "Referrer-Policy:" | cut -d':' -f2- | xargs || true)
-				pp=$(echo "$headers" | grep -i "Permissions-Policy:" | cut -d':' -f2- | xargs || true)
-				acao=$(echo "$headers" | grep -i "Access-Control-Allow-Origin:" | cut -d':' -f2- | xargs || true)
-
-				jq -n \
-					--arg domain "$domain" \
-					--arg url "$url" \
-					--arg ssl_version "$ssl_version_ep" \
-					--arg ssl_issuer "$ssl_issuer_ep" \
-					--arg cert_expiry "$cert_expiry_ep" \
-					--arg sts "$sts" \
-					--arg xfo "$xfo" \
-					--arg csp "$csp" \
-					--arg xss "$xss" \
-					--arg rp "$rp" \
-					--arg pp "$pp" \
-					--arg acao "$acao" \
-					'{
-        Domain: $domain,
-        URL: $url,
-        "SSL/TLS Version": $ssl_version,
-        "SSL/TLS Issuer": $ssl_issuer,
-        "Cert Expiry Date": $cert_expiry,
-        "Strict-Transport-Security": $sts,
-        "X-Frame-Options": $xfo,
-        "Content-Security-Policy": $csp,
-        "X-XSS-Protection": $xss,
-        "Referrer-Policy": $rp,
-        "Permissions-Policy": $pp,
-        "Access-Control-Allow-Origin": $acao
-      }' >>"$headers_jsonl"
-		done <"$domain_http_file"
+	# merge compliance results
+	local compliance_jsonl="$RUN_DIR/securitycompliance.jsonl"
+	: >"$compliance_jsonl"
+	if ls "$COMP_COMPLIANCE_TMP"/*.jsonl >/dev/null 2>&1; then
+		cat "$COMP_COMPLIANCE_TMP"/*.jsonl >"$compliance_jsonl" 2>/dev/null || true
 	fi
-	done <"$MASTER_SUBS"
-
-	rm -rf "$httpx_split_dir"
-	rm -f "$dns_map_file" "$tls_host_map_file" "$tls_endpoint_map_file"
-
 	combine_json "$compliance_jsonl" "$compliance_output"
+	rm -f "$compliance_jsonl"
+
+	# merge headers results
+	local headers_jsonl="$RUN_DIR/sec_headers.jsonl"
+	: >"$headers_jsonl"
+	if ls "$COMP_HEADERS_TMP"/*.jsonl >/dev/null 2>&1; then
+		cat "$COMP_HEADERS_TMP"/*.jsonl >"$headers_jsonl" 2>/dev/null || true
+	fi
 	combine_json "$headers_jsonl" "$headers_output"
-	rm -f "$compliance_jsonl" "$headers_jsonl"
+	rm -f "$headers_jsonl"
+
+	rm -rf "$COMP_COMPLIANCE_TMP" "$COMP_HEADERS_TMP" "$COMP_HTTPX_SPLIT"
+	rm -f "$COMP_DNS_MAP" "$COMP_TLS_HOST_MAP" "$COMP_TLS_ENDPOINT_MAP" "$COMP_WHOIS_LOCK"
 	quality_check_json_array "Security compliance" "$compliance_output"
 	quality_check_json_array "Security headers" "$headers_output"
-
 }
 
 # turning jsonl blobs into tidy arrays for later steps
@@ -2032,34 +2063,91 @@ combine_json() {
 	fi
 }
 
-# marking domains that smell like APIs based on simple keywords
+# multi-signal API identification (domain keyword + content-type + swagger/graphql response)
 run_api_identification() {
-info "[13/17] Identifying API endpoints..."
+	info "[19/22] Identifying API endpoints (multi-signal)..."
 	local api_file="$RUN_DIR/api_identification.json"
-	# starting a fresh array so we can jot down every guess
-	echo "[" >"$api_file"
-	local first_entry=true
+	local api_jsonl="$RUN_DIR/api_identification.jsonl"
+	: >"$api_jsonl"
+
+	# pre-build a map of content-types from httpx for quick lookup
+	local ct_map_file
+	ct_map_file=$(mktemp)
+	if [[ -s "$RUN_DIR/httpx.json" ]]; then
+		jq -cs '
+			[ .[] | if type=="array" then .[] else . end | select(type=="object") ]
+			| group_by(((.input // .host // "") | split(":")[0] | ascii_downcase))
+			| map({
+				key: ((.[0].input // .[0].host // "") | split(":")[0] | ascii_downcase),
+				value: {
+					content_type: (map(.content_type // "") | map(select(length>0)) | first // ""),
+					status: (map(.status_code // 0) | first // 0)
+				}
+			})
+			| from_entries
+		' "$RUN_DIR/httpx.json" >"$ct_map_file" 2>/dev/null || echo "{}" >"$ct_map_file"
+	else
+		echo "{}" >"$ct_map_file"
+	fi
+
+	# load swagger/graphql confirmed endpoints from exposed_files if available
+	local swagger_hosts_file
+	swagger_hosts_file=$(mktemp)
+	if [[ -s "$RUN_DIR/exposed_files.json" ]]; then
+		jq -r '.[] | select(.finding_type == "api_doc" or (.path | test("swagger|openapi|graphql"; "i"))) | .url | sub("^https?://"; "") | split("/")[0] | split(":")[0] | ascii_downcase' \
+			"$RUN_DIR/exposed_files.json" 2>/dev/null | sort -u >"$swagger_hosts_file" || true
+	fi
+
 	while read -r domain; do
-		# super lightweight keyword check; nothing fancy here
-		if echo "$domain" | grep -E -i '(\.api\.|-api-|-api\.)' >/dev/null; then
-			api_status="Yes"
-		else
-			api_status="No"
+		local domain_key
+		domain_key=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
+		local -a signals=()
+		local confidence="Low"
+
+		# signal 1: domain name keyword (weak)
+		if echo "$domain" | grep -qiE '(\.api\.|-api[-.]|^api\.)'; then
+			signals+=("domain-keyword")
 		fi
-		if [ "$first_entry" = true ]; then
-			first_entry=false
-		else
-			echo "," >>"$api_file"
+
+		# signal 2: content-type from httpx (strong)
+		local ct
+		ct=$(jq -r --arg key "$domain_key" '.[$key].content_type // ""' "$ct_map_file" 2>/dev/null || true)
+		if echo "$ct" | grep -qiE 'application/(json|xml|graphql|hal\+json|vnd\.|problem\+json)'; then
+			signals+=("json-content-type")
+			confidence="High"
 		fi
-		echo "  { \"domain\": \"${domain}\", \"api_endpoint\": \"${api_status}\" }" >>"$api_file"
+
+		# signal 3: swagger/openapi/graphql confirmed from exposed_files
+		if grep -q "^${domain_key}$" "$swagger_hosts_file" 2>/dev/null; then
+			signals+=("api-doc-found")
+			confidence="Confirmed"
+		fi
+
+		# determine api_endpoint status
+		local api_status="No"
+		[[ "${#signals[@]}" -ge 1 ]] && api_status="Yes"
+		[[ "$confidence" == "Confirmed" ]] && api_status="Yes"
+
+		local signals_json='[]'
+		(( ${#signals[@]} )) && signals_json=$(printf '%s\n' "${signals[@]}" | jq -R . 2>/dev/null | jq -s . 2>/dev/null || echo '[]')
+
+		jq -n \
+			--arg domain "$domain" \
+			--arg api_endpoint "$api_status" \
+			--arg api_confidence "$confidence" \
+			--argjson signals "$signals_json" \
+			'{ domain: $domain, api_endpoint: $api_endpoint, api_confidence: $api_confidence, api_signals: $signals }' \
+			>>"$api_jsonl" 2>/dev/null || true
 	done <"$MASTER_SUBS"
-	echo "]" >>"$api_file"
+
+	combine_json "$api_jsonl" "$api_file"
+	rm -f "$api_jsonl" "$ct_map_file" "$swagger_hosts_file"
 	quality_check_json_array "API detection" "$api_file"
 }
 
 # looking for intranet-ish names so the team sees potential internal portals
 run_colleague_identification() {
-info "[14/17] Identifying colleague-facing endpoints..."
+info "[20/22] Identifying colleague-facing endpoints..."
 	local colleague_file="$RUN_DIR/colleague_identification.json"
 	local keywords_file="colleague_keywords.txt"
 
@@ -2119,7 +2207,7 @@ info "[14/17] Identifying colleague-facing endpoints..."
 
 # stitching DNS, HTTP, and TLS bits into a single cloud story
 run_cloud_infrastructure_inventory() {
-	info "[15/17] Building cloud infrastructure inventory..."
+	info "[21/22] Building cloud infrastructure inventory..."
 	local output_file="$RUN_DIR/cloud_infrastructure.json"
 	local dns_map_file httpx_map_file tls_map_file
 	dns_map_file=$(mktemp)
@@ -2513,9 +2601,410 @@ run_cloud_infrastructure_inventory() {
 }
 
 
+# --- NEW MODULE: Subdomain Takeover Detection ---
+run_subdomain_takeover() {
+	info "[7/22] Detecting dangling DNS / subdomain takeover candidates..."
+	local output_file="$RUN_DIR/takeover.json"
+	local fingerprints_file="assets/takeover_fingerprints.json"
+
+	if [[ ! -s "$RUN_DIR/dnsx.json" ]]; then
+		echo "[]" >"$output_file"
+		quality_check_json_array "Takeover detection" "$output_file"
+		return
+	fi
+	if [[ ! -f "$fingerprints_file" ]]; then
+		warning "Takeover fingerprints file not found at $fingerprints_file; skipping."
+		echo "[]" >"$output_file"
+		return
+	fi
+
+	local jsonl_tmp="$RUN_DIR/takeover.jsonl"
+	: >"$jsonl_tmp"
+
+	# extract domains with CNAMEs from dnsx output
+	local cname_pairs
+	cname_pairs=$(jq -r '
+		(if type=="array" then .[] else . end)
+		| select(type=="object")
+		| select((.cname // []) | length > 0)
+		| .host as $host
+		| (.cname // [])[] as $cname
+		| [$host, $cname] | @tsv
+	' "$RUN_DIR/dnsx.json" 2>/dev/null || true)
+
+	if [[ -z "$cname_pairs" ]]; then
+		echo "[]" >"$output_file"
+		quality_check_json_array "Takeover detection" "$output_file"
+		return
+	fi
+
+	local fingerprints_json
+	fingerprints_json=$(cat "$fingerprints_file")
+
+	while IFS=$'\t' read -r host cname; do
+		[[ -z "$host" || -z "$cname" ]] && continue
+		local cname_lower
+		cname_lower=$(echo "$cname" | tr '[:upper:]' '[:lower:]' | sed 's/\.$//')
+
+		# check if CNAME resolves (if not → dangling)
+		local resolves
+		resolves=$(dig +short +time=3 +tries=1 A "$cname" 2>/dev/null | head -n 1 || true)
+		local nxdomain=false
+		[[ -z "$resolves" ]] && nxdomain=true
+
+		# match cname against fingerprint patterns
+		local matched_provider="" matched_body_pattern="" severity="low"
+		while IFS= read -r fp; do
+			local provider
+			provider=$(echo "$fp" | jq -r '.provider' 2>/dev/null || true)
+			local cname_pats
+			cname_pats=$(echo "$fp" | jq -r '.cname_patterns[]' 2>/dev/null || true)
+			local matched_cname=false
+			while IFS= read -r pat; do
+				[[ -z "$pat" ]] && continue
+				if echo "$cname_lower" | grep -qi "$pat"; then
+					matched_cname=true
+					matched_provider="$provider"
+					severity=$(echo "$fp" | jq -r '.severity // "low"' 2>/dev/null || echo "low")
+					matched_body_pattern=$(echo "$fp" | jq -r '.body_patterns | join("|")' 2>/dev/null || true)
+					break
+				fi
+			done <<<"$cname_pats"
+			[[ "$matched_cname" == true ]] && break
+		done < <(echo "$fingerprints_json" | jq -c '.[]' 2>/dev/null || true)
+
+		[[ -z "$matched_provider" ]] && continue
+
+		local status="Potential"
+		local evidence="Dangling CNAME to ${matched_provider}"
+
+		# if dangling, try to confirm by fetching the unclaimed-app error page
+		if [[ "$nxdomain" == true ]] && [[ -n "$matched_body_pattern" ]]; then
+			local http_resp
+			http_resp=$(curl -sL --max-time 8 --connect-timeout 4 "https://${host}" 2>/dev/null || \
+				curl -sL --max-time 8 --connect-timeout 4 "http://${host}" 2>/dev/null || true)
+			if echo "$http_resp" | grep -qiE "$matched_body_pattern"; then
+				status="Confirmed"
+				evidence="Unclaimed ${matched_provider} endpoint: body matches '${matched_body_pattern}'"
+			fi
+		elif [[ "$nxdomain" == false ]]; then
+			status="Safe"
+			evidence="CNAME resolves to ${resolves}"
+		fi
+
+		jq -n \
+			--arg domain "$host" \
+			--arg cname_target "$cname" \
+			--arg provider "$matched_provider" \
+			--arg status "$status" \
+			--arg severity "$severity" \
+			--arg evidence "$evidence" \
+			'{ domain: $domain, cname_target: $cname_target, provider: $provider, status: $status, severity: $severity, evidence: $evidence }' \
+			>>"$jsonl_tmp" 2>/dev/null || true
+	done <<<"$cname_pairs"
+
+	combine_json "$jsonl_tmp" "$output_file"
+	rm -f "$jsonl_tmp"
+	quality_check_json_array "Takeover detection" "$output_file"
+}
+
+# --- NEW MODULE: Exposed Sensitive Files Detection ---
+run_exposed_files() {
+	info "[11/22] Probing for exposed sensitive files..."
+	local output_file="$RUN_DIR/exposed_files.json"
+	local paths_file="assets/exposed_paths.txt"
+	local jsonl_tmp="$RUN_DIR/exposed_files.jsonl"
+	: >"$jsonl_tmp"
+
+	if [[ ! -s "$RUN_DIR/httpx.json" ]]; then
+		echo "[]" >"$output_file"
+		quality_check_json_array "Exposed files" "$output_file"
+		return
+	fi
+	if [[ ! -f "$paths_file" ]]; then
+		warning "Exposed paths file not found at $paths_file; skipping."
+		echo "[]" >"$output_file"
+		return
+	fi
+
+	local -a paths=()
+	while IFS= read -r p; do
+		p=$(echo "$p" | tr -d '\r' | xargs)
+		[[ -z "$p" || "$p" == \#* ]] && continue
+		paths+=("$p")
+	done <"$paths_file"
+
+	local live_hosts
+	live_hosts=$(jq -r '(if type=="array" then .[] else . end) | .url // ""' "$RUN_DIR/httpx.json" 2>/dev/null | grep -v '^$' | sort -u || true)
+
+	while IFS= read -r base_url; do
+		[[ -z "$base_url" ]] && continue
+		# strip path from base URL
+		local base
+		base=$(echo "$base_url" | sed 's|/[^/]*$||; s|/$||')
+		[[ -z "$base" ]] && base="$base_url"
+
+		for path in "${paths[@]}"; do
+			local target="${base}${path}"
+			local finding_type="sensitive_file"
+			case "$path" in
+				*swagger*|*openapi*|*api-docs*|*graphql*) finding_type="api_doc" ;;
+				*.git*) finding_type="git_exposure" ;;
+				*.env*) finding_type="env_file" ;;
+				*config*|*database*|*credentials*|*secrets*) finding_type="config_file" ;;
+				*backup*|*.sql|*.zip|*.tar*) finding_type="backup_file" ;;
+				*phpinfo*|*server-status*|*server-info*) finding_type="debug_endpoint" ;;
+				*wp-config*|*wp-admin*|*wp-login*) finding_type="cms_admin" ;;
+			esac
+
+			local resp_code content_type content_len
+			resp_code=$(curl -sI --max-time 8 --connect-timeout 4 -o /dev/null -w "%{http_code}" "$target" 2>/dev/null || echo "000")
+			if [[ "$resp_code" == "200" ]]; then
+				content_type=$(curl -sI --max-time 5 --connect-timeout 4 -w "%{content_type}" -o /dev/null "$target" 2>/dev/null | tr -d '\r' || true)
+				content_len=$(curl -sI --max-time 5 --connect-timeout 4 "$target" 2>/dev/null | grep -i 'Content-Length:' | cut -d' ' -f2 | tr -d '\r' || echo "0")
+				jq -n \
+					--arg url "$target" \
+					--arg path "$path" \
+					--arg status_code "$resp_code" \
+					--arg content_type "${content_type:-unknown}" \
+					--arg content_length "${content_len:-0}" \
+					--arg finding_type "$finding_type" \
+					'{ url: $url, path: $path, status_code: $status_code, content_type: $content_type, content_length: $content_length, finding_type: $finding_type }' \
+					>>"$jsonl_tmp" 2>/dev/null || true
+			fi
+		done
+	done <<<"$live_hosts"
+
+	combine_json "$jsonl_tmp" "$output_file"
+	rm -f "$jsonl_tmp"
+	quality_check_json_array "Exposed files" "$output_file"
+}
+
+# --- NEW MODULE: JavaScript File Analysis ---
+run_js_analysis() {
+	info "[13/22] Analyzing JavaScript files for endpoints and secrets..."
+	local output_file="$RUN_DIR/js_analysis.json"
+	local jsonl_tmp="$RUN_DIR/js_analysis.jsonl"
+	: >"$jsonl_tmp"
+
+	if [[ ! -s "$RUN_DIR/katana_links.json" ]]; then
+		echo "[]" >"$output_file"
+		quality_check_json_array "JS analysis" "$output_file"
+		return
+	fi
+
+	# extract all .js URLs from katana output
+	local js_urls
+	js_urls=$(jq -r 'to_entries[] | .value[]' "$RUN_DIR/katana_links.json" 2>/dev/null | grep -iE '\.js(\?|$)' | grep -v 'node_modules' | sort -u || true)
+
+	if [[ -z "$js_urls" ]]; then
+		echo "[]" >"$output_file"
+		quality_check_json_array "JS analysis" "$output_file"
+		return
+	fi
+
+	local js_tmp_dir
+	js_tmp_dir=$(mktemp -d)
+
+	_js_worker() {
+		local js_url="$1"
+		local out_dir="$2"
+		local url_hash
+		url_hash=$(printf '%s' "$js_url" | cksum | cut -d' ' -f1)
+		local host
+		host=$(echo "$js_url" | sed 's|^https\?://||' | cut -d'/' -f1 | cut -d':' -f1)
+
+		# download JS file (max 2MB, 5s timeout)
+		local js_content
+		js_content=$(curl -sL --max-time 5 --connect-timeout 4 --max-filesize 2097152 "$js_url" 2>/dev/null || true)
+		[[ -z "$js_content" ]] && return
+
+		# regex patterns
+		local -a findings=()
+
+		# API endpoints
+		while IFS= read -r match; do
+			[[ -z "$match" ]] && continue
+			findings+=("$(jq -n --arg js_url "$js_url" --arg host "$host" --arg finding_type "api_endpoint" --arg match "$match" --arg context "" \
+				'{ js_url: $js_url, host: $host, finding_type: $finding_type, match: $match, context: $context }' 2>/dev/null || true)")
+		done < <(echo "$js_content" | grep -oE '["'"'"'`](/?(api|v[0-9]+)/[a-zA-Z0-9/_-]{3,})["'"'"'`]' | sed "s/[\"'\`]//g" | sort -u | head -20 || true)
+
+		# AWS keys
+		while IFS= read -r match; do
+			[[ -z "$match" ]] && continue
+			findings+=("$(jq -n --arg js_url "$js_url" --arg host "$host" --arg finding_type "potential_secret" --arg match "$match" --arg context "AWS Key" \
+				'{ js_url: $js_url, host: $host, finding_type: $finding_type, match: $match, context: $context }' 2>/dev/null || true)")
+		done < <(echo "$js_content" | grep -oE 'AKIA[0-9A-Z]{16}' | sort -u || true)
+
+		# Generic secrets with high entropy
+		while IFS= read -r match; do
+			[[ -z "$match" ]] && continue
+			# skip if match looks like a template string or common placeholder
+			echo "$match" | grep -qiE 'your[-_]?key|example|placeholder|changeme|xxx+|your[-_]?token' && continue
+			findings+=("$(jq -n --arg js_url "$js_url" --arg host "$host" --arg finding_type "potential_secret" --arg match "${match:0:40}..." --arg context "Secret pattern" \
+				'{ js_url: $js_url, host: $host, finding_type: $finding_type, match: $match, context: $context }' 2>/dev/null || true)")
+		done < <(echo "$js_content" | grep -oE '(secret|token|password|api_key|apikey|auth_key)[[:space:]]*[:=][[:space:]]*["'"'"'][a-zA-Z0-9+/]{20,}["'"'"']' | head -10 || true)
+
+		# Internal URLs
+		while IFS= read -r match; do
+			[[ -z "$match" ]] && continue
+			findings+=("$(jq -n --arg js_url "$js_url" --arg host "$host" --arg finding_type "internal_url" --arg match "$match" --arg context "Internal endpoint" \
+				'{ js_url: $js_url, host: $host, finding_type: $finding_type, match: $match, context: $context }' 2>/dev/null || true)")
+		done < <(echo "$js_content" | grep -oE 'https?://[a-z0-9-]+\.(internal|corp|local|dev|staging|intra)\b[^"'"'"' ]*' | sort -u | head -10 || true)
+
+		# write findings
+		for f in "${findings[@]}"; do
+			[[ -n "$f" ]] && echo "$f" >>"${out_dir}/${url_hash}.jsonl"
+		done
+	}
+	export -f _js_worker
+
+	echo "$js_urls" | xargs -P 8 -I {} bash -c '_js_worker "$@"' _ {} "$js_tmp_dir"
+
+	# merge results
+	if ls "$js_tmp_dir"/*.jsonl >/dev/null 2>&1; then
+		cat "$js_tmp_dir"/*.jsonl >"$jsonl_tmp" 2>/dev/null || true
+	fi
+	combine_json "$jsonl_tmp" "$output_file"
+	rm -rf "$js_tmp_dir"
+	rm -f "$jsonl_tmp"
+	quality_check_json_array "JS analysis" "$output_file"
+}
+
+# --- NEW MODULE: Cloud Storage Public Exposure Check ---
+run_cloud_storage_check() {
+	info "[21/22] Checking cloud storage buckets for public exposure..."
+	local output_file="$RUN_DIR/cloud_storage.json"
+	local jsonl_tmp="$RUN_DIR/cloud_storage.jsonl"
+	: >"$jsonl_tmp"
+
+	if [[ ! -s "$RUN_DIR/cloud_infrastructure.json" ]]; then
+		echo "[]" >"$output_file"
+		quality_check_json_array "Cloud storage" "$output_file"
+		return
+	fi
+
+	# extract Object Storage entries
+	local storage_entries
+	storage_entries=$(jq -r '.[] | select(.ResourceType == "Object Storage") | [.Asset, .CloudProvider, .Storage] | @tsv' \
+		"$RUN_DIR/cloud_infrastructure.json" 2>/dev/null || true)
+
+	if [[ -z "$storage_entries" ]]; then
+		echo "[]" >"$output_file"
+		quality_check_json_array "Cloud storage" "$output_file"
+		return
+	fi
+
+	while IFS=$'\t' read -r asset provider storage; do
+		[[ -z "$asset" ]] && continue
+		local url="" status="Unknown"
+
+		case "$provider" in
+		AWS)
+			# try the asset as a bucket name
+			local bucket_name
+			bucket_name=$(echo "$storage" | sed 's/AWS S3//; s/ //g' || echo "$asset")
+			url="https://${asset}.s3.amazonaws.com/"
+			;;
+		Azure)
+			url=$(echo "$storage" | grep -oE 'https://[a-z0-9]+\.blob\.core\.windows\.net[^"'"'"' ]*' || true)
+			[[ -z "$url" ]] && url="https://${asset}.blob.core.windows.net/"
+			;;
+		GCP)
+			url="https://storage.googleapis.com/${asset}/"
+			;;
+		*)
+			continue
+			;;
+		esac
+
+		local http_code
+		http_code=$(curl -s --max-time 8 --connect-timeout 4 -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+		case "$http_code" in
+		200) status="Public" ;;
+		403) status="Private" ;;
+		404) status="Nonexistent" ;;
+		*) status="Unknown (${http_code})" ;;
+		esac
+
+		local severity="info"
+		[[ "$status" == "Public" ]] && severity="critical"
+
+		jq -n \
+			--arg asset "$asset" \
+			--arg provider "$provider" \
+			--arg url "$url" \
+			--arg status "$status" \
+			--arg severity "$severity" \
+			'{ asset: $asset, provider: $provider, url: $url, status: $status, finding_severity: $severity }' \
+			>>"$jsonl_tmp" 2>/dev/null || true
+	done <<<"$storage_entries"
+
+	combine_json "$jsonl_tmp" "$output_file"
+	rm -f "$jsonl_tmp"
+	quality_check_json_array "Cloud storage" "$output_file"
+}
+
+# --- NEW MODULE: Change Detection vs. previous run ---
+generate_change_report() {
+	local output_file="$RUN_DIR/changes.json"
+	local project_dir
+	project_dir=$(dirname "$RUN_DIR")
+
+	# find the previous run directory (immediately before current)
+	local prev_run=""
+	local current_run_name
+	current_run_name=$(basename "$RUN_DIR")
+	while IFS= read -r run_dir; do
+		local run_name
+		run_name=$(basename "$run_dir")
+		[[ "$run_name" == "$current_run_name" ]] && break
+		prev_run="$run_dir"
+	done < <(find "$project_dir" -maxdepth 1 -name 'run-*' -type d 2>/dev/null | sort)
+
+	if [[ -z "$prev_run" ]]; then
+		echo '{"previous_run": null, "new_hosts": [], "removed_hosts": [], "new_findings": [], "removed_findings": []}' >"$output_file"
+		return
+	fi
+
+	local prev_run_name
+	prev_run_name=$(basename "$prev_run")
+
+	# compare hosts (from httpx)
+	local current_hosts prev_hosts
+	current_hosts=$(jq -r '(if type=="array" then .[] else . end) | .url // ""' "$RUN_DIR/httpx.json" 2>/dev/null | grep -v '^$' | sort -u || true)
+	prev_hosts=$(jq -r '(if type=="array" then .[] else . end) | .url // ""' "$prev_run/httpx.json" 2>/dev/null | grep -v '^$' | sort -u || true)
+
+	local new_hosts removed_hosts
+	new_hosts=$(comm -23 <(echo "$current_hosts") <(echo "$prev_hosts") | jq -Rc '[inputs]' 2>/dev/null || echo '[]')
+	removed_hosts=$(comm -13 <(echo "$current_hosts") <(echo "$prev_hosts") | jq -Rc '[inputs]' 2>/dev/null || echo '[]')
+
+	# compare findings (from takeover + exposed_files)
+	local current_findings prev_findings new_findings removed_findings
+	current_findings=$(jq -r '.[].domain // .[].url // ""' "$RUN_DIR/takeover.json" "$RUN_DIR/exposed_files.json" 2>/dev/null | sort -u || true)
+	prev_findings=$(jq -r '.[].domain // .[].url // ""' "$prev_run/takeover.json" "$prev_run/exposed_files.json" 2>/dev/null | sort -u || true)
+
+	new_findings=$(comm -23 <(echo "$current_findings") <(echo "$prev_findings") | jq -Rc '[inputs]' 2>/dev/null || echo '[]')
+	removed_findings=$(comm -13 <(echo "$current_findings") <(echo "$prev_findings") | jq -Rc '[inputs]' 2>/dev/null || echo '[]')
+
+	jq -n \
+		--arg prev_run "$prev_run_name" \
+		--argjson new_hosts "$new_hosts" \
+		--argjson removed_hosts "$removed_hosts" \
+		--argjson new_findings "$new_findings" \
+		--argjson removed_findings "$removed_findings" \
+		'{
+			previous_run: $prev_run,
+			new_hosts: $new_hosts,
+			removed_hosts: $removed_hosts,
+			new_findings: $new_findings,
+			removed_findings: $removed_findings
+		}' >"$output_file" 2>/dev/null || echo '{}' >"$output_file"
+}
+
 # glue the UI shell with the datasets and drop the finished HTML
 build_html_report() {
-info "[16/17] Building HTML report with analytics..."
+info "[22/22] Building HTML report + change detection..."
 	combine_json "$RUN_DIR/dnsx.json" "$RUN_DIR/dnsx_merged.json"
 	combine_json "$RUN_DIR/naabu.json" "$RUN_DIR/naabu_merged.json"
 	combine_json "$RUN_DIR/httpx.json" "$RUN_DIR/httpx_merged.json"
@@ -2564,7 +3053,18 @@ info "[16/17] Building HTML report with analytics..."
 	echo -n "const rawKatanaData = " >>report.html
 	cat $RUN_DIR/katana_links.json | tr -d "\n" >>report.html
 	echo "" >>report.html
-
+	echo -n "const takeoverData = " >>report.html
+	cat ${RUN_DIR}/takeover.json 2>/dev/null | tr -d "\n" >>report.html || echo "[]" >>report.html
+	echo "" >>report.html
+	echo -n "const exposedFilesData = " >>report.html
+	cat ${RUN_DIR}/exposed_files.json 2>/dev/null | tr -d "\n" >>report.html || echo "[]" >>report.html
+	echo "" >>report.html
+	echo -n "const jsAnalysisData = " >>report.html
+	cat ${RUN_DIR}/js_analysis.json 2>/dev/null | tr -d "\n" >>report.html || echo "[]" >>report.html
+	echo "" >>report.html
+	echo -n "const cloudStorageData = " >>report.html
+	cat ${RUN_DIR}/cloud_storage.json 2>/dev/null | tr -d "\n" >>report.html || echo "[]" >>report.html
+	echo "" >>report.html
 	cat footer.html >>report.html
 	sed -i.bak '/%%SCREENSHOT_MAP%%/{
     r '"$RUN_DIR/screenshot_map.json"'
@@ -2576,7 +3076,7 @@ info "[16/17] Building HTML report with analytics..."
 
 	mv report.html $RUN_DIR/
 
-	info "[17/17] Report generated at $RUN_DIR/report.html"
+	info "[22/22] Report generated at $RUN_DIR/report.html"
 }
 
 # final sandbox of data checks so we ship trustworthy artifacts
@@ -2593,6 +3093,10 @@ quality_post_run_checks() {
 	quality_check_json_array "Cloud inventory" "$RUN_DIR/cloud_infrastructure.json"
 	quality_check_json_array "Port summary" "$RUN_DIR/portscan.json"
 	quality_check_json_array "IP enrichment" "$RUN_DIR/ip_enrichment.json"
+	quality_check_json_array "Takeover detection" "$RUN_DIR/takeover.json"
+	quality_check_json_array "Exposed files" "$RUN_DIR/exposed_files.json"
+	quality_check_json_array "JS analysis" "$RUN_DIR/js_analysis.json"
+	quality_check_json_array "Cloud storage" "$RUN_DIR/cloud_storage.json"
 	quality_check_hosts_against_master "HTTP inventory" "$RUN_DIR/httpx.json" '(if type=="array" then .[] else . end) | (.input // .url // .host // "") | sub("^https?://"; "") | split("/")[0] | split(":")[0] | ascii_downcase'
 	quality_check_hosts_against_master "TLS inventory" "$RUN_DIR/tls_inventory.json" '(if type=="array" then .[] else . end) | (.Host // .host // .Domain // .domain // "") | ascii_downcase'
 	quality_check_hosts_against_master "Cloud inventory" "$RUN_DIR/cloud_infrastructure.json" '(if type=="array" then .[] else . end) | (.Asset // "") | ascii_downcase'
@@ -2636,27 +3140,32 @@ main() {
 	if ! run_gau; then
 		warning "GAU step encountered an error and was skipped."
 	fi
-	info "[5/17] Merging subdomains..."
+	info "[5/22] Merging subdomains..."
 	while read -r domain; do
 		echo "$domain" >>"$ALL_TEMP"
 		echo "www.$domain" >>"$ALL_TEMP"
 	done <"$PRIMARY_DOMAINS_FILE"
 	sort -u "$ALL_TEMP" >"$MASTER_SUBS"
-	tr '[:upper:]' '[:lower:]' <"$MASTER_SUBS" | sed '/^$/d' | sort -u >"$MASTER_HOST_INDEX"
 	rm -f "$ALL_TEMP"
+	tr '[:upper:]' '[:lower:]' <"$MASTER_SUBS" | sed '/^$/d' | sort -u >"$MASTER_HOST_INDEX"
 	run_dnsx
+	run_subdomain_takeover             # [7/22]  NEW: dangling CNAME / takeover detection
 	run_naabu
-	generate_ip_intel
+	generate_ip_intel                  # [9/22]  IP enrichment (parallel)
 	run_httpx
+	run_exposed_files                  # [11/22] NEW: sensitive file exposure
 	run_katana
-	gather_screenshots
-	run_login_detection
-	run_tls_inventory
-	run_security_compliance
-	run_api_identification
-	run_colleague_identification
-	run_cloud_infrastructure_inventory
-	build_html_report
+	run_js_analysis                    # [13/22] NEW: JS endpoint/secret extraction
+	gather_screenshots                 # [14/22] screenshot capture
+	run_login_detection                # [15/22] parallel, 2+ signal threshold
+	run_tls_inventory                  # [16/22] TLS + grading
+	run_security_compliance            # [17/22] parallel, cookie + CORS analysis
+	run_api_identification             # [19/22] multi-signal API detection
+	run_colleague_identification       # [20/22]
+	run_cloud_infrastructure_inventory # [21/22]
+	run_cloud_storage_check            # [21/22] storage exposure (runs after cloud infra)
+	generate_change_report             # delta vs. previous run
+	build_html_report                  # [22/22]
 	quality_post_run_checks
 	show_summary
 }

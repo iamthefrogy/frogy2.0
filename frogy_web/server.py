@@ -808,6 +808,7 @@ def create_app() -> Flask:
             status = "never"
             status_message = "No run recorded yet."
             ran_at = last_run.get("completed_at") or last_run.get("started_at")
+            started_at_val = last_run.get("started_at")
             report = None
             run_id = last_run.get("id")
             queue_position = None
@@ -829,6 +830,7 @@ def create_app() -> Flask:
                 status = active.get("status", "queued")
                 status_message = active.get("status_message") or status.capitalize()
                 ran_at = active.get("started_at") or active.get("enqueued_at") or ran_at
+                started_at_val = active.get("started_at") or started_at_val
                 queue_position = active.get("queue_position")
                 raw_scheduled = active.get("scheduled_for")
                 if raw_scheduled:
@@ -890,6 +892,7 @@ def create_app() -> Flask:
                     "status": status,
                     "status_message": status_message,
                     "ran_at": ran_at,
+                    "started_at": started_at_val,
                     "report": report,
                     "run_id": run_id,
                     "created_at": metadata.get("created_at"),
@@ -949,6 +952,52 @@ def create_app() -> Flask:
     @app.route("/")
     def index():
         return render_template("index.html")
+
+    @app.route("/projects/<slug>")
+    def project_detail_page(slug):
+        project_dir = PROJECTS_DIR / slug
+        if not (project_dir / "metadata.json").exists():
+            return abort(404)
+        return render_template("project.html")
+
+    @app.route("/api/projects/<slug>", methods=["GET"])
+    def api_project_detail(slug):
+        project_dir = PROJECTS_DIR / slug
+        meta_path = project_dir / "metadata.json"
+        if not meta_path.exists():
+            return jsonify({"error": "not found"}), 404
+        meta = load_metadata(project_dir)
+        runs = []
+        try:
+            for child in sorted(project_dir.iterdir(), reverse=True):
+                if not child.is_dir() or child.name in ("logs",):
+                    continue
+                report_path = child / "report.html"
+                run_meta_path = child / "run_meta.json"
+                run_info = {"run_id": child.name, "report_url": None, "status": "unknown"}
+                if run_meta_path.exists():
+                    try:
+                        run_info.update(load_json_file(run_meta_path))
+                    except Exception:
+                        pass
+                if report_path.exists():
+                    run_info["report_url"] = f"/projects/{slug}/runs/{child.name}/report"
+                log_path = project_dir / "logs" / f"{child.name}.log"
+                run_info["has_log"] = log_path.exists()
+                runs.append(run_info)
+        except Exception:
+            pass
+        last_run = meta.get("last_run", {})
+        return jsonify({
+            "slug": slug,
+            "name": meta.get("name", slug),
+            "targets": meta.get("latest_targets", meta.get("targets", [])),
+            "created_at": meta.get("created_at"),
+            "total_runs": len(runs),
+            "last_status": last_run.get("status"),
+            "summary_stats": last_run.get("summary_stats", {}),
+            "runs": runs[:30],
+        })
 
     @app.route("/api/status", methods=["GET"])
     def api_status():
@@ -1246,5 +1295,52 @@ def create_app() -> Flask:
         if not target.exists():
             abort(404, description=f"{asset_path} not found within run {run_id}.")
         return send_from_directory(run_dir, asset_path)
+
+    @app.route("/api/scans/<slug>/logs", methods=["GET"])
+    def api_scan_logs(slug: str):
+        # #14: sanitise cursor — non-negative and capped at a sane upper bound
+        cursor = max(0, min(int(request.args.get("cursor", 0)), 1_000_000))
+        run_id = request.args.get("run_id", "")
+
+        # Check for an active (running/queued) job first
+        active_job: Optional[FrogyJob] = None
+        with manager.lock:
+            for job in manager.running.values():
+                if job.project_slug == slug:
+                    active_job = job
+                    break
+            if active_job is None:
+                for job in manager.queue:
+                    if job.project_slug == slug:
+                        active_job = job
+                        break
+
+        if active_job is not None:
+            lines, total = active_job.get_logs(since=cursor)
+            done = active_job.status not in ("running", "queued", "pending")
+            return jsonify({"lines": lines, "cursor": cursor + len(lines), "done": done})
+
+        # Fall back to log file on disk
+        project_dir = PROJECTS_DIR / slug
+        logs_dir = project_dir / "logs"
+        if not logs_dir.exists():
+            return jsonify({"lines": [], "cursor": 0, "done": True})
+
+        if run_id:
+            log_path = logs_dir / f"{run_id}.log"
+        else:
+            log_files = sorted(logs_dir.glob("*.log"), reverse=True)
+            if not log_files:
+                return jsonify({"lines": [], "cursor": 0, "done": True})
+            log_path = log_files[0]
+
+        if not log_path.exists():
+            return jsonify({"lines": [], "cursor": 0, "done": True})
+
+        all_lines = log_path.read_text(errors="replace").splitlines()
+        # #14: cap cursor to actual line count to prevent oversized slice on bogus input
+        cursor = min(cursor, len(all_lines))
+        lines = all_lines[cursor:]
+        return jsonify({"lines": lines, "cursor": cursor + len(lines), "done": True})
 
     return app

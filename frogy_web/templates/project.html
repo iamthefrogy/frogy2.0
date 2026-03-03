@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Orbis — Dashboard</title>
+  <title>Orbis — Project</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
@@ -18,7 +18,7 @@
 
     <nav class="sidebar-nav">
       <span class="sidebar-nav-label">Workspace</span>
-      <a href="/" class="sidebar-nav-item is-active">
+      <a href="/" class="sidebar-nav-item">
         <span>📁</span> Projects
       </a>
     </nav>
@@ -38,66 +38,43 @@
 
     <div id="flash-message" class="flash" aria-live="polite"></div>
 
-    <div class="page-header">
-      <h1 class="page-title">Projects</h1>
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="/" class="breadcrumb-link">Projects</a>
+      <span>›</span>
+      <span class="js-project-name">Loading…</span>
+    </nav>
+
+    <!-- Project header -->
+    <div class="project-detail-header">
+      <div>
+        <h1 class="page-title js-project-name">Loading…</h1>
+        <p class="project-detail-meta" id="project-meta"></p>
+      </div>
       <div class="page-actions">
-        <input id="scan-search" type="search" placeholder="Search projects…" class="search-input" aria-label="Search projects">
         <button id="new-scan-btn" class="btn btn--primary" type="button">+ New Scan</button>
       </div>
     </div>
 
-    <!-- KPI cards -->
-    <div class="kpi-row">
-      <div class="kpi-card">
-        <span class="kpi-card-label">Total Projects</span>
-        <span class="kpi-card-value" id="kpi-projects">—</span>
-        <span class="kpi-card-sub">All time</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-card-label">Active Scans</span>
-        <span class="kpi-card-value accent" id="kpi-running">—</span>
-        <span class="kpi-card-sub">Running now</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-card-label">Completed</span>
-        <span class="kpi-card-value success" id="kpi-succeeded">—</span>
-        <span class="kpi-card-sub">Successful runs</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-card-label">In Queue</span>
-        <span class="kpi-card-value warning" id="kpi-queued">—</span>
-        <span class="kpi-card-sub">Waiting to run</span>
-      </div>
-    </div>
+    <!-- Summary stats (last run) -->
+    <div id="project-summary-stats"></div>
 
-    <!-- Filter tabs -->
-    <div class="controls-bar">
-      <div class="filter-tabs" role="tablist" aria-label="Filter by status">
-        <button class="filter-tab is-active" data-filter="all"       role="tab">All</button>
-        <button class="filter-tab"           data-filter="running"   role="tab">Running</button>
-        <button class="filter-tab"           data-filter="succeeded" role="tab">Done</button>
-        <button class="filter-tab"           data-filter="queued"    role="tab">Queued</button>
+    <!-- Targets expandable -->
+    <details>
+      <div class="targets-expandable">
+        <summary>Target Domains</summary>
+        <ol class="targets-list-detail" id="targets-detail-list">
+          <li style="color:var(--text-3)">Loading…</li>
+        </ol>
       </div>
-    </div>
+    </details>
 
-    <!-- Project list -->
-    <div class="project-list" id="project-list">
-      <div class="project-list-header" aria-hidden="true">
-        <span><input type="checkbox" id="select-all" aria-label="Select all"></span>
-        <span>Project</span>
-        <span>Status</span>
-        <span>Progress</span>
-        <span>Discovery</span>
-        <span></span>
+    <!-- Run history -->
+    <div>
+      <p class="section-title">Run History</p>
+      <div class="run-history-list" id="run-history-list">
+        <div class="run-history-empty">Loading runs…</div>
       </div>
-      <div id="scan-table-body" role="list"></div>
-    </div>
-
-    <!-- Bulk action bar -->
-    <div id="bulk-bar" class="bulk-bar hidden" role="toolbar" aria-label="Bulk actions">
-      <span id="bulk-count">0 selected</span>
-      <button id="bulk-delete-btn" class="btn btn--danger-ghost btn--sm" type="button">Delete selected</button>
-      <button id="bulk-deselect-btn" class="btn btn--ghost btn--sm" type="button">Deselect all</button>
     </div>
 
   </main>
@@ -155,15 +132,6 @@
     </div>
   </div>
 </section>
-
-<div id="log-backdrop" class="log-backdrop hidden"></div>
-<div id="log-panel" class="log-panel hidden" role="dialog" aria-label="Scan Logs">
-  <div class="log-panel-header">
-    <span id="log-panel-title" class="log-panel-title">Logs</span>
-    <button id="log-panel-close" class="icon-btn" aria-label="Close">✕</button>
-  </div>
-  <div id="log-output" class="log-output"></div>
-</div>
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

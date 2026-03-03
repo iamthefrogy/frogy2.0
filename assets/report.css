@@ -1,52 +1,61 @@
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   --font-family-base: 'Inter', 'Segoe UI', Tahoma, Geneva, sans-serif;
   --font-family-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
-  --color-bg: #f8fafc;
-  --color-surface: #ffffff;
-  --color-surface-muted: #eef2ff;
-  --color-border: rgba(15, 23, 42, 0.08);
-  --color-text: #0f172a;
-  --color-text-muted: #475569;
-  --color-primary: #2563eb;
-  --color-primary-soft: rgba(37, 99, 235, 0.12);
-  --color-primary-strong: #1d4ed8;
-  --color-accent: #10b981;
-  --color-danger: #ef4444;
-  --color-gridline: rgba(148, 163, 184, 0.22);
-  --report-table-header-bg: rgba(37, 99, 235, 0.1);
-  --report-table-header-secondary-bg: rgba(37, 99, 235, 0.06);
-  --shadow-soft: 0 16px 40px rgba(15, 23, 42, 0.12);
+  --color-bg:             #09090b;
+  --color-surface:        #111115;
+  --color-surface-muted:  #18181b;
+  --color-border:         #27272a;
+  --color-border-subtle:  #3f3f46;
+  --color-text:           #fafafa;
+  --color-text-muted:     #a1a1aa;
+  --color-text-subtle:    #71717a;
+  --color-primary:        #06b6d4;
+  --color-accent:         #06b6d4;
+  --color-primary-dim:    rgba(6,182,212,0.12);
+  --color-primary-soft:   rgba(6,182,212,0.12);
+  --color-primary-strong: #0891b2;
+  --color-success:        #22c55e;
+  --color-success-dim:    rgba(34,197,94,0.12);
+  --color-danger:         #ef4444;
+  --color-danger-dim:     rgba(239,68,68,0.12);
+  --color-warning:        #f59e0b;
+  --color-warning-dim:    rgba(245,158,11,0.12);
+  --color-info:           #3b82f6;
+  --color-header-bg:      #111115;
+  --color-header-border:  #27272a;
+  --color-gridline:       rgba(71,85,105,0.45);
+  --report-table-header-bg: rgba(6,182,212,0.12);
+  --report-table-header-secondary-bg: rgba(6,182,212,0.07);
+  --shadow-soft: 0 18px 42px rgba(2,6,23,0.68);
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 24px;
   --table-header-sticky-offset: 48px;
 }
 
-body[data-theme="light"],
-body:not([data-theme]) {
+body[data-theme="light"] {
   color-scheme: light;
-}
-
-body[data-theme="dark"] {
-  color-scheme: dark;
-  --color-bg: #0b1120;
-  --color-surface: #111827;
-  --color-surface-muted: #1f2937;
-  --color-border: rgba(148, 163, 184, 0.22);
-  --color-text: #e2e8f0;
-  --color-text-muted: #94a3b8;
-  --color-primary: #60a5fa;
-  --color-primary-soft: rgba(96, 165, 250, 0.22);
-  --color-primary-strong: #3b82f6;
-  --color-accent: #34d399;
-  --color-danger: #f87171;
-  --color-gridline: rgba(71, 85, 105, 0.45);
-  --report-table-header-bg: rgba(96, 165, 250, 0.18);
-  --report-table-header-secondary-bg: rgba(96, 165, 250, 0.12);
-  --shadow-soft: 0 18px 42px rgba(2, 6, 23, 0.68);
-  --table-header-sticky-offset: 48px;
+  --color-bg:             #f4f4f5;
+  --color-surface:        #ffffff;
+  --color-surface-muted:  #f4f4f5;
+  --color-border:         #e4e4e7;
+  --color-border-subtle:  #d4d4d8;
+  --color-text:           #09090b;
+  --color-text-muted:     #52525b;
+  --color-text-subtle:    #a1a1aa;
+  --color-primary:        #0891b2;
+  --color-accent:         #0891b2;
+  --color-primary-dim:    rgba(8,145,178,0.1);
+  --color-primary-soft:   rgba(8,145,178,0.1);
+  --color-primary-strong: #0e7490;
+  --color-header-bg:      #ffffff;
+  --color-header-border:  #e4e4e7;
+  --color-gridline:       rgba(148,163,184,0.22);
+  --report-table-header-bg: rgba(8,145,178,0.1);
+  --report-table-header-secondary-bg: rgba(8,145,178,0.06);
+  --shadow-soft: 0 16px 40px rgba(15,23,42,0.12);
 }
 
 *,
@@ -58,31 +67,21 @@ body[data-theme="dark"] {
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at 20% -10%, rgba(37, 99, 235, 0.16), transparent 55%) var(--color-bg);
+  background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-family-base);
   line-height: 1.5;
   transition: background 0.3s ease, color 0.3s ease;
 }
 
-body[data-theme="dark"] {
-  background: radial-gradient(circle at 20% -10%, rgba(59, 130, 246, 0.22), transparent 60%) var(--color-bg);
-}
-
 .header {
   top: 0;
   z-index: 50;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.92), rgba(79, 70, 229, 0.88));
-  color: #f8fafc;
+  background: var(--color-header-bg);
+  border-bottom: 1px solid var(--color-header-border);
+  color: var(--color-text);
   padding: 18px 28px;
-  box-shadow: 0 12px 32px rgba(6, 12, 34, 0.28);
-  backdrop-filter: blur(10px);
-}
-
-body[data-theme="dark"] .header {
-  background: linear-gradient(135deg, rgba(30, 64, 175, 0.88), rgba(17, 94, 198, 0.88));
-  color: #e2e8f0;
-  box-shadow: 0 20px 44px rgba(2, 6, 23, 0.7);
+  box-shadow: var(--shadow-soft);
 }
 
 .header__content {
@@ -245,6 +244,40 @@ body[data-theme="dark"] .btn--ghost {
 body[data-theme="dark"] .btn--ghost:hover {
   background: rgba(96, 165, 250, 0.22);
   color: #e0f2fe;
+}
+
+/* #16: light-theme overrides — default btn rules use light-on-dark colours that
+   become invisible when the report is switched to the light theme */
+body[data-theme="light"] .btn--primary {
+  background: var(--color-primary);
+  color: #ffffff;
+  border: 1px solid var(--color-primary-strong);
+  box-shadow: 0 2px 8px rgba(8, 145, 178, 0.25);
+}
+
+body[data-theme="light"] .btn--primary:hover {
+  background: var(--color-primary-strong);
+  box-shadow: 0 4px 12px rgba(8, 145, 178, 0.35);
+  transform: translateY(-1px);
+}
+
+body[data-theme="light"] .btn--ghost {
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border-subtle);
+}
+
+body[data-theme="light"] .btn--ghost:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+body[data-theme="light"] .header__subtitle {
+  color: var(--color-text-muted);
+}
+
+body[data-theme="light"] .export-menu__list {
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
 }
 
 .container {

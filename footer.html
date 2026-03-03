@@ -1,3 +1,107 @@
+// ── Redirect Deduplication ──────────────────────────────────────────────────
+// Removes double-counted entries caused by HTTP→HTTPS redirect chains.
+// Works with both legacy httpx data (status 3xx + location field) and data
+// collected with -follow-redirects (final_url field present).
+//
+// Rules:
+//   A) http:80   → https:443  same host — suppress HTTP if HTTPS record exists
+//   B) http:N    → https:N    same host — suppress HTTP if HTTPS record exists
+//   C) same host + scheme + port, path-only redirect — keep, update url to final_url
+//   D) cross-subdomain redirect — keep both, annotate with _redirectsTo
+//   E) cross-domain redirect   — keep both, annotate with _redirectsTo
+function deduplicateHttpxRecords(records) {
+  if (!records || records.length === 0) return records;
+
+  function parseUrlParts(urlStr) {
+    if (!urlStr) return null;
+    try {
+      const normalized = urlStr.startsWith('//') ? 'https:' + urlStr : urlStr;
+      const u = new URL(normalized);
+      const scheme = u.protocol.replace(':', '').toLowerCase();
+      const host = u.hostname.toLowerCase();
+      const explicitPort = u.port ? parseInt(u.port, 10) : null;
+      const effectivePort = explicitPort !== null ? explicitPort : (scheme === 'https' ? 443 : 80);
+      return { scheme, host, port: effectivePort, path: u.pathname };
+    } catch { return null; }
+  }
+
+  // Map "scheme:host:effectivePort" → record index for quick membership check
+  const existingKeys = new Map();
+  records.forEach((r, idx) => {
+    const p = parseUrlParts(r.url || r.input || '');
+    if (p) existingKeys.set(`${p.scheme}:${p.host}:${p.port}`, idx);
+  });
+
+  const suppressed = new Set();
+  const updated = new Map(); // idx → patched record
+
+  records.forEach((r, idx) => {
+    if (suppressed.has(idx)) return;
+    const sc = Number(r.status_code);
+    const isRedirect = sc >= 300 && sc < 400;
+    const hasFinalUrl = !!(r.final_url && r.final_url !== (r.url || r.input || ''));
+
+    // Determine where this record redirects to
+    let targetUrl = null;
+    if (hasFinalUrl) {
+      targetUrl = r.final_url;
+    } else if (isRedirect && r.location) {
+      targetUrl = r.location;
+      // Resolve protocol-relative and relative paths
+      if (targetUrl.startsWith('//')) {
+        const srcScheme = parseUrlParts(r.url || r.input || '')?.scheme || 'https';
+        targetUrl = srcScheme + ':' + targetUrl;
+      } else if (!targetUrl.includes('://')) {
+        try { targetUrl = new URL(targetUrl, r.url || r.input || '').href; }
+        catch { targetUrl = null; }
+      }
+    }
+
+    if (!targetUrl) return; // No redirect info — keep as-is
+
+    const src = parseUrlParts(r.url || r.input || '');
+    const tgt = parseUrlParts(targetUrl);
+    if (!src || !tgt) return;
+
+    if (src.host === tgt.host) {
+      // Rule A: http:80 → https:443 same host
+      if (src.scheme === 'http' && src.port === 80 && tgt.scheme === 'https' && tgt.port === 443) {
+        const httpsIdx = existingKeys.get(`https:${tgt.host}:443`);
+        if (httpsIdx !== undefined && httpsIdx !== idx) { suppressed.add(idx); return; }
+        // No separate HTTPS record — keep this one, upgrade url to final target
+        if (hasFinalUrl) updated.set(idx, { ...r, url: r.final_url, _redirectedFrom: r.url });
+        return;
+      }
+
+      // Rule B: http:N → https:N same host (non-standard port scheme upgrade)
+      if (src.scheme === 'http' && tgt.scheme === 'https' && src.port === tgt.port) {
+        const httpsIdx = existingKeys.get(`https:${tgt.host}:${tgt.port}`);
+        if (httpsIdx !== undefined && httpsIdx !== idx) { suppressed.add(idx); return; }
+        if (hasFinalUrl) updated.set(idx, { ...r, url: r.final_url, _redirectedFrom: r.url });
+        return;
+      }
+
+      // Rule C: Same host, same scheme + port — path-only redirect
+      if (src.scheme === tgt.scheme && src.port === tgt.port) {
+        if (hasFinalUrl) updated.set(idx, { ...r, url: r.final_url, _redirectedFrom: r.url });
+        return;
+      }
+
+      // Same host, other scheme/port combo — check if target record already exists
+      const tgtIdx = existingKeys.get(`${tgt.scheme}:${tgt.host}:${tgt.port}`);
+      if (tgtIdx !== undefined && tgtIdx !== idx) { suppressed.add(idx); return; }
+      updated.set(idx, { ...r, _redirectsTo: targetUrl });
+    } else {
+      // Rule D: Cross-subdomain, Rule E: Cross-domain — keep both, annotate
+      updated.set(idx, { ...r, _redirectsTo: targetUrl });
+    }
+  });
+
+  return records
+    .map((r, idx) => updated.has(idx) ? updated.get(idx) : r)
+    .filter((_, idx) => !suppressed.has(idx));
+}
+
 const dnsxData = filterRecordsByHost(rawDnsxData, record => record.host).map(record => {
   const hostValue = normalizeHost(record.host);
   return {
@@ -5,14 +109,14 @@ const dnsxData = filterRecordsByHost(rawDnsxData, record => record.host).map(rec
     host: hostValue ? hostValue.toLowerCase() : hostValue
   };
 });
-const httpxData = filterRecordsByHost(rawHttpxData, record => {
+const httpxData = deduplicateHttpxRecords(filterRecordsByHost(rawHttpxData, record => {
   const inputHost = normalizeHost((record.input || "").split(":")[0]);
   if (hostLooksValid(inputHost)) return inputHost;
   return extractHostFromUrl(record.url || record.host || record.input || "");
 }).map(record => ({
   ...record,
   input: record.input ? record.input.trim().toLowerCase() : record.input
-}));
+})));
 const naabuData = filterRecordsByHost(rawNaabuData, record => record.host).map(record => ({
   ...record,
   host: (() => {
@@ -29,7 +133,12 @@ const loginData = filterRecordsByHost(
     ...record,
     login_detection: {
       ...record.login_detection,
-      login_found: record?.login_detection?.login_found || "No",
+      // #10: safe type normalization — guard against boolean true/false from scanner
+      login_found: (() => {
+        const v = record?.login_detection?.login_found;
+        if (!v) return "No";
+        return (String(v).toLowerCase() === "yes" || v === true) ? "Yes" : "No";
+      })(),
       login_details: details
     }
   };
@@ -124,6 +233,19 @@ if (typeof tlsInventoryData !== "undefined") {
           } else if (!Array.isArray(window.cloudInfraData)) {
             window.cloudInfraData = [];
           }
+
+          // #13: data quality flags — track which tools produced output so the report
+          // can distinguish "zero findings" from "tool did not run / data missing"
+          const dataQuality = {
+            dns:     dnsxData.length > 0,
+            http:    httpxData.length > 0,
+            ports:   naabuData.length > 0,
+            login:   loginData.length > 0,
+            tls:     Array.isArray(window.tlsInventoryData) && window.tlsInventoryData.length > 0,
+            headers: false, // set after secHeadersArray is built
+            cloud:   Array.isArray(window.cloudInfraData) && window.cloudInfraData.length > 0
+          };
+
           const secHeadersArray = (() => {
             if (typeof secHeadersData !== "undefined") {
               return Array.isArray(secHeadersData) ? secHeadersData : [];
@@ -132,6 +254,7 @@ if (typeof tlsInventoryData !== "undefined") {
             return [];
           })();
           window.secHeadersData = secHeadersArray;
+          dataQuality.headers = secHeadersArray.length > 0;
 
 const secMapDomain = {};
           const secMapUrl = {};
@@ -146,7 +269,14 @@ const secMapDomain = {};
             secMapUrl[item.URL] = item;
           });
           const loginMap = {};
-          loginData.forEach(item => { loginMap[item.url] = item.login_detection.login_found; });
+          const loginDetailsMap = {};
+          loginData.forEach(item => {
+            loginMap[item.url] = item.login_detection.login_found;
+            if (Array.isArray(item.login_detection.login_details) && item.login_detection.login_details.length) {
+              loginDetailsMap[item.url] = item.login_detection.login_details;
+            }
+          });
+          window.loginDetailsMap = loginDetailsMap;
           const apiMap = {};
           apiData.forEach(item => { apiMap[item.domain] = item.api_endpoint; });
           const colleagueMap = {};
@@ -243,8 +373,42 @@ const secMapDomain = {};
               const set = byOrigin[o] || new Set();
               linksMap[rec.url] = Array.from(set).sort();
             });
-
             window.linksMap = linksMap;
+
+            // Deduplicated unique page count per endpoint — strip query params, normalize
+            // numeric path segments (/users/123 and /users/456 both → /users/{id}) so
+            // pagination does not inflate the count.
+            const uniquePageCountMap = {};
+            (httpxData || []).forEach(rec => {
+              const links = linksMap[rec.url] || [];
+              const uniquePages = new Set();
+              links.forEach(url => {
+                try {
+                  const u = new URL(url);
+                  const normPath = u.pathname
+                    .replace(/\/\d+(?=\/|$)/g, '/{id}')
+                    .replace(/\/$/, '') || '/';
+                  uniquePages.add(u.origin + normPath);
+                } catch {}
+              });
+              uniquePageCountMap[rec.url] = uniquePages.size;
+            });
+            window.uniquePageCountMap = uniquePageCountMap;
+          })();
+
+          // Build takeover risk lookup from takeoverData injected by frogy.sh
+          (function () {
+            const lookup = {};
+            const td = (typeof takeoverData !== 'undefined' && Array.isArray(takeoverData)) ? takeoverData : [];
+            td.forEach(t => {
+              if (!t.domain || (t.status || '').toLowerCase() === 'safe') return;
+              lookup[(t.domain || '').toLowerCase()] = {
+                status: t.status,
+                severity: (t.severity || 'low').toLowerCase(),
+                provider: t.provider || 'Unknown'
+              };
+            });
+            window.takeoverByDomain = lookup;
           })();
 
           const ipIntelIndex = buildIpIntelIndex(ipIntelData);
@@ -297,13 +461,17 @@ const secMapDomain = {};
                 httpLoginHosts.add(parsed.hostname);
               }
             } catch {
+              // #2: extract hostname only (strip scheme, path, query, port for dedup)
               if (url.startsWith("https://")) {
-                httpsLoginHosts.add(url.replace(/^https?:\/\//, ""));
+                httpsLoginHosts.add(url.replace(/^https:\/\//, "").split(/[/?#:]/)[0]);
               } else if (url.startsWith("http://")) {
-                httpLoginHosts.add(url.replace(/^https?:\/\//, ""));
+                httpLoginHosts.add(url.replace(/^http:\/\//, "").split(/[/?#:]/)[0]);
               }
             }
           });
+
+          // #11: deduplicated count of unique login hosts across both protocols
+          const uniqueLoginHostsTotal = new Set([...httpLoginHosts, ...httpsLoginHosts]).size;
 
           const employeeAssetCount = Object.values(colleagueMap).filter(value => {
             if (!value) return false;
@@ -365,14 +533,18 @@ const secMapDomain = {};
               emailDomainStates[domain] = defaultEmailState();
             }
           });
-          const emailBaseline = resolvableDomainSet.size || Object.keys(emailDomainStates).length || pipelineStats.resolvable || 0;
+          // #3: use union of secData domains + resolvable domains so coverage is never
+          // understated when the security scan covered more domains than resolved via DNS
+          const allEmailDomains = new Set([
+            ...Object.keys(emailDomainStates),
+            ...Array.from(resolvableDomainSet)
+          ]);
+          const emailBaseline = allEmailDomains.size || pipelineStats.resolvable || 0;
           let spfCovered = 0;
           let dkimCovered = 0;
           let dmarcCovered = 0;
           let dnssecCovered = 0;
-          const emailStateDomainList = resolvableDomainSet.size
-            ? Array.from(resolvableDomainSet)
-            : Object.keys(emailDomainStates);
+          const emailStateDomainList = Array.from(allEmailDomains);
           emailStateDomainList.forEach(domain => {
             const state = emailDomainStates[domain] || defaultEmailState();
             if (state.spf) spfCovered++;
@@ -390,6 +562,14 @@ const secMapDomain = {};
           const riskLeaderboard = [...riskEntries].sort((a, b) => b.score - a.score);
           const topRiskEntry = riskLeaderboard[0] || null;
           const topRiskLabel = topRiskEntry ? describeEndpoint(topRiskEntry) : null;
+
+          // #7: aggregate risk score = mean of top-5 entries (more representative than single peak)
+          const aggregateRiskScore = (() => {
+            if (!riskLeaderboard.length) return 0;
+            const topN = Math.min(5, riskLeaderboard.length);
+            const sum = riskLeaderboard.slice(0, topN).reduce((s, e) => s + (Number(e.score) || 0), 0);
+            return Math.round(sum / topN);
+          })();
 
           const timestamp = formatTimestampUTC(deriveScanTimestamp([dnsxData, httpxData, naabuData, loginData]));
           const summaryMetaParts = [];
@@ -471,6 +651,8 @@ const secMapDomain = {};
             DNSSEC: { configured: dnssecCovered, missing: Math.max(emailBaseline - dnssecCovered, 0) }
           };
 
+          const hstsCovered = headerCoverage['HSTS']?.present ?? 0;
+
           const exposureMatrix = {
             endpoints: { http: httpEndpointCount, https: httpsEndpointCount },
             logins: { http: httpLoginCount, https: httpsLoginCount }
@@ -478,22 +660,64 @@ const secMapDomain = {};
 
           const statusCounts = {};
           httpxData.forEach(item => {
-            const code = String(item.status_code ?? "Unknown");
+            // #15: categorize non-numeric responses so "Unknown" isn't a single opaque bucket
+            const sc = item.status_code;
+            const code = (sc != null && sc !== "" && !Number.isNaN(Number(sc)))
+              ? String(sc)
+              : (item.failed ? "Failed" : (item.error ? "Error" : "Unknown"));
             statusCounts[code] = (statusCounts[code] || 0) + 1;
           });
-          const statusBreakdown = Object.entries(statusCounts).sort((a, b) => {
-            const codeA = Number(a[0]);
-            const codeB = Number(b[0]);
-            const isNumA = !Number.isNaN(codeA);
-            const isNumB = !Number.isNaN(codeB);
-            if (isNumA && isNumB) return codeA - codeB;
-            if (isNumA) return -1;
-            if (isNumB) return 1;
-            return a[0].localeCompare(b[0]);
-          });
+          // statusBreakdownObj is a plain object (code → count) for the chart
+          const statusBreakdownObj = Object.fromEntries(
+            Object.entries(statusCounts).sort((a, b) => {
+              const codeA = Number(a[0]);
+              const codeB = Number(b[0]);
+              const isNumA = !Number.isNaN(codeA);
+              const isNumB = !Number.isNaN(codeB);
+              if (isNumA && isNumB) return codeA - codeB;
+              if (isNumA) return -1;
+              if (isNumB) return 1;
+              return a[0].localeCompare(b[0]);
+            })
+          );
+          const statusBreakdown = Object.entries(statusBreakdownObj);
           const statusContext = statusBreakdown.length
             ? statusBreakdown.map(([code, count]) => `${count}×${code}`).join(", ")
             : "No HTTP status data observed";
+
+          // TLS cert health stats (computed from tlsInventoryData)
+          const tlsCertStats = (() => {
+            const records = Array.isArray(window.tlsInventoryData) ? window.tlsInventoryData : [];
+            const seenKeys = new Set();
+            let ok = 0, expiringSoon = 0, expired = 0;
+            records.forEach(record => {
+              // #12: include SerialNumber/Issuer in dedup key to avoid collapsing
+              // distinct certs on the same host that happen to expire on the same date
+              const certKey = [
+                record.Host || record.Domain || '',
+                record.NotAfter || record.ValidTo || '',
+                record.SerialNumber || record.Serial || record.Issuer || ''
+              ].join('|');
+              if (seenKeys.has(certKey)) return;
+              seenKeys.add(certKey);
+              let days = null;
+              if (record.DaysUntilExpiry != null && record.DaysUntilExpiry !== '') {
+                days = Number(record.DaysUntilExpiry);
+              } else {
+                const dateStr = record.NotAfter || record.ValidTo || record['Cert Expiry Date'];
+                if (dateStr) {
+                  const expiry = new Date(dateStr);
+                  // #9: Math.floor for conservative boundary — never round up remaining days
+                  if (!isNaN(expiry.getTime())) days = Math.floor((expiry - Date.now()) / 86400000);
+                }
+              }
+              if (days == null) return;
+              if (days < 0) expired++;
+              else if (days < 30) expiringSoon++;
+              else ok++;
+            });
+            return { ok, expiringSoon, expired, total: ok + expiringSoon + expired };
+          })();
 
           const cloudStats = (() => {
             const data = Array.isArray(window.cloudInfraData) ? window.cloudInfraData : [];
@@ -509,7 +733,8 @@ const secMapDomain = {};
               const provider = (item.CloudProvider || "").trim();
               const resourceTypeRaw = (item.ResourceType || "").trim();
               const resourceType = resourceTypeRaw.toLowerCase();
-              const recognized = resourceType !== "" && resourceType !== "other" || provider;
+              // #4: explicit parentheses — provider alone is sufficient to recognize an asset
+              const recognized = (resourceType !== "" && resourceType !== "other") || (provider !== "");
               if (!recognized) return;
               stats.total += 1;
               if (provider) {
@@ -560,19 +785,25 @@ const secMapDomain = {};
             },
             headerCoverage,
             headerBaseline,
+            hstsCovered,
+            certsExpiringSoon: tlsCertStats.expiringSoon + tlsCertStats.expired,
+            tlsCertStats,
             largestCluster,
             katanaTotal,
             statusContext,
             employeeAssetCount,
             colleagueTotal,
             totalLoginSurfaces: pipelineStats.logins || 0,
+            uniqueLoginHostsTotal,          // #11: host-deduplicated login surface count
             topRiskScore: Number(topRiskEntry?.score) || 0,
+            aggregateRiskScore,             // #7: mean of top-5 risk entries
             topRiskLabel,
             missingDmarc: Math.max(emailBaseline - dmarcCovered, 0),
             missingSpf: Math.max(emailBaseline - spfCovered, 0),
             missingDkim: Math.max(emailBaseline - dkimCovered, 0),
             dnssecGap: Math.max(emailBaseline - dnssecCovered, 0),
-            cloudStats
+            cloudStats,
+            dataQuality                     // #13: per-tool data presence flags
           };
 
           const actionCandidates = [];
@@ -657,14 +888,22 @@ const secMapDomain = {};
               resolvable: pipelineStats.resolvable || 0,
               webHosts: pipelineStats.webHosts || 0
             },
-            riskLeaderboard,
-            dnsStats,
-            exposureMatrix,
             headerCoverage,
+            headerBaseline,
             emailCoverage,
-            statusBreakdown,
-            portCategoryTotals: portscanInsights.categoryTotals
+            statusBreakdown: statusBreakdownObj,
+            dnsStats,
+            loginStats: { http: httpLoginCount, https: httpsLoginCount },
+            portStats: { management: managementPortCount, database: databasePortCount, total: totalOpenPorts },
+            tlsCertStats,
+            cloudStats,
           });
+
+          // Endpoint gallery + cert coloring
+          setTimeout(() => {
+            initEndpointViewToggle();
+            applyTlsExpiryColoring();
+          }, 100);
 
     } catch (err) {
       console.error("Error loading data or building report:", err);
@@ -740,6 +979,109 @@ const secMapDomain = {};
           closeLinksModal();
         }
       });
+
+      /* ═══════════════════════════════════════════════════════════
+         FEATURES — Gallery, Auth Badges, Certs
+         ═══════════════════════════════════════════════════════════ */
+
+      // ── Auth Badge helper ────────────────────────────────────────
+      function authBadgeHtml(val) {
+        const ok = val && val !== '-' && val.toLowerCase() !== 'none' && val.toLowerCase() !== 'no';
+        return `<span class="auth-badge auth-badge--${ok ? 'ok' : 'bad'}">${ok ? '✓' : '✗'}</span>`;
+      }
+
+      // ── Endpoint Gallery ─────────────────────────────────────────
+      function initEndpointViewToggle() {
+        const buttons = document.querySelectorAll('[data-endpoints-view]');
+        if (!buttons.length) return;
+        buttons.forEach(btn => {
+          btn.addEventListener('click', () => {
+            buttons.forEach(b => b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            const mode = btn.dataset.endpointsView;
+            const tableWrap = document.getElementById('endpoints-table')?.closest('.table-container');
+            const scrollControls = document.querySelector('.table-scroll-controls[data-view-group="endpoints"]');
+            const gallery = document.getElementById('endpoints-gallery');
+            if (mode === 'gallery') {
+              if (tableWrap) tableWrap.style.display = 'none';
+              if (scrollControls) scrollControls.style.display = 'none';
+              if (gallery) {
+                gallery.style.display = 'grid';
+                renderEndpointGallery(typeof httpxData !== 'undefined' ? httpxData : []);
+              }
+            } else {
+              if (tableWrap) tableWrap.style.display = '';
+              if (scrollControls) scrollControls.style.display = '';
+              if (gallery) gallery.style.display = 'none';
+            }
+          });
+        });
+      }
+
+      function renderEndpointGallery(data) {
+        const container = document.getElementById('endpoints-gallery');
+        if (!container || !Array.isArray(data)) return;
+        container.innerHTML = data.map(h => {
+          const screenshotKey = (h.host || '').replace(/\./g, '_') + '_' + (h.port || 443);
+          const screenshotPath = (typeof screenshotMap !== 'undefined' && screenshotMap?.[screenshotKey]) ? screenshotMap[screenshotKey] : null;
+          const sc = Number(h.status_code) || 0;
+          const scClass = sc >= 500 ? '5xx' : sc >= 400 ? '4xx' : sc >= 300 ? '3xx' : '2xx';
+          const techs = (Array.isArray(h.tech) ? h.tech : []).slice(0, 4);
+          const safeUrl = escapeHtml(screenshotPath || '');
+          return `<div class="endpoint-card" onclick="openModal('${safeUrl}')">
+            ${screenshotPath
+              ? `<img class="endpoint-card__thumb" src="${screenshotPath}" alt="screenshot" loading="lazy">`
+              : `<div class="endpoint-card__thumb-placeholder">No screenshot</div>`}
+            <div class="endpoint-card__body">
+              <div class="endpoint-card__url" title="${escapeHtml(h.url || '')}">${escapeHtml(h.host || '')}</div>
+              <div class="endpoint-card__row">
+                <span class="sc-badge sc-badge--${scClass}">${sc || '—'}</span>
+                ${h.title ? `<span style="font-size:0.72rem;color:var(--color-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${escapeHtml(h.title)}</span>` : ''}
+              </div>
+              ${techs.length ? `<div class="endpoint-card__row">${techs.map(t => `<span class="tech-chip">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('');
+      }
+
+      // ── TLS Cert Expiry Coloring ──────────────────────────────────
+      function certExpiryClass(dateStr) {
+        if (!dateStr || dateStr === '—') return '';
+        const expiry = new Date(dateStr);
+        if (isNaN(expiry.getTime())) return '';
+        const days = Math.floor((expiry - Date.now()) / 86400000); // #9: Math.floor for conservative boundary
+        if (days < 0)  return 'expiry-urgent'; // already expired
+        if (days < 30) return 'expiry-soon';   // #1: expiring soon, not same class as expired
+        if (days < 90) return 'expiry-soon';
+        return 'expiry-ok';
+      }
+
+      function applyTlsExpiryColoring() {
+        const tbody = document.getElementById('tls-table-body');
+        if (!tbody) return;
+        // Column indices for "Not Before" and "Not After" in TLS table vary — scan all cells
+        Array.from(tbody.querySelectorAll('tr')).forEach(row => {
+          Array.from(row.cells).forEach(cell => {
+            const text = cell.textContent.trim();
+            // Looks like a date: e.g. 2025-03-01 or 2025-03-01T00:00:00Z
+            if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+              const cls = certExpiryClass(text);
+              if (cls) {
+                const span = document.createElement('span');
+                span.className = cls;
+                span.textContent = text;
+                cell.textContent = '';
+                cell.appendChild(span);
+              }
+            }
+          });
+        });
+
+        // Watch for dynamic updates
+        const observer = new MutationObserver(() => applyTlsExpiryColoring());
+        observer.observe(tbody, { childList: true, subtree: false });
+      }
+
     </script>
 
   </body>

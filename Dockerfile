@@ -27,6 +27,8 @@ RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@${SUBFINDE
 
 FROM ubuntu:24.04
 
+LABEL project=frogy
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \

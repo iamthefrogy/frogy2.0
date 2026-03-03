@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>External Attack Surface Analysis</title>
+    <title>Orbis — Attack Surface Intelligence</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -525,6 +525,161 @@
           min-width: 260px;
         }
       }
+
+      /* ── Column Picker Panel ──────────────────────────────────── */
+      .col-picker-panel {
+        position: fixed; top: 0; right: 0; bottom: 0; width: 290px;
+        background: var(--color-surface); border-left: 1px solid var(--color-border);
+        display: flex; flex-direction: column; z-index: 500;
+        transform: translateX(100%); transition: transform 0.25s ease;
+        box-shadow: -4px 0 20px rgba(0,0,0,0.25);
+      }
+      .col-picker-panel.is-open { transform: translateX(0); }
+      .col-picker-header {
+        padding: 14px 18px; border-bottom: 1px solid var(--color-border);
+        display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+      }
+      .col-picker-title { font-weight: 600; font-size: 0.9rem; color: var(--color-text); }
+      .col-picker-close {
+        width: 28px; height: 28px; border-radius: 6px; border: none;
+        background: transparent; color: var(--color-text-muted);
+        cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;
+        font-family: inherit;
+      }
+      .col-picker-close:hover { background: var(--color-surface-muted); color: var(--color-text); }
+      .col-picker-body { flex: 1; overflow-y: auto; padding: 10px 14px; }
+      .col-picker-group { margin-bottom: 14px; }
+      .col-picker-group-title {
+        font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.12em; color: var(--color-text-muted); margin: 0 0 7px;
+      }
+      .col-picker-item {
+        display: flex; align-items: center; gap: 8px; padding: 4px 6px;
+        border-radius: 5px; cursor: pointer;
+      }
+      .col-picker-item:hover { background: var(--color-surface-muted); }
+      .col-picker-item label { font-size: 0.82rem; color: var(--color-text); cursor: pointer; flex: 1; }
+      .col-picker-btn-inline {
+        display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px;
+        border-radius: 6px; border: 1px solid var(--color-border);
+        background: transparent; color: var(--color-text-muted);
+        cursor: pointer; font-size: 0.8rem; font-family: inherit;
+        transition: background 0.15s, color 0.15s; margin-left: 6px;
+      }
+      .col-picker-btn-inline:hover { background: var(--color-surface-muted); color: var(--color-text); }
+
+      /* ── Auth Badges ─────────────────────────────────────────── */
+      .auth-badge {
+        display: inline-flex; align-items: center; padding: 2px 7px;
+        border-radius: 4px; font-size: 0.7rem; font-weight: 700;
+      }
+      .auth-badge--ok  { background: rgba(34,197,94,0.15); color: #22c55e; }
+      .auth-badge--bad { background: rgba(239,68,68,0.15);  color: #ef4444; }
+
+      /* ── View Toggle (Table / Gallery) ───────────────────────── */
+      .endpoints-toolbar {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      }
+      .view-toggle {
+        display: flex; gap: 2px; padding: 3px;
+        background: var(--color-surface-muted); border: 1px solid var(--color-border);
+        border-radius: 6px; margin-left: auto;
+      }
+      .view-toggle-btn {
+        padding: 4px 10px; border-radius: 4px; border: none; background: transparent;
+        color: var(--color-text-muted); cursor: pointer; font-size: 0.8rem; font-family: inherit;
+        transition: background 0.15s, color 0.15s;
+      }
+      .view-toggle-btn.is-active { background: var(--color-surface); color: var(--color-text); }
+
+      /* ── Endpoint Gallery ────────────────────────────────────── */
+      .endpoint-gallery {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr));
+        gap: 14px; padding: 4px;
+      }
+      .endpoint-card {
+        background: var(--color-surface); border: 1px solid var(--color-border);
+        border-radius: 8px; overflow: hidden; cursor: pointer;
+        transition: border-color 0.15s;
+      }
+      .endpoint-card:hover { border-color: var(--color-primary); }
+      .endpoint-card__thumb {
+        width: 100%; height: 120px; object-fit: cover; display: block;
+        background: var(--color-surface-muted);
+      }
+      .endpoint-card__thumb-placeholder {
+        width: 100%; height: 120px; display: flex; align-items: center; justify-content: center;
+        background: var(--color-surface-muted); color: var(--color-text-muted); font-size: 0.75rem;
+      }
+      .endpoint-card__body { padding: 9px 11px; display: flex; flex-direction: column; gap: 5px; }
+      .endpoint-card__url {
+        font-size: 0.78rem; font-weight: 600; color: var(--color-text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .endpoint-card__row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+      .sc-badge { padding: 2px 6px; border-radius: 3px; font-size: 0.68rem; font-weight: 700; }
+      .sc-badge--2xx { background: rgba(34,197,94,0.15);  color: #22c55e; }
+      .sc-badge--3xx { background: rgba(59,130,246,0.15);  color: #3b82f6; }
+      .sc-badge--4xx { background: rgba(245,158,11,0.15);  color: #f59e0b; }
+      .sc-badge--5xx { background: rgba(239,68,68,0.15);   color: #ef4444; }
+      .tech-chip {
+        padding: 2px 5px; background: var(--color-surface-muted);
+        border: 1px solid var(--color-border); border-radius: 3px;
+        font-size: 0.64rem; color: var(--color-text-muted);
+      }
+
+      /* ── Cert Expiry Colors ──────────────────────────────────── */
+      .expiry-urgent { color: var(--color-danger); font-weight: 700; }
+      .expiry-soon   { color: #f59e0b; font-weight: 600; }
+      .expiry-ok     { color: var(--color-accent); }
+
+      /* ── 3×3 Charts Grid ─────────────────────────────────────── */
+      .charts-grid-2x2 {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+      }
+      .chart-box-2x2 {
+        background: var(--color-surface); border: 1px solid var(--color-border);
+        border-radius: 10px; padding: 14px 16px;
+        display: flex; flex-direction: column; height: 220px;
+      }
+      .chart-box-2x2 canvas { flex: 1; min-height: 0; }
+      .chart-box-2x2 .chart-box-title {
+        font-size: 0.63rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.12em; color: var(--color-text-muted); margin: 0 0 10px;
+      }
+      @media (max-width: 1100px) {
+        .charts-grid-2x2 { grid-template-columns: repeat(2, 1fr); }
+      }
+      @media (max-width: 700px) {
+        .charts-grid-2x2 { grid-template-columns: 1fr; }
+      }
+
+      /* ── Executive Banner ────────────────────────────────────── */
+      .exec-banner { display:grid; grid-template-columns:180px 1fr; gap:0; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:20px }
+      .exec-score-panel { background:var(--color-surface-muted); border-right:1px solid var(--color-border); padding:28px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px }
+      .exec-score-label { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; color:var(--color-text-muted) }
+      .exec-score-value { font-size:3.5rem; font-weight:800; line-height:1; letter-spacing:-0.03em }
+      .exec-score-value.score-critical { color:#ef4444 }
+      .exec-score-value.score-high     { color:#f97316 }
+      .exec-score-value.score-medium   { color:#f59e0b }
+      .exec-score-value.score-low      { color:#22c55e }
+      .exec-score-grade { font-size:0.8rem; font-weight:600; color:var(--color-text-muted) }
+      .exec-metrics { display:grid; grid-template-columns:repeat(4,1fr); padding:0 }
+      .exec-metric-group { padding:20px; border-right:1px solid var(--color-border) }
+      .exec-metric-group:last-child { border-right:none }
+      .exec-metric-group-title { font-size:0.6rem; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; color:var(--color-text-muted); margin:0 0 12px }
+      .exec-metric-row { display:flex; align-items:baseline; gap:6px; margin-bottom:6px }
+      .exec-metric-val { font-size:1.4rem; font-weight:700; line-height:1; color:var(--color-text) }
+      .exec-metric-val.accent  { color:var(--color-primary) }
+      .exec-metric-val.danger  { color:#ef4444 }
+      .exec-metric-val.warning { color:#f59e0b }
+      .exec-metric-val.success { color:#22c55e }
+      .exec-metric-lbl { font-size:0.72rem; color:var(--color-text-muted) }
+      @media (max-width:900px) {
+        .exec-banner { grid-template-columns:1fr }
+        .exec-metrics { grid-template-columns:repeat(2,1fr) }
+        .exec-metric-group { border-right:none; border-bottom:1px solid var(--color-border) }
+      }
     </style>
     <script>
       const screenshotMap =
@@ -620,11 +775,11 @@
     <header class="header">
       <div class="header__content">
         <div class="header__titles">
-          <h1>External Attack Surface Intelligence Report</h1>
-          <p class="header__subtitle">Unified visibility across internet-exposed assets, live services, and defensive readiness indicators.</p>
+          <h1>● Orbis — Attack Surface Intelligence</h1>
+          <p class="header__subtitle">Full-Spectrum Attack Surface Intelligence · Unified visibility across internet-exposed assets, live services, and defensive readiness indicators.</p>
         </div>
         <div class="header__actions">
-          <button id="themeToggleButton" class="btn btn--ghost theme-toggle" type="button" aria-pressed="false" title="Switch to dark theme">Dark theme</button>
+          <button id="themeToggleButton" class="btn btn--ghost theme-toggle" type="button" aria-pressed="false" title="Switch theme">Light theme</button>
           <div class="export-menu">
             <button id="exportReportButton" class="btn btn--primary export-menu__trigger" type="button" aria-haspopup="true" aria-expanded="false">Export Report</button>
             <div id="exportMenu" class="export-menu__list" role="menu" hidden>
@@ -633,6 +788,7 @@
             </div>
           </div>
         </div>
+
       </div>
     </header>
 
@@ -660,17 +816,79 @@
           <span aria-hidden="true" class="report-nav__toggle-icon"></span>
         </button>
         <div class="report-content">
-          <section class="scoreboard view-block" data-view-group="overview" id="scoreboard"></section>
+          <div class="exec-banner view-block" data-view-group="overview" id="exec-banner">
+            <div class="exec-score-panel">
+              <span class="exec-score-label">Risk Score</span>
+              <span class="exec-score-value" id="exec-score-value">—</span>
+              <span class="exec-score-grade" id="exec-score-grade">—</span>
+            </div>
+            <div class="exec-metrics">
+              <div class="exec-metric-group">
+                <p class="exec-metric-group-title">Attack Surface</p>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-subdomains">—</span><span class="exec-metric-lbl">subdomains</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val accent" id="em-live">—</span><span class="exec-metric-lbl">live hosts</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-web">—</span><span class="exec-metric-lbl">web endpoints</span></div>
+              </div>
+              <div class="exec-metric-group">
+                <p class="exec-metric-group-title">Email Security</p>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-spf">—</span><span class="exec-metric-lbl">SPF configured</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-dmarc">—</span><span class="exec-metric-lbl">DMARC configured</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-dkim">—</span><span class="exec-metric-lbl">DKIM configured</span></div>
+              </div>
+              <div class="exec-metric-group">
+                <p class="exec-metric-group-title">Web Security</p>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-hsts">—</span><span class="exec-metric-lbl">HSTS enabled</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val danger" id="em-logins">—</span><span class="exec-metric-lbl">login panels found</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val warning" id="em-takeover">—</span><span class="exec-metric-lbl">takeover risks</span></div>
+              </div>
+              <div class="exec-metric-group">
+                <p class="exec-metric-group-title">Network / TLS</p>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-open-ports">—</span><span class="exec-metric-lbl">open ports</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val danger" id="em-cert-expiring">—</span><span class="exec-metric-lbl">certs expiring &lt;30d</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-cloud-assets">—</span><span class="exec-metric-lbl">cloud assets</span></div>
+              </div>
+            </div>
+          </div>
 
-          <section class="charts-grid view-block" data-view-group="overview">
-            <div class="chart-container"><h3>Discovery Summary</h3><canvas id="funnelChart"></canvas></div>
-            <div class="chart-container"><h3>Risk Leaderboard</h3><canvas id="riskLeaderboardChart"></canvas></div>
-            <div class="chart-container"><h3>DNS Health</h3><canvas id="dnsHealthChart"></canvas></div>
-            <div class="chart-container"><h3>Endpoint vs Login Exposure</h3><canvas id="tlsLoginChart"></canvas></div>
-            <div class="chart-container"><h3>HTTP Status Distribution</h3><canvas id="statusCodeChart"></canvas></div>
-            <div class="chart-container"><h3>Security Header Coverage</h3><canvas id="headerCoverageChart"></canvas></div>
-            <div class="chart-container"><h3>Email Authentication</h3><canvas id="emailCoverageChart"></canvas></div>
-            <div class="chart-container"><h3>Port Distribution Category</h3><canvas id="portCategoryChart"></canvas></div>
+          <section class="scoreboard view-block" data-view-group="overview" id="scoreboard" style="display:none"></section>
+
+          <section class="charts-grid-2x2 view-block" data-view-group="overview">
+            <div class="chart-box-2x2">
+              <p class="chart-box-title">Attack Surface</p>
+              <canvas id="funnelChart"></canvas>
+            </div>
+            <div class="chart-box-2x2">
+              <p class="chart-box-title">HTTP Response Codes</p>
+              <canvas id="statusCodeChart"></canvas>
+            </div>
+            <div class="chart-box-2x2">
+              <p class="chart-box-title">Email Authentication</p>
+              <canvas id="emailCoverageChart"></canvas>
+            </div>
+            <div class="chart-box-2x2">
+              <p class="chart-box-title">Security Headers</p>
+              <canvas id="headerCoverageChart"></canvas>
+            </div>
+            <div class="chart-box-2x2">
+              <p class="chart-box-title">DNS Resolution Status</p>
+              <canvas id="dnsStatusChart"></canvas>
+            </div>
+            <div class="chart-box-2x2">
+              <p class="chart-box-title">Login Panel Exposure</p>
+              <canvas id="loginPanelsChart"></canvas>
+            </div>
+            <div class="chart-box-2x2">
+              <p class="chart-box-title">Open Port Categories</p>
+              <canvas id="portCategoriesChart"></canvas>
+            </div>
+            <div class="chart-box-2x2">
+              <p class="chart-box-title">TLS Certificate Health</p>
+              <canvas id="tlsCertChart"></canvas>
+            </div>
+            <div class="chart-box-2x2">
+              <p class="chart-box-title">Cloud Asset Distribution</p>
+              <canvas id="cloudDistributionChart"></canvas>
+            </div>
           </section>
 
           <section class="table-top-controls view-block" data-view-group="overview">
@@ -728,8 +946,15 @@
             <p class="focus-description">&nbsp;&nbsp;&nbsp;Inventory of reachable web surfaces, response characteristics, and technology fingerprints.</p>
           </section>
           <section class="table-top-controls view-block" data-view-group="endpoints">
-            <input type="text" class="table-search-input" data-table-id="endpoints-table" placeholder="Search Application Endpoints..." />
+            <div class="endpoints-toolbar">
+              <input type="text" class="table-search-input" data-table-id="endpoints-table" placeholder="Search Application Endpoints..." />
+              <div class="view-toggle" aria-label="View mode">
+                <button class="view-toggle-btn is-active" data-endpoints-view="table" type="button">Table</button>
+                <button class="view-toggle-btn" data-endpoints-view="gallery" type="button">Gallery</button>
+              </div>
+            </div>
           </section>
+          <div id="endpoints-gallery" class="endpoint-gallery view-block" data-view-group="endpoints" style="display:none"></div>
 
         <div class="table-scroll-controls view-block" data-view-group="endpoints" role="group" aria-label="Application endpoints table scroll controls">
           <button type="button" class="table-scroll-button" data-direction="left">◀</button>
@@ -1666,9 +1891,9 @@
         return Array.from(PORT_CATEGORY_MAP.get(port) || []);
       }
 
-      const THEME_STORAGE_KEY = "report-theme-preference";
+      const THEME_STORAGE_KEY = "frogyTheme";
       const themeToggleButton = document.getElementById("themeToggleButton");
-      setTheme(readStoredTheme() || "light", false);
+      setTheme(readStoredTheme() || "dark", false);
       configureThemeToggle();
 
       function getDesignTokens() {
@@ -1797,13 +2022,14 @@
         const tokens = applyChartDefaults();
         [
           funnelChart,
-          riskLeaderboardChart,
-          dnsHealthChart,
-          tlsLoginChart,
           statusCodeChart,
           headerCoverageChart,
           emailCoverageChart,
-          portCategoryChart
+          dnsStatusChart,
+          loginPanelsChart,
+          portCategoriesChart,
+          tlsCertChart,
+          cloudDistributionChart,
         ].filter(Boolean).forEach(chart => updateChartAppearance(chart, tokens));
       }
 
@@ -1856,7 +2082,8 @@
       }
 
       // Global variables for charts and table data.
-      let funnelChart, riskLeaderboardChart, dnsHealthChart, tlsLoginChart, statusCodeChart, headerCoverageChart, emailCoverageChart, portCategoryChart;
+      let funnelChart, statusCodeChart, headerCoverageChart, emailCoverageChart,
+          dnsStatusChart, loginPanelsChart, portCategoriesChart, tlsCertChart, cloudDistributionChart;
       let allTableRows = [];
       let currentPage = 1;
       let rowsPerPage = 20;
@@ -2372,14 +2599,119 @@
         return { summary, badge, status, days };
       }
 
+      // ── Scoring signal library ───────────────────────────────────────────────
+      // Each helper returns [{bucket, points, reason}] fed into addContribution.
+
+      function scoreTechStack(techArray) {
+        const tech = (techArray || []).map(t => String(t).toLowerCase()).join(' ');
+        if (!tech) return [];
+        const signals = [];
+        if (/phpmyadmin|adminer|pgadmin|kibana|elasticsearch|grafana|prometheus|jenkins|kubernetes.dashboard|portainer|rancher|swagger.ui|graphql.playground|airflow|jupyter|zeppelin/.test(tech))
+          signals.push({ bucket: 'sensitivity', points: 12, reason: 'Admin/monitoring tool detected in stack' });
+        if (/keycloak|auth0|okta|ldap|active.directory|saml|ping.identity/.test(tech))
+          signals.push({ bucket: 'sensitivity', points: 8, reason: 'Identity/auth service in stack' });
+        if (/wordpress|drupal|magento|joomla|typo3|craft.cms/.test(tech))
+          signals.push({ bucket: 'sensitivity', points: 6, reason: 'CMS admin surface detected' });
+        if (/server.status|nginx.status|tomcat.manager|weblogic|jboss|glassfish/.test(tech))
+          signals.push({ bucket: 'exposure', points: 6, reason: 'Infrastructure management interface detected' });
+        if (/next\.?js|nuxt|remix|laravel|django|ruby.on.rails|spring.boot|nestjs/.test(tech))
+          signals.push({ bucket: 'sensitivity', points: 2, reason: 'Full-stack framework (dynamic application)' });
+        return signals;
+      }
+
+      function scoreLoginPanelBonus(loginDetails) {
+        const d = (loginDetails || []).map(s => String(s).toLowerCase()).join(' ');
+        if (!d) return 0;
+        if (/phpmyadmin|adminer|pgadmin|mysql|mariadb|postgresql/.test(d)) return 10;
+        if (/kubernetes|docker|portainer|rancher/.test(d))               return 8;
+        if (/jenkins|gitlab|github.enterprise|bitbucket|teamcity|bamboo/.test(d)) return 8;
+        if (/guacamole|webmin|cpanel|plesk/.test(d))                     return 8;
+        if (/grafana|kibana|splunk|elastic|prometheus|datadog/.test(d))  return 6;
+        if (/wordpress|joomla|drupal|magento|cms/.test(d))               return 5;
+        return 0;
+      }
+
+      function scorePageTitle(title) {
+        if (!title || title === 'N/A') return [];
+        const t = String(title).toLowerCase();
+        const signals = [];
+        if (/index of\s*\//.test(t))
+          signals.push({ bucket: 'exposure', points: 10, reason: 'Directory listing enabled' });
+        if (/phpmyadmin|adminer|grafana|kibana|jenkins|portainer|kubernetes|rancher/.test(t))
+          signals.push({ bucket: 'exposure', points: 10, reason: `Admin tool title exposed (${title.slice(0, 35)})` });
+        if (/exception|stack.?trace|traceback|debug|fatal.error|unhandled/.test(t))
+          signals.push({ bucket: 'hygiene', points: 8, reason: 'Error/debug page publicly visible' });
+        if (/\b(dev(elopment)?|staging|test(ing)?|uat|qa)\b/.test(t))
+          signals.push({ bucket: 'sensitivity', points: 6, reason: 'Non-production environment exposed' });
+        return signals;
+      }
+
+      function scoreWebServer(webserver) {
+        if (!webserver || webserver === 'N/A') return [];
+        const ws = String(webserver);
+        const wsl = ws.toLowerCase();
+        const signals = [];
+        if (/\d+\.\d+/.test(ws))
+          signals.push({ bucket: 'hygiene', points: 5, reason: `Server version disclosed (${ws.slice(0, 30)})` });
+        if (/apache\/[01]\.|apache\/2\.[0-3]\./.test(wsl))
+          signals.push({ bucket: 'hygiene', points: 10, reason: `End-of-life Apache version (${ws.slice(0, 25)})` });
+        if (/nginx\/0\.|nginx\/1\.(0|[1-9]|1[0-7])\./.test(wsl))
+          signals.push({ bucket: 'hygiene', points: 10, reason: `End-of-life nginx version (${ws.slice(0, 25)})` });
+        if (/php\/[567]\./.test(wsl))
+          signals.push({ bucket: 'hygiene', points: 10, reason: `End-of-life PHP version (${ws.slice(0, 25)})` });
+        if (/werkzeug|development server|flask.*dev/.test(wsl))
+          signals.push({ bucket: 'hygiene', points: 6, reason: 'Development server exposed publicly' });
+        return signals;
+      }
+
+      function scoreCORSHeader(corsHeader) {
+        if (!corsHeader) return [];
+        const cors = String(corsHeader).trim().toLowerCase();
+        if (cors === '*')
+          return [{ bucket: 'hygiene', points: 12, reason: 'CORS wildcard (*) allows any origin to read responses' }];
+        if (cors === 'null')
+          return [{ bucket: 'hygiene', points: 10, reason: 'CORS allows null origin (iframe/file: bypass risk)' }];
+        return [];
+      }
+
+      function scoreTLSDetails(cipher, issuerCN, subjectCN, subjectAN, probeOk) {
+        const signals = [];
+        if (cipher && cipher !== 'N/A') {
+          const c = String(cipher).toUpperCase();
+          if (/\bNULL\b|ANON/.test(c))
+            signals.push({ bucket: 'hygiene', points: 18, reason: `Null/anonymous cipher (${cipher.slice(0, 30)})` });
+          else if (/EXPORT|RC4|\bDES\b|3DES/.test(c))
+            signals.push({ bucket: 'hygiene', points: 12, reason: `Broken cipher suite (${cipher.slice(0, 30)})` });
+          else if (/CBC/.test(c))
+            signals.push({ bucket: 'hygiene', points: 6, reason: 'CBC cipher in use (BEAST/POODLE exposure)' });
+        }
+        if (issuerCN && subjectCN &&
+            String(issuerCN).trim().toLowerCase() === String(subjectCN).trim().toLowerCase())
+          signals.push({ bucket: 'hygiene', points: 8, reason: 'Self-signed TLS certificate' });
+        if (Array.isArray(subjectAN) && subjectAN.some(s => String(s).includes('*')))
+          signals.push({ bucket: 'hygiene', points: 4, reason: 'Wildcard TLS certificate (broad blast radius)' });
+        if (probeOk === false)
+          signals.push({ bucket: 'exposure', points: 6, reason: 'TLS handshake failed (service reachable but TLS broken)' });
+        return signals;
+      }
+
       // Compute risk score
       function computePriority({
         purpose,
         url,
         loginFound,
+        loginDetails,
         statusCode,
+        pageTitle,
+        webserver,
+        corsHeader,
         sslVersion,
         tlsDeprecated,
+        tlsCipher,
+        tlsIssuerCN,
+        tlsSubjectCN,
+        tlsSubjectAN,
+        tlsProbeOk,
         certExpiry,
         scheme,
         securityHeadersMissing,
@@ -2390,11 +2722,12 @@
         openPortsCount,
         dbPortsCount,
         managementPortsCount,
-        techCount,
-        linkCount,
+        techArray,
+        uniquePageCount,
         isApiSurface,
         isEmployeeAsset,
-        cloudProfile
+        cloudProfile,
+        takeoverRisk
       }) {
         const bucketCaps = { exposure: 45, hygiene: 35, sensitivity: 20 };
         const bucketScores = { exposure: 0, hygiene: 0, sensitivity: 0 };
@@ -2402,14 +2735,19 @@
         const addContribution = (bucket, points, reason) => {
           if (!points || points <= 0 || !reason) return;
           const remaining = bucketCaps[bucket] - bucketScores[bucket];
-          if (remaining <= 0) return;
-          const applied = Math.min(points, remaining);
-          if (applied <= 0) return;
-          bucketScores[bucket] += applied;
-          contributions.push({ bucket, points: applied, reason });
+          if (remaining > 0) {
+            const applied = Math.min(points, remaining);
+            bucketScores[bucket] += applied;
+            contributions.push({ bucket, points: applied, reason, capped: false });
+          } else {
+            // #8: still record the signal even when the bucket is full so it
+            // surfaces in the risk tooltip rather than being silently discarded
+            contributions.push({ bucket, points: 0, reason, capped: true });
+          }
         };
+        const applySignals = (signals) => signals.forEach(s => addContribution(s.bucket, s.points, s.reason));
 
-        // Exposure factors
+        // ── Exposure ─────────────────────────────────────────────────────────
         const loginDetected = (loginFound || "").toString().toLowerCase() === "yes";
         const requestScheme = (scheme || "").toLowerCase();
         if (loginDetected && requestScheme === "http") {
@@ -2417,9 +2755,21 @@
         } else if (loginDetected) {
           addContribution("exposure", 12, "Authenticated surface exposed");
         }
-        if (Number(statusCode) >= 500) {
-          addContribution("exposure", 4, `Application returning ${statusCode} status`);
+        // Login panel type bonus — scored on top of base login signal
+        if (loginDetected) {
+          const panelBonus = scoreLoginPanelBonus(loginDetails);
+          if (panelBonus > 0) addContribution("exposure", panelBonus, "High-value login panel type detected");
         }
+
+        const sc = Number(statusCode);
+        if (sc >= 500) {
+          addContribution("exposure", 4, `Application returning ${statusCode} status`);
+        } else if (sc === 403) {
+          addContribution("exposure", 4, "Resource exists but access denied (403)");
+        } else if (sc === 401) {
+          addContribution("sensitivity", 3, "Authentication-protected surface (401)");
+        }
+
         if (Number.isFinite(openPortsCount) && openPortsCount > 0) {
           addContribution("exposure", Math.min(14, openPortsCount * 2), `${openPortsCount} internet services reachable`);
         }
@@ -2437,12 +2787,27 @@
             `${dbPortsCount} database port${dbPortsCount === 1 ? "" : "s"} exposed`
           );
         }
-        if (Number.isFinite(linkCount) && linkCount > 0) {
-          const linkScore = Math.min(6, Math.round(Math.log10(linkCount + 1) * 4));
-          if (linkScore > 0) {
-            addContribution("exposure", linkScore, `${linkCount} crawlable links discovered`);
+
+        // Deduplicated unique crawlable pages (replaces raw link count)
+        if (Number.isFinite(uniquePageCount) && uniquePageCount > 0) {
+          const pageScore = Math.min(12, Math.round(Math.log10(uniquePageCount + 1) * 5));
+          if (pageScore > 0) addContribution("exposure", pageScore, `${uniquePageCount} unique crawlable pages discovered`);
+        }
+
+        // Page title pattern signals
+        applySignals(scorePageTitle(pageTitle));
+
+        // Subdomain takeover risk
+        if (takeoverRisk) {
+          const sev = takeoverRisk.severity || 'low';
+          const tStatus = (takeoverRisk.status || '').toLowerCase();
+          if (tStatus === 'confirmed') {
+            addContribution("exposure", sev === 'critical' ? 20 : 15, `Confirmed subdomain takeover — ${takeoverRisk.provider}`);
+          } else if (tStatus === 'potential') {
+            addContribution("exposure", sev === 'critical' ? 12 : 8, `Potential takeover — dangling CNAME to ${takeoverRisk.provider}`);
           }
         }
+
         if (cloudProfile) {
           const resourceType = (cloudProfile.ResourceType || "").toLowerCase();
           const shielding = (cloudProfile.WafShielding || "").toLowerCase();
@@ -2468,7 +2833,7 @@
           }
         }
 
-        // Hygiene factors
+        // ── Hygiene ──────────────────────────────────────────────────────────
         const normalizedVersion = normalizeTlsVersion(sslVersion);
         if (!normalizedVersion || normalizedVersion === "N/A") {
           addContribution("hygiene", 6, "TLS version unknown");
@@ -2495,6 +2860,10 @@
         } else {
           addContribution("hygiene", 4, "Certificate validity unknown");
         }
+
+        // TLS cipher, self-signed, wildcard, broken handshake
+        applySignals(scoreTLSDetails(tlsCipher, tlsIssuerCN, tlsSubjectCN, tlsSubjectAN, tlsProbeOk));
+
         const missingHeaders = Array.isArray(securityHeadersMissing) ? securityHeadersMissing : [];
         if (missingHeaders.length) {
           addContribution(
@@ -2503,21 +2872,29 @@
             `Missing security headers (${missingHeaders.join(", ")})`
           );
         }
+
+        // CORS misconfiguration
+        applySignals(scoreCORSHeader(corsHeader));
+
+        // Web server version disclosure / EOL
+        applySignals(scoreWebServer(webserver));
+
         if (!hasDmarc) addContribution("hygiene", 6, "DMARC not published");
         if (!hasSpf) addContribution("hygiene", 4, "SPF not published");
         if (!hasDkim) addContribution("hygiene", 3, "DKIM not published");
         if (!hasDnssec) addContribution("hygiene", 2, "DNSSEC not enabled");
 
-        // Sensitivity factors
+        // ── Sensitivity ──────────────────────────────────────────────────────
         if (isEmployeeAsset || (purpose && purpose.toLowerCase().includes("employee"))) {
           addContribution("sensitivity", 12, "Employee-facing asset");
         }
         if (isApiSurface) {
           addContribution("sensitivity", 6, "API surface detected");
         }
-        if (techCount && Number.isFinite(techCount) && techCount > 6) {
-          addContribution("sensitivity", 4, `${techCount} technologies fingerprinted`);
-        }
+
+        // Tech stack specificity (replaces blunt tech count signal)
+        applySignals(scoreTechStack(techArray));
+
         if (cloudProfile && cloudProfile.CloudProvider) {
           addContribution("sensitivity", 3, `${cloudProfile.CloudProvider} managed surface`);
         }
@@ -2526,9 +2903,12 @@
           100,
           bucketScores.exposure + bucketScores.hygiene + bucketScores.sensitivity
         );
+        // #8: show scored contributions first, then capped (additional context)
         const reasons = contributions
-          .sort((a, b) => b.points - a.points)
-          .map(item => `${item.reason}${item.points ? ` (+${item.points})` : ""}`)
+          .sort((a, b) => (a.capped === b.capped) ? b.points - a.points : (a.capped ? 1 : -1))
+          .map(item => item.capped
+            ? item.reason                                       // no score suffix for capped items
+            : `${item.reason}${item.points ? ` (+${item.points})` : ""}`)
           .slice(0, 5);
 
         return {
@@ -2804,117 +3184,53 @@ function generateExecutiveSummary({ summarySignals, actions, topRisk }) {
       }
 
       function buildScoreboard(metrics) {
-        const sb = document.getElementById("scoreboard");
-        if (!sb || !metrics) return;
+        if (!metrics) return;
 
-        const {
-          pipeline,
-          topRisk,
-          actions,
-          exposure,
-          authentication,
-          controls,
-          metadata,
-          summary
-        } = metrics;
-        const summaryData = generateExecutiveSummary({
-          summarySignals: summary,
-          actions,
-          topRisk
-        });
-        const contextMap = {
-          "Total Assets": "Total internet-facing domains discovered this run.",
-          "Live Assets": "Shows which domains still resolve publicly and are reachable.",
-          "Application Endpoints": "Live hosts serving HTTP/S content attackers can reach.",
-          "Possible Dormant Assets": "Dormant names still owned but no longer resolving.",
-          "Login Portals": "Applications presenting an authentication flow to users.",
-          "HTTP Login Pages": "Plaintext logins that can be intercepted or modified.",
-          "HTTPS Login Pages": "Login flows already protected by TLS.",
-          "Employee-Intended Assets": "Assets intended for staff that warrant extra scrutiny.",
-          "SPF Coverage": "Domains publishing SPF to curb sender spoofing.",
-          "DMARC Coverage": "Domains enforcing DMARC for phishing resilience.",
-          "DKIM Coverage": "Domains signing outbound mail with DKIM.",
-          "DNSSEC Enabled": "Domains validated with DNSSEC against tampering.",
-          "Open Services": "Externally reachable TCP services on observed hosts.",
-          "Management Ports": "Administrative services such as SSH or RDP exposed.",
-          "Database Ports": "Database engines reachable directly from the internet.",
-          "Shared Host Exposure": "Hostnames co-hosted on the same origin/IP."
+        const { pipeline, topRisk, authentication, controls, summary } = metrics;
+
+        // ── Risk Score (#7: use aggregate mean-of-top-5 when available) ─
+        const aggregateScore = Number(summary?.aggregateRiskScore);
+        const topScore       = Number(topRisk?.score);
+        const score = Number.isFinite(aggregateScore) && aggregateScore > 0
+          ? Math.round(aggregateScore)
+          : (Number.isFinite(topScore) ? Math.round(topScore) : 0);
+        const scoreEl = document.getElementById("exec-score-value");
+        const gradeEl = document.getElementById("exec-score-grade");
+        if (scoreEl) {
+          scoreEl.textContent = score;
+          const cls = score >= 80 ? "score-critical" : score >= 60 ? "score-high" : score >= 40 ? "score-medium" : "score-low";
+          scoreEl.className = `exec-score-value ${cls}`;
+        }
+        if (gradeEl) {
+          gradeEl.textContent = score >= 80 ? "Critical Risk" : score >= 60 ? "High Risk" : score >= 40 ? "Medium Risk" : "Low Risk";
+        }
+
+        // ── Helper ──────────────────────────────────────────────────
+        const set = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = (val != null && val !== "") ? val : "—";
         };
 
-        const renderScoreCard = ({ label, value, meta, tone, context }) => {
-          const toneClass = tone ? ` score-card--${tone}` : "";
-          const normalizedValue = (typeof value === "number" && Number.isFinite(value))
-            ? value.toLocaleString()
-            : escapeHtml(value);
-          const safeMeta = meta ? escapeHtml(meta) : "";
-          const contextText = context || contextMap[label];
-          const contextMarkup = contextText
-            ? `<p class="score-card__context">${escapeHtml(contextText)}</p>`
-            : "";
-          return `
-            <article class="score-card${toneClass}">
-              <p class="score-card__label">${escapeHtml(label)}</p>
-              <h2>${normalizedValue}</h2>
-              ${safeMeta ? `<p class="score-card__meta">${safeMeta}</p>` : ""}
-              ${contextMarkup}
-            </article>
-          `;
-        };
+        // ── Attack Surface ──────────────────────────────────────────
+        set("em-subdomains", pipeline?.discovered);
+        set("em-live",       pipeline?.liveAssets ?? pipeline?.resolvable);
+        set("em-web",        pipeline?.webHosts);
 
-        const renderSection = (title, items) => {
-          if (!Array.isArray(items) || items.length === 0) return "";
-          return `
-            <div class="scoreboard__section">
-              <h3 class="scoreboard__section-title">${escapeHtml(title)}</h3>
-              <div class="scoreboard__grid scoreboard__grid--kpis">
-                ${items.map(renderScoreCard).join("")}
-              </div>
-            </div>
-          `;
-        };
+        // ── Email Security (controls[0]=SPF, [1]=DMARC, [2]=DKIM) ──
+        set("em-spf",   controls?.[0]?.value);
+        set("em-dmarc", controls?.[1]?.value);
+        set("em-dkim",  controls?.[2]?.value);
 
-        const postureLabel = summaryData.postureLabel || "Overall posture";
-        const postureValue = summaryData.postureValue || ((typeof topRisk?.score === "number" && Number.isFinite(topRisk.score)) ? topRisk.score.toLocaleString() : "Low");
-        const defaultFootprint = pipeline
-          ? `${pipeline.discovered.toLocaleString()} discovered -> ${pipeline.resolvable.toLocaleString()} resolvable -> ${pipeline.webHosts.toLocaleString()} web hosts`
-          : "No footprint data available";
-        const footprintText = summaryData.footprintText || defaultFootprint;
-        const highlightItems = Array.isArray(summaryData.highlights) ? summaryData.highlights : [];
-        const highlightMarkup = highlightItems.length
-          ? `<ul class="summary-card__highlights">${highlightItems.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-          : "";
-        const actionsList = (Array.isArray(summaryData.actionList) && summaryData.actionList.length
-          ? summaryData.actionList
-          : (Array.isArray(actions) && actions.length ? actions : ["Maintain current controls and monitor upcoming scans for emerging trends."]))
-          .slice(0, 2);
-        const summaryActions = actionsList
-          .map(item => `<li>${escapeHtml(item)}</li>`)
-          .join("");
-        const timestampLabel = metadata?.timestampLabel ? escapeHtml(metadata.timestampLabel) : "Scan time unavailable";
-        const summaryMeta = metadata?.meta ? `<p class="summary-card__meta">${escapeHtml(metadata.meta)}</p>` : "";
+        // ── Web Security ────────────────────────────────────────────
+        set("em-hsts",     summary?.hstsCovered != null ? summary.hstsCovered : null);
+        set("em-logins",   authentication?.[0]?.value);
+        set("em-takeover", summary?.takeoverRisks != null ? summary.takeoverRisks : null);
 
-        sb.innerHTML = `
-          <article class="summary-card">
-            <div class="summary-card__header">
-              <h2>${escapeHtml(summaryData.heading || "Executive Summary")}</h2>
-              <span class="summary-card__timestamp">${timestampLabel}</span>
-            </div>
-            <div class="summary-card__headline">
-              <span class="summary-card__risk-label">${escapeHtml(postureLabel)}</span>
-              <span class="summary-card__risk-score">${escapeHtml(postureValue)}</span>
-              <span class="summary-card__risk-asset">${escapeHtml(footprintText)}</span>
-            </div>
-            ${highlightMarkup}
-            <div class="summary-card__actions">
-              <span>Immediate actions</span>
-              <ul>${summaryActions}</ul>
-            </div>
-            ${summaryMeta}
-          </article>
-          ${renderSection("Exposure", exposure)}
-          ${renderSection("Authentication", authentication)}
-          ${renderSection("Controls", controls)}
-        `;
+        // ── Network / TLS ───────────────────────────────────────────
+        const totalPorts = summary?.totalOpenPorts ?? 0;
+        set("em-open-ports",    totalPorts > 0 ? totalPorts : null);
+        set("em-cert-expiring", summary?.certsExpiringSoon != null ? summary.certsExpiringSoon : null);
+        set("em-cloud-assets",  summary?.cloudStats?.total != null ? summary.cloudStats.total : null);
       }
 
       function coerceTimestamp(value) {
@@ -3075,390 +3391,286 @@ function generateExecutiveSummary({ summarySignals, actions, topRisk }) {
       }
 
 
-// Visualisation builder for charts
+// Visualisation builder — 9 charts (3×3 grid)
 function buildInsightsCharts({
   pipeline,
-  riskLeaderboard,
-  dnsStats,
-  exposureMatrix,
   headerCoverage,
+  headerBaseline,
   emailCoverage,
   statusBreakdown,
-  portCategoryTotals
+  dnsStats,
+  loginStats,
+  portStats,
+  tlsCertStats,
+  cloudStats,
 }) {
   const tokens = getDesignTokens();
-  const chartText = getChartTextColor(tokens);
-  const createTicks = () => ({
-    color: chartText,
-    font: { family: tokens.fontFamily, weight: "500" }
-  });
-  const createGrid = (display = true) => ({
-    color: tokens.grid,
-    drawBorder: false,
-    borderDash: [4, 4],
-    display
-  });
-  const tooltipTheme = getTooltipTheme(tokens);
+  const tc  = getChartTextColor ? getChartTextColor(tokens) : (tokens.textMuted || '#888');
+  const tt  = getTooltipTheme  ? getTooltipTheme(tokens)   : {};
+  const accent = tokens.accent || '#06b6d4';
+  const grid   = tokens.grid   || 'rgba(255,255,255,0.08)';
 
-  const replaceWithMessage = (canvas, message) => {
-    if (!canvas) return;
-    const parent = canvas.parentElement;
-    if (parent) {
-      parent.innerHTML = `<p>${escapeHtml(message)}</p>`;
-    }
+  const baseOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: tt },
   };
 
-  (function buildFunnel() {
-    const canvas = document.getElementById("funnelChart");
-    if (!canvas) return;
-    const labels = ["Discovered", "Live Assets", "Web Hosts"];
-    const data = [
-      Number(pipeline?.discovered) || 0,
-      Number(pipeline?.resolvable) || 0,
-      Number(pipeline?.webHosts) || 0
+  // 1 — Attack Surface Funnel (horizontal bar)
+  const funnelCanvas = document.getElementById('funnelChart');
+  if (funnelCanvas) {
+    if (funnelChart) { try { funnelChart.destroy(); } catch(_){} }
+    funnelChart = new Chart(funnelCanvas, {
+      type: 'bar',
+      data: {
+        labels: ['Discovered', 'Live', 'Web Hosts'],
+        datasets: [{
+          data: [
+            pipeline.discovered || 0,
+            pipeline.resolvable  || 0,
+            pipeline.webHosts    || 0,
+          ],
+          backgroundColor: [accent + '33', accent + '77', accent],
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        ...baseOpts,
+        indexAxis: 'y',
+        scales: {
+          x: { ticks: { color: tc, font: { size: 10 } }, grid: { color: grid } },
+          y: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  // 2 — HTTP Status Breakdown (bar chart)
+  const scCanvas = document.getElementById('statusCodeChart');
+  if (scCanvas) {
+    if (statusCodeChart) { try { statusCodeChart.destroy(); } catch(_){} }
+    // statusBreakdown is now a plain object { code: count }
+    const scObj = (statusBreakdown && typeof statusBreakdown === 'object' && !Array.isArray(statusBreakdown))
+      ? statusBreakdown : {};
+    const scLabels = Object.keys(scObj);
+    statusCodeChart = new Chart(scCanvas, {
+      type: 'bar',
+      data: {
+        labels: scLabels,
+        datasets: [{
+          data: scLabels.map(k => scObj[k]),
+          backgroundColor: scLabels.map(k =>
+            k.startsWith('5') ? '#ef4444' :
+            k.startsWith('4') ? '#f59e0b' :
+            k.startsWith('3') ? '#3b82f6' : '#22c55e'),
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        ...baseOpts,
+        scales: {
+          x: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: tc, font: { size: 10 } }, grid: { color: grid } },
+        },
+      },
+    });
+  }
+
+  // 3 — Email Auth Coverage (stacked bar) — fixed keys
+  const ecCanvas = document.getElementById('emailCoverageChart');
+  if (ecCanvas) {
+    if (emailCoverageChart) { try { emailCoverageChart.destroy(); } catch(_){} }
+    const eTotal = emailCoverage?.total || 0;
+    const eConf  = [
+      emailCoverage?.SPF?.configured   || 0,
+      emailCoverage?.DKIM?.configured  || 0,
+      emailCoverage?.DMARC?.configured || 0,
+      emailCoverage?.DNSSEC?.configured || 0,
     ];
-    if (!data.some(value => value > 0)) {
-      replaceWithMessage(canvas, "No asset discovery data available.");
-      funnelChart = undefined;
-      return;
-    }
-    if (funnelChart) funnelChart.destroy();
-    funnelChart = new Chart(canvas, {
-      type: "bar",
+    emailCoverageChart = new Chart(ecCanvas, {
+      type: 'bar',
       data: {
-        labels,
-        datasets: [{
-          label: "Assets",
-          data,
-          backgroundColor: ["#3b82f6", "#8b5cf6", "#14b8a6"],
-          borderRadius: 12,
-          maxBarThickness: 48
-        }]
+        labels: ['SPF', 'DKIM', 'DMARC', 'DNSSEC'],
+        datasets: [
+          { label: 'Configured', data: eConf, backgroundColor: '#22c55e', borderRadius: 4, stack: 's' },
+          { label: 'Missing',    data: eConf.map(v => Math.max(eTotal - v, 0)), backgroundColor: '#ef444466', borderRadius: 4, stack: 's' },
+        ],
       },
       options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: tooltipTheme
-        },
+        ...baseOpts,
         scales: {
-          x: { ticks: createTicks(), grid: createGrid(false) },
-          y: { beginAtZero: true, ticks: createTicks(), grid: createGrid() }
-        }
-      }
+          x: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: tc, font: { size: 10 } }, grid: { color: grid } },
+        },
+        plugins: { ...baseOpts.plugins, legend: { display: true, labels: { color: tc, boxWidth: 10, font: { size: 10 } } } },
+      },
     });
-  })();
+  }
 
-  (function buildRiskLeaderboard() {
-    const canvas = document.getElementById("riskLeaderboardChart");
-    if (!canvas) return;
-    const topEntries = Array.isArray(riskLeaderboard) ? riskLeaderboard.slice(0, 6) : [];
-    if (!topEntries.length) {
-      replaceWithMessage(canvas, "Risk scoring unavailable.");
-      riskLeaderboardChart = undefined;
-      return;
-    }
-    const labels = topEntries.map(entry => describeEndpoint(entry));
-    const data = topEntries.map(entry => Number(entry.score) || 0);
-    if (riskLeaderboardChart) riskLeaderboardChart.destroy();
-    riskLeaderboardChart = new Chart(canvas, {
-      type: "bar",
+  // 4 — Security Headers coverage — fixed: use label keys, not HTTP header names
+  const hcCanvas = document.getElementById('headerCoverageChart');
+  if (hcCanvas) {
+    if (headerCoverageChart) { try { headerCoverageChart.destroy(); } catch(_){} }
+    // headerCoverage is keyed by label (e.g. 'HSTS', 'CSP', 'X-Frame-Options', ...)
+    const hdrKeys   = ['HSTS', 'X-Frame-Options', 'CSP', 'X-XSS-Protection', 'Referrer-Policy', 'Permissions-Policy'];
+    const hdrLabels = ['HSTS', 'X-Frame', 'CSP', 'XSS-Prot', 'Referrer', 'Perms'];
+    const hdrPresent = hdrKeys.map(k => headerCoverage?.[k]?.present ?? 0);
+    const hdrTotal   = headerBaseline || 0;
+    headerCoverageChart = new Chart(hcCanvas, {
+      type: 'bar',
       data: {
-        labels,
-        datasets: [{
-          label: "Score",
-          data,
-          backgroundColor: "#ef4444",
-          borderRadius: 10,
-          maxBarThickness: 40
-        }]
+        labels: hdrLabels,
+        datasets: [
+          { label: 'Present', data: hdrPresent, backgroundColor: accent, borderRadius: 4, stack: 's' },
+          { label: 'Missing', data: hdrPresent.map(v => Math.max(hdrTotal - v, 0)), backgroundColor: accent + '33', borderRadius: 4, stack: 's' },
+        ],
       },
       options: {
-        indexAxis: "y",
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: tooltipTheme
-        },
+        ...baseOpts,
+        indexAxis: 'y',
         scales: {
-          x: { beginAtZero: true, ticks: createTicks(), grid: createGrid() },
-          y: { ticks: createTicks(), grid: createGrid(false) }
-        }
-      }
+          x: { ticks: { color: tc, font: { size: 10 } }, grid: { color: grid } },
+          y: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+        },
+        plugins: { ...baseOpts.plugins, legend: { display: true, labels: { color: tc, boxWidth: 10, font: { size: 10 } } } },
+      },
     });
-  })();
+  }
 
-  (function buildDnsHealth() {
-    const canvas = document.getElementById("dnsHealthChart");
-    if (!canvas) return;
-    const values = [
-      Number(dnsStats?.resolvable) || 0,
-      Number(dnsStats?.nxdomain) || 0,
-      Number(dnsStats?.other) || 0
-    ];
-    if (!values.some(value => value > 0)) {
-      replaceWithMessage(canvas, "No DNS health data available.");
-      dnsHealthChart = undefined;
-      return;
-    }
-    if (dnsHealthChart) dnsHealthChart.destroy();
-    dnsHealthChart = new Chart(canvas, {
-      type: "doughnut",
+  // 5 — DNS Resolution Status (doughnut)
+  const dnsCanvas = document.getElementById('dnsStatusChart');
+  if (dnsCanvas) {
+    if (dnsStatusChart) { try { dnsStatusChart.destroy(); } catch(_){} }
+    const dnsResolvable = dnsStats?.resolvable || 0;
+    const dnsNx = dnsStats?.nxdomain || 0;
+    const dnsOther = dnsStats?.other || 0;
+    dnsStatusChart = new Chart(dnsCanvas, {
+      type: 'doughnut',
       data: {
-        labels: ["Resolvable", "NXDOMAIN", "Other"],
+        labels: ['Resolvable', 'NXDOMAIN', 'Other'],
         datasets: [{
-          data: values,
-          backgroundColor: ["#22c55e", "#ef4444", "#f97316"],
+          data: [dnsResolvable, dnsNx, dnsOther],
+          backgroundColor: ['#22c55e', '#ef4444', '#6b7280'],
           borderWidth: 0,
-          valueLabels: true,
-          valueLabelColor: "#ffffff",
-          valueLabelFontSize: 12,
-          valueLabelFontWeight: "600"
-        }]
+        }],
       },
       options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } }
-          },
-          tooltip: tooltipTheme
-        }
-      }
-    });
-  })();
-
-  (function buildTlsExposure() {
-    const canvas = document.getElementById("tlsLoginChart");
-    if (!canvas) return;
-    const httpEndpoints = Number(exposureMatrix?.endpoints?.http) || 0;
-    const httpsEndpoints = Number(exposureMatrix?.endpoints?.https) || 0;
-    const httpLogins = Number(exposureMatrix?.logins?.http) || 0;
-    const httpsLogins = Number(exposureMatrix?.logins?.https) || 0;
-    if (!(httpEndpoints || httpsEndpoints || httpLogins || httpsLogins)) {
-      replaceWithMessage(canvas, "No HTTP service coverage data available.");
-      tlsLoginChart = undefined;
-      return;
-    }
-    if (tlsLoginChart) tlsLoginChart.destroy();
-    tlsLoginChart = new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels: ["Endpoint", "Login Panel"],
-        datasets: [
-          {
-            label: "HTTP",
-            data: [httpEndpoints, httpLogins],
-            backgroundColor: "#ef4444",
-            borderRadius: 8,
-            maxBarThickness: 42
-          },
-          {
-            label: "HTTPS",
-            data: [httpsEndpoints, httpsLogins],
-            backgroundColor: "#22c55e",
-            borderRadius: 8,
-            maxBarThickness: 42
-          }
-        ]
+        ...baseOpts,
+        cutout: '65%',
+        plugins: { ...baseOpts.plugins, legend: { display: true, position: 'bottom', labels: { color: tc, boxWidth: 10, font: { size: 10 }, padding: 6 } } },
       },
-      options: {
-        indexAxis: "x",
-        responsive: true,
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } }
-          },
-          tooltip: tooltipTheme
-        },
-        scales: {
-          x: { stacked: true, beginAtZero: true, ticks: createTicks(), grid: createGrid() },
-          y: { stacked: true, ticks: createTicks(), grid: createGrid(false) }
-        }
-      }
     });
-  })();
+  }
 
-  (function buildStatusCodeChart() {
-    const canvas = document.getElementById("statusCodeChart");
-    if (!canvas) return;
-    const entries = Array.isArray(statusBreakdown) ? statusBreakdown : [];
-    if (!entries.some(([, count]) => count > 0)) {
-      replaceWithMessage(canvas, "No HTTP status data available.");
-      statusCodeChart = undefined;
-      return;
-    }
-    const labels = entries.map(([code]) => code);
-    const data = entries.map(([, count]) => count);
-    if (statusCodeChart) statusCodeChart.destroy();
-    const palette = ["#22c55e", "#3b82f6", "#f97316", "#facc15", "#ef4444", "#a855f7", "#0ea5e9"];
-    statusCodeChart = new Chart(canvas, {
-      type: "bar",
+  // 6 — Login Panel Exposure (bar: HTTP vs HTTPS)
+  const lpCanvas = document.getElementById('loginPanelsChart');
+  if (lpCanvas) {
+    if (loginPanelsChart) { try { loginPanelsChart.destroy(); } catch(_){} }
+    loginPanelsChart = new Chart(lpCanvas, {
+      type: 'bar',
       data: {
-        labels,
+        labels: ['HTTP (insecure)', 'HTTPS (secure)'],
         datasets: [{
-          label: "Responses",
-          data,
-          backgroundColor: labels.map((_, idx) => palette[idx % palette.length]),
-          borderRadius: 10,
-          maxBarThickness: 40
-        }]
+          data: [loginStats?.http || 0, loginStats?.https || 0],
+          backgroundColor: ['#ef4444', '#22c55e'],
+          borderRadius: 4,
+        }],
       },
       options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: tooltipTheme
-        },
+        ...baseOpts,
+        indexAxis: 'y',
         scales: {
-          x: { ticks: createTicks(), grid: createGrid(false) },
-          y: { beginAtZero: true, ticks: createTicks(), grid: createGrid() }
-        }
-      }
+          x: { ticks: { color: tc, font: { size: 10 } }, grid: { color: grid } },
+          y: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+        },
+      },
     });
-  })();
+  }
 
-  (function buildPortCategoryChart() {
-    const canvas = document.getElementById("portCategoryChart");
-    if (!canvas) return;
-    const totals = (portCategoryTotals && typeof portCategoryTotals === "object") ? portCategoryTotals : {};
-    const entries = Object.entries(totals).filter(([, count]) => Number(count) > 0);
-    if (!entries.length) {
-      replaceWithMessage(canvas, "No open port categories detected.");
-      portCategoryChart = undefined;
-      return;
-    }
-    if (portCategoryChart) portCategoryChart.destroy();
-    const labels = entries.map(([label]) => label);
-    const data = entries.map(([, count]) => count);
-    const palette = ["#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#f97316", "#22c55e", "#eab308", "#14b8a6", "#facc15"];
-    portCategoryChart = new Chart(canvas, {
-      type: "pie",
+  // 7 — Open Port Categories (doughnut)
+  const pcCanvas = document.getElementById('portCategoriesChart');
+  if (pcCanvas) {
+    if (portCategoriesChart) { try { portCategoriesChart.destroy(); } catch(_){} }
+    const mgmt = portStats?.management || 0;
+    const db   = portStats?.database   || 0;
+    const other = Math.max((portStats?.total || 0) - mgmt - db, 0);
+    portCategoriesChart = new Chart(pcCanvas, {
+      type: 'doughnut',
       data: {
-        labels,
+        labels: ['Management', 'Database', 'Other'],
         datasets: [{
-          data,
-          backgroundColor: labels.map((_, idx) => palette[idx % palette.length]),
+          data: [mgmt, db, other],
+          backgroundColor: ['#f59e0b', '#ef4444', '#6b7280'],
           borderWidth: 0,
-          valueLabels: true,
-          valueLabelColor: "#ffffff",
-          valueLabelFontSize: 12,
-          valueLabelFontWeight: "600"
-        }]
+        }],
       },
       options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: tooltipTheme
-        }
-      }
+        ...baseOpts,
+        cutout: '65%',
+        plugins: { ...baseOpts.plugins, legend: { display: true, position: 'bottom', labels: { color: tc, boxWidth: 10, font: { size: 10 }, padding: 6 } } },
+      },
     });
-  })();
+  }
 
-  (function buildHeaderCoverage() {
-    const canvas = document.getElementById("headerCoverageChart");
-    if (!canvas) return;
-    const labels = Object.keys(headerCoverage || {});
-    if (!labels.length) {
-      replaceWithMessage(canvas, "No security header data collected.");
-      headerCoverageChart = undefined;
-      return;
-    }
-    const present = labels.map(label => Number(headerCoverage[label]?.present) || 0);
-    const missing = labels.map(label => Number(headerCoverage[label]?.missing) || 0);
-    if (headerCoverageChart) headerCoverageChart.destroy();
-    headerCoverageChart = new Chart(canvas, {
-      type: "bar",
+  // 8 — TLS Certificate Health (doughnut)
+  const tcCanvas = document.getElementById('tlsCertChart');
+  if (tcCanvas) {
+    if (tlsCertChart) { try { tlsCertChart.destroy(); } catch(_){} }
+    const certOk      = tlsCertStats?.ok          || 0;
+    const certSoon    = tlsCertStats?.expiringSoon || 0;
+    const certExpired = tlsCertStats?.expired      || 0;
+    tlsCertChart = new Chart(tcCanvas, {
+      type: 'doughnut',
       data: {
-        labels,
-        datasets: [
-          {
-            label: "Present",
-            data: present,
-            backgroundColor: "#22c55e",
-            borderRadius: 8,
-            maxBarThickness: 36
-          },
-          {
-            label: "Missing",
-            data: missing,
-            backgroundColor: "#ef4444",
-            borderRadius: 8,
-            maxBarThickness: 36
-          }
-        ]
+        labels: ['Healthy', 'Expiring <30d', 'Expired'],
+        datasets: [{
+          data: [certOk, certSoon, certExpired],
+          backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
+          borderWidth: 0,
+        }],
       },
       options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } }
-          },
-          tooltip: tooltipTheme
-        },
-        scales: {
-          x: { stacked: true, ticks: createTicks(), grid: createGrid(false) },
-          y: { stacked: true, beginAtZero: true, ticks: createTicks(), grid: createGrid() }
-        }
-      }
+        ...baseOpts,
+        cutout: '65%',
+        plugins: { ...baseOpts.plugins, legend: { display: true, position: 'bottom', labels: { color: tc, boxWidth: 10, font: { size: 10 }, padding: 6 } } },
+      },
     });
-  })();
+  }
 
-  (function buildEmailCoverage() {
-    const canvas = document.getElementById("emailCoverageChart");
-    if (!canvas) return;
-    const labels = Object.keys(emailCoverage || {}).filter(label => label !== "total");
-    if (!labels.length) {
-      replaceWithMessage(canvas, "No email security data collected.");
-      emailCoverageChart = undefined;
-      return;
-    }
-    const configured = labels.map(label => Number(emailCoverage[label]?.configured) || 0);
-    const missing = labels.map(label => Number(emailCoverage[label]?.missing) || 0);
-    if (emailCoverageChart) emailCoverageChart.destroy();
-    emailCoverageChart = new Chart(canvas, {
-      type: "bar",
+  // 9 — Cloud Asset Distribution (doughnut by provider or shielded/unshielded)
+  const cdCanvas = document.getElementById('cloudDistributionChart');
+  if (cdCanvas) {
+    if (cloudDistributionChart) { try { cloudDistributionChart.destroy(); } catch(_){} }
+    const providers = cloudStats?.providers || {};
+    const providerEntries = Object.entries(providers).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const hasProviders = providerEntries.length > 0;
+    const cdLabels = hasProviders
+      ? providerEntries.map(([p]) => p || 'Unknown')
+      : ['Shielded', 'Unshielded'];
+    const total = cloudStats?.total || 0;
+    const unshielded = cloudStats?.unshielded || 0;
+    const cdData = hasProviders
+      ? providerEntries.map(([, c]) => c)
+      : [Math.max(total - unshielded, 0), unshielded];
+    const palette = ['#06b6d4','#3b82f6','#8b5cf6','#f59e0b','#22c55e','#ef4444'];
+    cloudDistributionChart = new Chart(cdCanvas, {
+      type: 'doughnut',
       data: {
-        labels,
-        datasets: [
-          {
-            label: "Configured",
-            data: configured,
-            backgroundColor: "#3b82f6",
-            borderRadius: 8,
-            maxBarThickness: 36
-          },
-          {
-            label: "Missing",
-            data: missing,
-            backgroundColor: "#f97316",
-            borderRadius: 8,
-            maxBarThickness: 36
-          }
-        ]
+        labels: cdLabels,
+        datasets: [{
+          data: cdData,
+          backgroundColor: hasProviders ? palette.slice(0, cdLabels.length) : ['#22c55e', '#ef4444'],
+          borderWidth: 0,
+        }],
       },
       options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: chartText, font: { family: tokens.fontFamily, weight: "500" } }
-          },
-          tooltip: tooltipTheme
-        },
-        scales: {
-          x: { stacked: true, ticks: createTicks(), grid: createGrid(false) },
-          y: { stacked: true, beginAtZero: true, ticks: createTicks(), grid: createGrid() }
-        }
-      }
+        ...baseOpts,
+        cutout: '65%',
+        plugins: { ...baseOpts.plugins, legend: { display: true, position: 'bottom', labels: { color: tc, boxWidth: 10, font: { size: 10 }, padding: 6 } } },
+      },
     });
-  })();
-
-  ;
+  }
 }
 
       // Global array to store table rows.
@@ -4073,13 +4285,30 @@ function buildInsightsCharts({
                 urlHost = "";
               }
               const cloudProfile = cloudProfileIndex(urlHost || domain || h.host || "");
+              const takeoverRisk = (window.takeoverByDomain || {})[urlHost] ||
+                                   (window.takeoverByDomain || {})[domain] || null;
+              const tlsCipher    = tlsRecord ? (tlsRecord.Cipher || tlsRecord.NegotiatedCipher || null) : null;
+              const tlsIssuerCN  = tlsRecord ? (tlsRecord.IssuerCN || tlsRecord.CertificateIssuerCommonName || null) : null;
+              const tlsSubjectCN = tlsRecord ? (tlsRecord.SubjectCN || tlsRecord.CertificateCommonName || null) : null;
+              const tlsSubjectAN = tlsRecord ? (Array.isArray(tlsRecord.SubjectAN) ? tlsRecord.SubjectAN : (Array.isArray(tlsRecord.CertificateSANs) ? tlsRecord.CertificateSANs : [])) : [];
+              const tlsProbeOk   = tlsRecord ? (tlsRecord.ProbeStatus !== false) : null;
+              const uniquePageCount = (window.uniquePageCountMap && window.uniquePageCountMap[h.url]) || 0;
               const { score, reasons, breakdown } = computePriority({
                 purpose: domainPurpose,
                 url: h.url,
                 loginFound: loginMap[h.url] || "N/A",
+                loginDetails: (window.loginDetailsMap || {})[h.url] || [],
                 statusCode: h.status_code,
+                pageTitle: h.title || "",
+                webserver: h.webserver || "",
+                corsHeader: acaoFlag,
                 sslVersion,
                 tlsDeprecated,
+                tlsCipher,
+                tlsIssuerCN,
+                tlsSubjectCN,
+                tlsSubjectAN,
+                tlsProbeOk,
                 certExpiry,
                 scheme: schemeValue || (urlValue.startsWith("https://") ? "https" : (urlValue.startsWith("http://") ? "http" : "")),
                 securityHeadersMissing: missingSecurityHeaders,
@@ -4090,11 +4319,12 @@ function buildInsightsCharts({
                 openPortsCount,
                 dbPortsCount,
                 managementPortsCount,
-                techCount: sanitizedTech.length,
-                linkCount,
+                techArray: sanitizedTech,
+                uniquePageCount,
                 isApiSurface: apiDetected === "Yes",
                 isEmployeeAsset: colleagueStatus,
-                cloudProfile
+                cloudProfile,
+                takeoverRisk
               });
               const roundedScore = Math.round(score);
               if (score < minRiskScore) minRiskScore = score;

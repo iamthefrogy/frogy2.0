@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orbis — Sign in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-theme="dark">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-brand">● Orbis</div>
+      <p class="login-sub">Enter your access key to continue.</p>
+      <form method="POST" action="/login">
+        <input type="password" name="key" class="field-input" placeholder="Access key" autofocus autocomplete="current-password">
+        {% if error %}<p class="login-error">{{ error }}</p>{% endif %}
+        <button type="submit" class="btn btn--primary btn--full">Continue →</button>
+      </form>
+    </div>
+  </div>
+  <script>
+    (function() {
+      const stored = localStorage.getItem("frogyTheme");
+      if (stored === "light") document.body.dataset.theme = "light";
+    })();
+  </script>
+</body>
+</html>
