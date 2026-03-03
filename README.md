@@ -1,157 +1,315 @@
-# Frogy 2.0
-<p align="center">
-  <a href="#features">Features</a> •
-  <a href="#installation-and-usage">Installation</a> •
-  <a href="#risk-scoring">Risk Scoring</a> •
-  <a href="#screenshots">Screenshots</a> •
-  <a href="#blackhat-video">Blackhat Video</a>
+<div align="center">
 
-**Frogy 2.0** is an automated external reconnaissance and Attack Surface Management (ASM) toolkit designed to map out an organization's entire internet presence. It identifies assets, IP addresses, web applications, and other metadata across the public internet and then smartly prioritizes them with highest (most attractive) to lowest (least attractive) from an attacker's playground perspective.
+# Orbis - Attack Surface Intelligence
+### Full-Spectrum Attack Surface Intelligence
 
-<img src="https://chintangurjar.com/images/frogy.png"/>
+[![BlackHat](https://img.shields.io/badge/BlackHat%20Arsenal-Presented-black?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyTDIgN2wxMCA1IDEwLTV6TTIgMTdsOSA1IDktNXYtNUwyIDEyeiIvPjwvc3ZnPg==)](https://www.youtube.com/watch?v=LHlU4CYNj1M)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Bash](https://img.shields.io/badge/Bash-5.x-4EAA25?style=flat-square&logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
+[![Flask](https://img.shields.io/badge/Flask-3.x-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 
-# Approx. Time Duration
+**Orbis** automatically maps your organisation's entire internet-facing attack surface, subdomains, open ports, web applications, cloud infrastructure, TLS certificates, email posture, exposed secrets, login panels, and more, then scores and ranks every discovered asset so you know exactly where to focus first.
 
-Key pipeline stages: 17-step bash workflow.
+<img width="801" height="831" alt="image" src="https://github.com/user-attachments/assets/9e012767-ae54-4ee1-87dc-add602ecd0c8" />
 
-Assumptions for timing: official Docker container on a mid-range cloud VM (≈2 vCPU, 4–8 GB RAM), fast but not unlimited network egress (Nat/ISP throttled around 50–100 Mbps), no upstream rate bans, and default script throttles (httpx -t 5 -rl 15, Katana -c 5, curl timeouts 25 s). Times grow nearly linearly with live subdomains because Naabu, curl login probes, tlsx, and dig/whois loops iterate per host/endpoint.
-
-  | Total Discovered Subdomains | Typical Runtime (wallclock) | Primary Bottleneck / Rationale |
-  | --- | --- | --- |
-  | 2-digit (≤ 99) | ~20 – 40 minutes | Naabu still scans ~180 ports per host; each live endpoint then hits httpx twice (JSON + screenshots), Katana depth-3 crawl, curl login detection, and tlsx handshakes. DNS/email hygiene (dig) plus whois lookups run sequentially across every subdomain. |
-  | 3-digit (100 – 999) | ~45 – 120 minutes | Port scanning now covers tens of thousands of probes; Katana/curl loops grow proportionally and are mostly sequential; tlsx and screenshotting contend for CPU. DNSSEC/SPF/DKIM checks and ipinfo enrichments fan out to hundreds of hosts, each with multiple dig/whois calls. |
-  | 4-digit (1 000 – 9 999) | ~3 – 6 hours | Millions of port probes through Naabu plus repeated httpx/curl/TLS passes saturate rate limits, while Katana depth-3 crawls queue for hours. Large JSON merging (jq, sort) and disk writes (screenshots, responses) add I/O overhead. External services (crt.sh, whois, TLS endpoints) throttle aggressive parallelism. |
-  | 5-digit (10 000 – 99 999) | ~8 – 18 hours | Naabu must touch tens of millions of host:port combos; httpx, tlsx, Katana, and curl runs become the dominant wallclock cost due to conservative rate limits and timeouts. Massive DNS/email hygiene loops hammer resolver APIs, and IP enrichment (whois.cymru, reverse DNS) further drags. Expect retries, remote throttling, and storage pressure from screenshots/responses. |
-
-  Note: real runtimes can swing widely based on upstream rate-limits, packet loss, depth of Katana crawling, and whether endpoints time out (forcing every
-  curl/httpx call to wait a full 15–25 s). Adjusting tool flags (e.g., trimming port catalog, lowering Katana depth, upping httpx -t) can significantly
-  shorten runs at the cost of coverage.
-
-# Features
-
-- **Comprehensive recon:**  
-  Aggregate subdomains and assets using multiple tools (CHAOS, Subfinder, Assetfinder, crt.sh) to map an organization's entire digital footprint.
+<div align="left">
   
-- **Live asset verification:**  
-  Validate assets with live DNS resolution and port scanning (using DNSX and Naabu) to confirm what is publicly reachable.
-  
-- **In-depth web recon:**  
-  Collect detailed HTTP response data (via HTTPX) including metadata, technology stack, status codes, content lengths, and more.
-  
-- **Smart prioritization:**  
-  Use a composite scoring system that considers homepage status, login identification, technology stack, and DNS data and much more to generate risk score for each assets helping bug bounty hunters and pentesters focus on the most promising targets to start attacks with.
-  
-- **Professional reporting:**  
-  Generate a dynamic, colour-coded HTML report with a modern design and dark/light theme toggle.
+## What it does
 
-# Risk Scoring
+You give it a list of domains. It does the rest.
 
-Attack Surface scoring flows through three capped buckets **(Exposure ≤45, Hygiene ≤35, Sensitivity ≤20)**. Each endpoint’s attributes—login transport, HTTP status, open/management/database ports, Katana link volume, cloud shielding, TLS version/expiry/protocols, security headers, email auth posture, DNSSEC, employee/API classification, tech stack breadth, cloud resource type—feeds the bucket-specific contributions. The final score is the capped sum of those buckets (max 100) and the top contributor explanations come from the same contribution list.
-
-<img src="https://chintangurjar.com/images/riskscore.png"/>
-
----
-# Screenshots
-
-<img src="https://chintangurjar.com/images/frogyss3.png"/>
-<img src="https://chintangurjar.com/images/frogyss2.png"/>
-<img src="https://chintangurjar.com/images/frogyss1.png"/>
-
----
-
-> **Why This Matters**  
-> This approach helps you quickly **prioritize** which assets warrant deeper testing. Subdomains with high counts of open ports, advanced internal usage, missing headers, or login panels are more complex, more privileged, or more likely to be misconfigured—therefore, your security team can focus on those first.
-
-# Installation and Usage
-
-## Give permissions
-
-```bash
-chmod 777 *
+```
+google.com          →   Frogy 2.0 discovers:
+apple.com                  • 2,000+ subdomains (passive + active enumeration)
+example.com                • Every open port across all live hosts
+                           • Every web application — status, tech stack, redirects
+                           • Login panels, exposed .env files, leaked JS secrets
+                           • TLS certificates, cipher strengths, expiry dates
+                           • Subdomain takeover candidates (55+ service fingerprints)
+                           • Cloud asset inventory (AWS / Azure / GCP / Cloudflare)
+                           • SPF / DKIM / DMARC / DNSSEC coverage
+                           • Screenshots of every website
+                           → Risk-scored, prioritised, searchable HTML report
 ```
 
-## Quick Start (Docker)
+## Pipeline Overview
+
+Frogy 2.0 runs a **22-step bash pipeline** against your targets, fully automated from discovery to report:
+
+| Phase | Steps | What happens |
+|-------|-------|-------------|
+| **Discovery** | 1–6 | Subfinder + Assetfinder + crt.sh + GAU → merge + DNS resolve (A, AAAA, CNAME, MX, NS, SPF, DMARC, DNSSEC) |
+| **Takeover** | 7 | CNAME chains checked against 55+ dangling-DNS fingerprints — Confirmed / Potential / Safe |
+| **Port + Web** | 8–10 | Naabu port scan → HTTPX web fingerprint (follow redirects, tech stack, server, CORS, TLS) |
+| **Exposed Files** | 11 | 100+ sensitive paths probed per site (`.env`, `.git/config`, `swagger.json`, private keys, backups…) |
+| **Crawl + JS** | 12–13 | Katana deep crawl → JS file analysis (API keys, cloud credentials, internal URLs) |
+| **Screenshots** | 14 | Visual snapshot of every live endpoint |
+| **Security Analysis** | 15–18 | Login panel detection · TLS/cipher grading · header compliance · CORS / email auth checks |
+| **Intelligence** | 19–21 | API surface mapping · employee portal classification · full cloud infrastructure inventory |
+| **Score + Report** | 22 | Three-bucket risk scoring → change detection → self-contained HTML report |
+
+> **Runtime estimates** (Docker, 2 vCPU / 4–8 GB, 50–100 Mbps):
+> `≤100 subdomains` ~20–40 min · `100–999` ~45–120 min · `1k–10k` ~3–6 hrs · `10k+` ~8–18 hrs
+
+## Key Features
+
+<details>
+<summary><b>Subdomain Discovery & DNS Intelligence</b></summary>
+
+- Aggregates from **Subfinder**, **Assetfinder**, **crt.sh**, and **GAU** (Wayback Machine)
+- Full DNS resolution: A, AAAA, CNAME, MX, NS, SPF, DMARC, DKIM, DNSSEC
+- WHOIS registrar, creation date, expiry per domain
+- Change detection — new assets, disappeared assets, new findings vs. previous scan
+</details>
+
+<details>
+<summary><b>Web Fingerprinting with Redirect Intelligence</b></summary>
+
+- HTTPX with `-follow-redirects` captures **final-hop metadata** (not the redirect page)
+- **Redirect deduplication** in reports: HTTP:80 suppressed when HTTPS:443 exists for the same host — eliminates double-counting
+- Technology stack, web server + version, CDN/WAF, content-length, status codes
+</details>
+
+<details>
+<summary><b>Subdomain Takeover Detection</b></summary>
+
+- 55+ service fingerprints: GitHub Pages, AWS S3, Heroku, Netlify, Vercel, Azure, Fastly, Fly.io, and more
+- Verified by fetching the expected error-page body
+- **Confirmed** / **Potential** / **Safe** classification
+- Takeover status feeds directly into the risk score
+</details>
+
+<details>
+<summary><b>TLS / SSL Deep Analysis</b></summary>
+
+- Cipher suite inspection: flags NULL, ANON, RC4, DES, 3DES, CBC
+- Protocol version (TLS 1.3 down to SSL 3.0)
+- Self-signed detection, wildcard SAN detection, broken handshakes
+- Certificate expiry with colour-coded urgency (expired → within 7d → within 30d → ok)
+</details>
+
+<details>
+<summary><b>Login Surface Detection</b></summary>
+
+- Multi-signal heuristics: password/username fields, CSRF tokens, HTTP 401/403/407, JS auth libraries, multilingual sign-in keywords, CAPTCHA indicators
+- Structured JSON output including **login panel type** (phpMyAdmin, Jenkins, Kubernetes Dashboard, Grafana, CMS admin, remote-access gateways)
+- Type used by scoring engine to apply higher penalties for high-value panels
+</details>
+
+<details>
+<summary><b>Cloud Infrastructure Mapping</b></summary>
+
+- Covers AWS, Azure, GCP, Cloudflare, Vercel, Netlify, Fastly, Heroku, Fly.io, DigitalOcean, Hetzner
+- Resource type classification: CDN, load balancer, object storage, managed DB, API gateway, serverless
+- Shielding status: WAF/CDN-protected vs. direct-origin exposure
+</details>
+
+<details>
+<summary><b>Crawl-Based Complexity Scoring</b></summary>
+
+- Katana crawls every live site (configurable depth)
+- **Deduplicated unique page count** per endpoint: numeric path segments normalised (`/users/123` → `/users/{id}`), query strings stripped
+- Log-scaled score contribution (+2 to +12) — measures real application complexity, not URL count inflation
+</details>
+
+## Risk Scoring
+
+Every endpoint is scored through **three capped buckets** (max 100). The aggregate report score is the **mean of the top-5 domain endpoint scores**.
+
+| Bucket | Cap | Measures |
+|--------|-----|----------|
+| **Exposure** | 45 | Directly dangerous or reachable attack surfaces |
+| **Hygiene** | 35 | Misconfigurations, certificate health, compliance gaps |
+| **Sensitivity** | 20 | Asset criticality, stack complexity, data-handling classification |
+
+<details>
+<summary><b>Exposure signals</b></summary>
+
+| Signal | Points |
+|--------|--------|
+| Login interface served over HTTP | +20 |
+| Authenticated surface (HTTPS login) | +12 |
+| High-value login panel (phpMyAdmin, Jenkins, k8s, Portainer, Grafana, remote-access) | +8 – +10 bonus |
+| Confirmed subdomain takeover | +15 – +20 |
+| Potential subdomain takeover (dangling CNAME) | +8 – +12 |
+| Admin tool visible in page title (Kibana, Grafana, Jenkins…) | +10 |
+| Directory listing enabled (`Index of /`) | +10 |
+| Management port(s) exposed | up to +15 |
+| Database port(s) exposed | up to +12 |
+| Open internet services (port count) | up to +14 |
+| Unique crawlable pages (log-scaled) | up to +12 |
+| Cloud workload / CDN without WAF shielding | +8 – +12 |
+| Infrastructure management interface in tech stack | +6 |
+| TLS handshake failure | +6 |
+| HTTP 403 (resource exists, blocked by auth) | +4 |
+| 5xx server error | +4 |
+</details>
+
+<details>
+<summary><b>Hygiene signals</b></summary>
+
+| Signal | Points |
+|--------|--------|
+| TLS certificate expired | +20 |
+| Deprecated SSL 3.0 protocol | +18 |
+| NULL / anonymous cipher suite | +18 |
+| RC4 / DES / 3DES broken cipher | +12 |
+| Legacy TLS 1.0 / 1.1 | +12 |
+| CORS wildcard `*` | +12 |
+| CORS null-origin allowed | +10 |
+| End-of-life server (Apache 2.x / nginx ≤1.17 / PHP 5–7) | +10 |
+| Certificate expires within 7 days | +12 |
+| Self-signed certificate | +8 |
+| Error / debug / stack trace page public | +8 |
+| Legacy protocol / deprecated cipher support | +8 |
+| CBC cipher in use (BEAST / POODLE) | +6 |
+| Development server exposed (Werkzeug, Flask dev) | +6 |
+| Certificate expires within 30 days | +6 |
+| Missing security headers (HSTS, CSP, X-Frame-Options…) | up to +12 |
+| DMARC not published | +6 |
+| SPF not published | +4 |
+| Certificate validity unknown | +4 |
+| Wildcard TLS certificate | +4 |
+| DKIM not published | +3 |
+| DNSSEC not enabled | +2 |
+| Server version disclosed in headers | +5 |
+</details>
+
+<details>
+<summary><b>Sensitivity signals</b></summary>
+
+| Signal | Points |
+|--------|--------|
+| Employee-facing / internal asset | +12 |
+| Admin / monitoring tool in stack (Kibana, Grafana, Jenkins, phpMyAdmin, k8s Dashboard) | +12 |
+| Crawl surface size — unique deduplicated pages (log-scaled) | up to +12 |
+| Identity / auth service (Keycloak, Okta, Auth0, LDAP, SAML) | +8 |
+| Object storage endpoint exposed | +8 |
+| Error / debug page publicly visible | +8 |
+| Non-production environment in title (dev / staging / test / UAT) | +6 |
+| API surface detected | +6 |
+| CMS admin surface (WordPress, Drupal, Magento) | +6 |
+| Managed database footprint reachable | +7 |
+| Cloud API / serverless resource | +5 |
+| Cloud managed surface | +3 |
+| Full-stack framework detected (dynamic app indicator) | +2 |
+| Authentication-protected surface (HTTP 401) | +3 |
+</details>
+
+> **Why it matters:** - An internal admin panel with an expired self-signed cert, a wildcard CORS header, and port 3306 exposed scores far higher than a static marketing page — so your team skips the noise and starts where it matters.
+
+**Why This Matters** - This approach helps you quickly **prioritize** which assets warrant deeper testing. Subdomains with high counts of open ports, advanced internal usage, missing headers, or login panels are more complex, more privileged, or more likely to be misconfigured—therefore, your security team can focus on those first.
+
+
+# Screenshots
+
+<img width="1236" height="747" alt="image" src="https://github.com/user-attachments/assets/55361436-bd53-4913-ac97-e6afb892a769" />
+<img width="1217" height="755" alt="image" src="https://github.com/user-attachments/assets/db8992c2-26e4-491a-bcf2-5eb7c0a39bfa" />
+<img width="1219" height="755" alt="image" src="https://github.com/user-attachments/assets/877a7f2e-6738-43d1-9597-6c49bd85539b" />
+<img width="1218" height="743" alt="image" src="https://github.com/user-attachments/assets/89fde7f5-0000-49d4-98df-dc961d9083df" />
+
+## Quick Start
+
+### 1. Build the Docker image
 
 ```bash
+https://github.com/iamthefrogy/frogy2.0.git
+cd frogy2.0
+chmod 777 *
 docker build -t frogy:latest .
 ```
 
-#### Linux hosts (native Docker)
+### 2. Run the container
 
-`--network host` works reliably on Linux, so you can bind directly to the host network and keep the default port:
-
+**Linux** (native Docker — `--network host` works):
 ```bash
-docker run --rm --network host --privileged --cap-add=NET_RAW frogy:latest
+docker run --rm --network host --privileged --cap-add=NET_RAW \
+  -v "$(pwd)/output:/opt/frogy/output" \
+  frogy:latest
 ```
 
-If you want runs to survive container restarts, add `-v "$(pwd)/output:/opt/frogy/output"` to that command so artefacts are stored on the host.
-
-#### macOS & Windows (Docker Desktop)
-
-Docker Desktop does **not** support `--network host`. Use bridged networking with an explicit port mapping instead:
-
+**macOS / Windows** (Docker Desktop — no `--network host`):
 ```bash
-docker run --rm --privileged --cap-add=NET_RAW -p 8787:8787 frogy:latest
+docker run --rm --privileged --cap-add=NET_RAW \
+  -p 8787:8787 \
+  -v "$(pwd)/output:/opt/frogy/output" \
+  frogy:latest
 ```
 
-Add `-v "$(pwd)/output:/opt/frogy/output"` if you want to persist run history to the host filesystem.
+> `-v "$(pwd)/output:/opt/frogy/output"` persists scan history across container restarts.
 
-When the container starts you will see a banner similar to:
+### 3. Open the dashboard
 
 ```
-[frogy] Docker container is up. Control plane will be served at http://0.0.0.0:8787
-[frogy] If you mapped the port (e.g. -p 8787:8787), open that URL from your browser.
+http://localhost:8787
 ```
 
-The UI is available at `http://localhost:8787` (or the host/IP you published the port on).
+Access-key authentication is required on first load. The key is printed to container stdout on startup.
 
-> **Persisting runs**: Mounting `./output` into `/opt/frogy/output` keeps your scan history, metadata, and reports on the host. Without the mount the container still works, but all artefacts are wiped when it stops.
+## Report Tour
 
-## Launching a Run
+The generated report is a **self-contained HTML file** — no server needed, open it in any browser.
 
-The control plane now opens with a single scan table:
+| Tab | Contents |
+|-----|----------|
+| **Overview** | Executive banner (risk score + grade + 4 metric groups) · 9-chart analytics grid · risk leaderboard |
+| **Domain Intelligence** | All subdomains · DNS records · email auth posture (SPF/DKIM/DMARC/DNSSEC) · WHOIS |
+| **Application Endpoints** | Every live endpoint — status, title, tech stack, login detection, security headers, CORS, CDN, screenshots · Table or Gallery view |
+| **IP Addresses** | Reverse DNS · ASN · network blocks · geolocation |
+| **TLS Certificates** | Cipher · protocol version · expiry (colour-coded) · SANs · issuer · grade |
+| **Cloud Infrastructure** | Asset map by provider · resource type · shielding status |
+| **Subdomain Takeover** | Confirmed + potential findings with provider + evidence |
+| **Exposed Files** | Sensitive paths reachable on live hosts |
+| **JS Findings** | Secrets and internal URLs extracted from JavaScript |
+| **Changes** | Delta vs. previous scan — new / disappeared assets, new findings |
 
-1. Click **New Scan** to define a company name and paste newline-delimited **primary domains** (same format as `target.txt`). Client-side checks catch whitespace and invalid characters before submission.
-2. Choose **Run Now**, **Add to Queue**, or **Schedule** (future date/time) directly from the modal. The scan is persisted regardless of the launch mode so you can rerun it later.
-3. Scan rows list the last known status, completion time, and a report link. Selecting a row enables **Modify** (updates name/targets and optionally reruns) or **Delete** (removes the project folder and artefacts from disk).
+**Every table** has full-text search, column filters, and CSV + JSON export.
 
-Every launch writes a fresh target file to `output/projects/<project>/targets/targets-<timestamp>.txt` before invoking `frogy.sh`. Status badges stay in sync with the scheduler, so refreshes never lose track of queued or running jobs; reports always open in a new browser tab.
+---
 
-## Interface Highlights
+## Orbis Dashboard
 
-- **Selectable rows & bulk actions**: Use the new checkbox column (or the select-all header) to modify or delete multiple scans at once.
-- **Targets on demand**: The Targets column shows the total count plus a “View” pop-up with a scrollable list, keeping the table compact even for large target sets.
-- **Instant reports**: The dedicated **View Results** column launches the latest HTML report in a new tab; buttons disable automatically while runs are still generating data.
-- **Report exports**: Grab the underlying data straight from the dashboard—download JSON (all datasets) or a ZIP of CSV files ready for spreadsheets.
-- **Progress visibility**: Each row carries a horizontal progress bar with live step labels (e.g. “Step 5/17 – httpx”), so you can see pipeline momentum at a glance.
-- **Action icons**: The rightmost column offers quick controls for rescan/stop (🔄/⏹), modify (✏️), and delete (🗑️). Tooltips clarify each action; active runs expose a stop button you can use to cancel in-flight work.
-- **Theme toggle**: Swap between dark and light palettes via the toggle in the header; your preference is remembered in the browser.
-- **Footer credits**: A persistent “Developed by Frogy (Chintan Gurjar)” footer links out to contact details and the project homepage.
+The web UI at `localhost:8787` is branded **Orbis — Full-Spectrum Attack Surface Intelligence**.
 
-## Queueing & Scheduling
+- **Project cards** — status badge, live progress bar (`Step X of 22`), elapsed/total duration
+- **KPI row** — Total projects · Active scans · Completed · Queued
+- **Filter tabs** — All / Running / Done / Queued
+- **View Logs** — live log streaming side panel, polls every 1.5 s during active scans
+- **Project detail page** — full per-project run history with individual report + log access
+- **Bulk operations** — select multiple projects for batch deletion
+- **Modify / Rescan / Cancel** any project from the `···` context menu
+- **Dark / Light theme** — persisted via `frogyTheme` localStorage key (shared with reports)
 
-- Use **Add to Queue** when resources are busy—jobs execute automatically once earlier work completes.
-- Use **Schedule** to select a future date/time; the run starts at that moment (subject to queue order). Scheduled entries remain highlighted until they fire.
-- Parallel execution is supported by raising `FROGY_MAX_CONCURRENT` (see below); the scheduler respects that ceiling while interleaving queued and scheduled work.
+## Tech Stack
 
-## Browsing History
+| Component | Technology |
+|-----------|-----------|
+| Web dashboard | Python · Flask 3.x |
+| Scanner pipeline | Bash 5.x · 22-step workflow |
+| Subdomain discovery | Subfinder · Assetfinder · crt.sh · GAU |
+| DNS resolution | DNSX |
+| Port scanning | Naabu |
+| Web fingerprinting | HTTPX |
+| Web crawling | Katana |
+| TLS analysis | tlsx |
+| System utilities | jq · curl · whois · dnsutils · openssl |
+| Container base | Ubuntu 24.04 · Go 1.24 (tool compilation) |
 
-- The table consolidates every saved scan. Completed runs expose a **Report** link that opens a fresh tab to the archived HTML dashboard. Queued/running entries keep their link disabled until output is ready.
-- If a run directory has been removed (for example `output/projects/<project>/run-2025XXXXXX` no longer exists) the UI surfaces a clear warning instead of rendering a blank report.
-- Logs for every run are still archived under `output/projects/<project>/logs/`.
+## BlackHat Arsenal
+
+Frogy was presented at **BlackHat Arsenal**. Watch the full demo:
+
+[![BlackHat Demo](https://img.shields.io/badge/▶%20Watch%20on%20YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=IayqiBe21h4)
 
 
-## CLI Compatibility
+## Acknowledgements
 
-`frogy.sh` retains its original CLI usage and can still be executed manually:
+Special thanks to the [Project Discovery](https://projectdiscovery.io) team for building the open-source tools that power this pipeline (Subfinder, DNSX, Naabu, HTTPX, Katana, tlsx), and to [tomnomnom](https://github.com/tomnomnom) for Assetfinder. Keep rocking the community!
 
-```bash
-bash frogy.sh target.txt
-```
-Manual runs continue to emit `output/run-*` folders in the repository root. The control plane only relocates runs that it initiated into `output/projects/<project>/`.
+Built by [Chintan Gurjar](https://chintangurjar.com)
 
-# BlackHat Video
-https://www.youtube.com/watch?v=LHlU4CYNj1M
+
 
 # Future Roadmap
 
@@ -206,8 +364,7 @@ https://www.youtube.com/watch?v=LHlU4CYNj1M
 - Completed ✅ ~~Export report in CSV + JSON format.~~
 - Completed ✅ ~~Add the same search bar to all side panel reporting.~~
 - Completed ✅ ~~User should be allowed to directly open UI and add targets there only.~~
-- Implement alterx from project discovery~~
+- Completed ✅ ~~Implement brand new scoring logic.~~
+- Completed ✅ ~~Implement brand new GUI, slick design and more adaptability~~
+- Completed ✅ ~~Fix the URL redirection issue which was bumping score and no. of endpoints.~~
 
-
-# Thanksgiving
-Special thanks to the Project Discovery team and all the creators who helped me achieve this. Keep rocking the community!
