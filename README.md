@@ -214,7 +214,7 @@ Every endpoint is scored through **three capped buckets** (max 100). The aggrega
 ### 1. Build the Docker image
 
 ```bash
-https://github.com/iamthefrogy/frogy2.0.git
+git clone https://github.com/iamthefrogy/frogy2.0.git
 cd frogy2.0
 chmod 777 *
 docker build -t frogy:latest .
