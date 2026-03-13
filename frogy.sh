@@ -3,6 +3,10 @@ set -euo pipefail
 # running tight so we bail fast and know why
 set -o errtrace
 
+# Resolve the directory this script lives in so all assets/lists/* paths work
+# regardless of where frogy.sh is invoked from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # colour palette and logging helpers need to be available before traps fire
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
@@ -12,6 +16,36 @@ NC='\033[0m'
 info() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [+] $*"; }
 warning() { echo -e "[$(date +'%Y-%m-%d %H:%M:%S')] ${YELLOW}[!]${NC} $*"; }
 error() { echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] [-] $*${NC}"; }
+log_warn() { warning "$*"; }  # alias used by new expansion modules
+
+# background heartbeat — logs a still-alive pulse every 2 minutes for long-running steps
+_HEARTBEAT_PID=""
+heartbeat_start() {
+	local label="${1:-running}"
+	( while true; do sleep 120; info "  → still ${label}... ($(date +'%H:%M:%S'))"; done ) &
+	_HEARTBEAT_PID=$!
+	disown "$_HEARTBEAT_PID" 2>/dev/null || true
+}
+heartbeat_stop() {
+	if [[ -n "${_HEARTBEAT_PID:-}" ]]; then
+		kill "$_HEARTBEAT_PID" 2>/dev/null || true
+		_HEARTBEAT_PID=""
+	fi
+}
+
+# Load API keys from the config file written by the web UI.
+# Env vars always win; file values only fill gaps.
+load_api_config() {
+	local cfg="${FROGY_CONFIG_FILE:-}"
+	[[ -z "$cfg" || ! -f "$cfg" ]] && return
+	GITHUB_TOKEN="${GITHUB_TOKEN:-$(jq -r '.api_keys.github_token // empty' "$cfg" 2>/dev/null || true)}"
+	SHODAN_API_KEY="${SHODAN_API_KEY:-$(jq -r '.api_keys.shodan_api_key // empty' "$cfg" 2>/dev/null || true)}"
+	CENSYS_API_KEY="${CENSYS_API_KEY:-$(jq -r '.api_keys.censys_api_key // empty' "$cfg" 2>/dev/null || true)}"
+	OTX_API_KEY="${OTX_API_KEY:-$(jq -r '.api_keys.otx_api_key // empty' "$cfg" 2>/dev/null || true)}"
+	VIRUSTOTAL_API_KEY="${VIRUSTOTAL_API_KEY:-$(jq -r '.api_keys.virustotal_api_key // empty' "$cfg" 2>/dev/null || true)}"
+	WHOISXML_API_KEY="${WHOISXML_API_KEY:-$(jq -r '.api_keys.whoisxml_api_key // empty' "$cfg" 2>/dev/null || true)}"
+	CHAOS_KEY="${CHAOS_KEY:-$(jq -r '.api_keys.chaos_api_key // empty' "$cfg" 2>/dev/null || true)}"
+}
 
 # if anything crashes mid-run, this little buddy shouts where it blew up
 log_err() {
@@ -62,6 +96,16 @@ GAU_COUNT=0
 # nudge this if the web scanners seem blocked or throttled
 BLOCK_DETECTION_THRESHOLD="20"
 
+# ─── Fixed scan parameters ────────────────────────────────────────────────
+SCALE_TIER="fixed"
+HTTPX_THREADS=20
+HTTPX_RATE=80
+HTTPX_TIMEOUT_SECS=8
+HTTPX_RETRIES_COUNT=1
+KATANA_DEPTH_ADAPTIVE=3
+KATANA_TIMEOUT_ADAPTIVE=60
+EFFECTIVE_WEB_PORTS=""       # fixed web port list for httpx expansion
+
 # caching a few lookups so we don't hammer the same data over and over
 declare -A CLOUD_IP_ASN_CACHE=()
 declare -A CLOUD_IP_PROVIDER_CACHE=()
@@ -90,11 +134,96 @@ check_dependencies() {
 		exit 1
 	fi
 	info "All required tools are present."
+
+	# /dev/tcp is used for Team Cymru batch ASN lookup; warn early if unavailable
+	# (expected on Docker Desktop for macOS/Windows — ASN classification is non-critical)
+	if ! (exec 3<>/dev/tcp/whois.cymru.com/43) 2>/dev/null; then
+		warning "/dev/tcp unavailable — ASN classification via Team Cymru will be skipped (expected on Docker Desktop for macOS/Windows, non-critical)."
+	fi
 }
+
+# ─── Health-check mode ────────────────────────────────────────────────────────
+# Usage: bash frogy.sh --check
+# Validates tools, network reachability, /dev/tcp, write permissions, and CAP_NET_RAW.
+run_health_check() {
+	local pass=0 warn=0 fail=0
+	_hc_pass() { echo "  [PASS] $*"; (( pass++ )) || true; }
+	_hc_warn() { echo -e "  ${YELLOW}[WARN]${NC} $*"; (( warn++ )) || true; }
+	_hc_fail() { echo -e "  ${RED}[FAIL]${NC} $*"; (( fail++ )) || true; }
+
+	echo ""
+	echo "═══════════════════════════════════════════════"
+	echo "  Frogy 2.0 — Health Check"
+	echo "═══════════════════════════════════════════════"
+	echo ""
+
+	echo "── Tool versions ──────────────────────────────"
+	local required_tools=("subfinder" "assetfinder" "dnsx" "naabu" "httpx" "katana" "jq" "curl" "whois" "dig" "openssl" "tlsx" "xargs" "unzip" "grep" "sed" "awk")
+	for tool in "${required_tools[@]}"; do
+		if command -v "$tool" &>/dev/null; then
+			local ver
+			ver=$("$tool" --version 2>&1 | head -1 || echo "(version unknown)")
+			_hc_pass "$tool — $ver"
+		else
+			_hc_fail "$tool — NOT FOUND"
+		fi
+	done
+
+	echo ""
+	echo "── Network reachability ───────────────────────"
+	for url in "https://crt.sh" "https://api.github.com" "https://web.archive.org"; do
+		if curl -s --max-time 8 "$url" >/dev/null 2>&1; then
+			_hc_pass "$url reachable"
+		else
+			_hc_warn "$url unreachable (transient or blocked by network)"
+		fi
+	done
+
+	echo ""
+	echo "── /dev/tcp (Team Cymru ASN lookup) ──────────"
+	if (exec 3<>/dev/tcp/whois.cymru.com/43) 2>/dev/null; then
+		_hc_pass "/dev/tcp available — ASN classification will work"
+	else
+		_hc_warn "/dev/tcp unavailable — ASN classification skipped (expected on Docker Desktop macOS/Windows, non-critical)"
+	fi
+
+	echo ""
+	echo "── Write permissions ──────────────────────────"
+	local out_dir="${FROGY_OUTPUT_DIR:-output}"
+	mkdir -p "$out_dir" 2>/dev/null || true
+	if [[ -w "$out_dir" ]]; then
+		_hc_pass "output dir '$out_dir' is writable"
+	else
+		_hc_fail "output dir '$out_dir' is NOT writable — scans will fail to write results"
+	fi
+
+	echo ""
+	echo "── CAP_NET_RAW (naabu SYN scan) ───────────────"
+	if naabu -version >/dev/null 2>&1; then
+		_hc_pass "naabu responds — raw socket support likely available"
+	else
+		_hc_warn "naabu did not respond to --version; add --cap-add=NET_RAW --privileged to docker run"
+	fi
+
+	echo ""
+	echo "═══════════════════════════════════════════════"
+	printf "  Results: %d passed, %d warnings, %d failed\n" "$pass" "$warn" "$fail"
+	echo "═══════════════════════════════════════════════"
+	echo ""
+	if [[ "$fail" -gt 0 ]]; then
+		exit 1
+	fi
+	exit 0
+}
+
+if [[ "${1:-}" == "--check" ]]; then
+	run_health_check
+fi
 
 # I expect a plain list of domains as the first argument
 if [ "$#" -lt 1 ]; then
 	echo -e "\033[91m[-] Usage: $0 <primary_domains_file>\033[0m"
+	echo -e "\033[91m       or: $0 --check   (run health check)\033[0m"
 	exit 1
 fi
 
@@ -138,53 +267,269 @@ USE_NAABU="true"
 USE_HTTPX="true"
 USE_GAU="true"
 
-NAABU_SCAN_MODE="${NAABU_SCAN_MODE:-auto}"
+NAABU_SCAN_MODE="${NAABU_SCAN_MODE:-connect}"
+NAABU_TOP_PORTS="${NAABU_TOP_PORTS:-100}"
 
-PORT_SPEC_FILE="assets/port-spec.txt"
+# Fixed top-20 web ports (Shodan facet-derived, web-focused) used for httpx expansion.
+WEB_PORTS_TOP20=$(grep -v '^[[:space:]]*$' "$SCRIPT_DIR/assets/lists/web-ports-top20.txt" | paste -sd',')
 
-# pulling port targets from the shortlist so naabu knows where to look
-generate_port_list() {
-	local outfile="$1"
-	local spec_file="$PORT_SPEC_FILE"
-	local tmp
-	tmp=$(mktemp)
-	: >"$tmp"
-	if [[ -f "$spec_file" ]]; then
-		while IFS= read -r raw_spec; do
-			local spec
-			spec=$(echo "$raw_spec" | tr -d '[:space:]')
-			[[ -z "$spec" || "$spec" == \#* ]] && continue
-			if [[ "$spec" =~ ^([0-9]+)-([0-9]+)$ ]]; then
-				local start=${BASH_REMATCH[1]}
-				local end=${BASH_REMATCH[2]}
-				if ((start <= end)); then
-					for ((port=start; port<=end; port++)); do
-						echo "$port" >>"$tmp"
-					done
-				fi
-			elif [[ "$spec" =~ ^[0-9]+$ ]]; then
-				echo "$spec" >>"$tmp"
-			else
-				warning "Skipping invalid port specification '$raw_spec' in $spec_file"
-			fi
-		done <"$spec_file"
-	else
-		warning "Port specification file '$spec_file' not found. Falling back to default top ports."
-		local -a fallback_ports=("7" "9" "13" "21-23" "25-26" "37" "53" "79-81" "88" "106" "110-111" "113" "119" "135" "139" "143-144" "179" "199" "389" "427" "443-445" "465" "513-515" "543-544" "548" "554" "587" "631" "646" "873" "990" "993" "995" "1025-1029" "1110" "1433" "1720" "1723" "1755" "1900" "2000-2001" "2049" "2121" "2717" "3000" "3128" "3306" "3389" "3986" "4899" "5000" "5009" "5051" "5060" "5101" "5190" "5357" "5432" "5631" "5666" "5800" "5900" "6000-6001" "6646" "7070" "8000" "8008-8009" "8080-8081" "8443" "8888" "9100" "9999-10000" "32768" "49152-49157")
-		for f_spec in "${fallback_ports[@]}"; do
-			if [[ "$f_spec" =~ ^([0-9]+)-([0-9]+)$ ]]; then
-				local start=${BASH_REMATCH[1]}
-				local end=${BASH_REMATCH[2]}
-				for ((port=start; port<=end; port++)); do
-					echo "$port" >>"$tmp"
-				done
-			else
-				echo "$f_spec" >>"$tmp"
-			fi
-		done
+# CDN alternate web ports — edge nodes listen on these in addition to 80/443.
+WEB_PORTS_CDN=$(grep -v '^[[:space:]]*$' "$SCRIPT_DIR/assets/lists/web-ports-cdn.txt" | paste -sd',')
+
+# Naabu rate/concurrency defaults.
+NAABU_RATE="${NAABU_RATE:-300}"
+NAABU_CONCURRENCY="${NAABU_CONCURRENCY:-25}"
+
+# ─── CDN ASN list — worldwide top-10+ providers ────────────────────────────
+# Hosts resolving to these ASNs are proxy/CDN-fronted; SYN scans are blocked.
+# They receive httpx web-port probing only (no naabu).
+# Edit assets/lists/cdn-asns.txt to add/remove providers — no code change needed.
+mapfile -t CDN_ASNS < "$SCRIPT_DIR/assets/lists/cdn-asns.txt"
+
+# ─── CDN CNAME suffix list — CNAME-based CDN detection (complements ASN lookup) ─
+# If any CNAME in a host's chain ends with one of these suffixes, the host is
+# treated as CDN-fronted regardless of ASN. Cloud tier still wins over CNAME CDN.
+# Edit assets/lists/cdn-cnames.txt to add/remove suffixes — no code change needed.
+mapfile -t CDN_CNAME_SUFFIXES < "$SCRIPT_DIR/assets/lists/cdn-cnames.txt"
+
+# ─── Cloud ASN list — worldwide top-10+ providers ──────────────────────────
+# Hosts in these ASNs are actual compute; full port scan is valid and useful.
+# Cloud takes precedence over CDN if a host maps to both.
+# Edit assets/lists/cloud-asns.txt to add/remove providers — no code change needed.
+mapfile -t CLOUD_ASNS < "$SCRIPT_DIR/assets/lists/cloud-asns.txt"
+
+# ─── Classify DNS-resolved hosts into CDN-fronted vs direct/cloud tiers ─────
+# Runs after dnsx; uses Team Cymru batch ASN lookup. Writes:
+#   cdn_hosts.txt       — hosts behind CDN proxies (no naabu; web ports only)
+#   direct_hosts.txt    — hosts on cloud/own IPs (full naabu scan)
+#   host_classification.json — per-host ASN/tier details for the report
+classify_hosts_by_tier() {
+	local dnsx_file="$RUN_DIR/dnsx.json"
+	local cdn_hosts="$RUN_DIR/cdn_hosts.txt"
+	local direct_hosts="$RUN_DIR/direct_hosts.txt"
+	local host_classification="$RUN_DIR/host_classification.json"
+
+	>"$cdn_hosts"
+	>"$direct_hosts"
+
+	if [[ ! -s "$dnsx_file" ]]; then
+		warning "  ⚠ No dnsx data; treating all master subdomains as direct hosts."
+		[[ -s "$MASTER_SUBS" ]] && cp "$MASTER_SUBS" "$direct_hosts"
+		echo "[]" >"$host_classification"
+		return
 	fi
-	sort -n "$tmp" | uniq >"$outfile"
-	rm -f "$tmp"
+
+	# Collect all resolved hostnames
+	local all_hosts_tmp
+	all_hosts_tmp=$(mktemp)
+	jq -r 'select(type=="object") | select(.status_code=="NOERROR") | .host' \
+		"$dnsx_file" 2>/dev/null | sort -u >"$all_hosts_tmp" || true
+
+	# Build ip|host mapping from A records
+	local ip_host_map
+	ip_host_map=$(mktemp)
+	jq -r 'select(type=="object") | select(.status_code=="NOERROR") |
+	        select(.a != null and (.a | length) > 0) |
+	        .host as $h | .a[] | "\(.)|\($h)"' \
+		"$dnsx_file" 2>/dev/null | sort -u >"$ip_host_map" || true
+
+	if [[ ! -s "$ip_host_map" ]]; then
+		warning "  ⚠ No A records found; treating all resolved hosts as direct."
+		cp "$all_hosts_tmp" "$direct_hosts"
+		echo "[]" >"$host_classification"
+		rm -f "$all_hosts_tmp" "$ip_host_map"
+		return
+	fi
+
+	local ips_tmp
+	ips_tmp=$(mktemp)
+	cut -d'|' -f1 "$ip_host_map" | sort -u >"$ips_tmp"
+	local ip_count
+	ip_count=$(wc -l <"$ips_tmp" | tr -d ' ')
+	info "  → Classifying ${ip_count} unique IPs via Team Cymru batch ASN lookup..."
+
+	# Batch ASN lookup over a single TCP connection to whois.cymru.com
+	local cymru_tmp
+	cymru_tmp=$(mktemp)
+	{
+		printf 'begin\nverbose\n'
+		cat "$ips_tmp"
+		printf 'end\n'
+	} | timeout 60 bash -c \
+		'exec 3<>/dev/tcp/whois.cymru.com/43; cat >&3; sleep 3; cat <&3; exec 3>&-' \
+		2>/dev/null | \
+		awk -F'|' '
+		NF>=2 && $1~/^[[:space:]]*[0-9]/ {
+			asn=$1; ip=$2
+			gsub(/^[[:space:]]+|[[:space:]]+$/, "", asn)
+			gsub(/^[[:space:]]+|[[:space:]]+$/, "", ip)
+			if (asn!="" && ip!="") print ip "|" asn
+		}' >"$cymru_tmp" || true
+
+	# Python script to classify hosts (avoids messy bash associative arrays for large sets)
+	local py_tmp
+	py_tmp=$(mktemp --suffix=.py)
+	cat >"$py_tmp" <<'PYEOF'
+import sys, json
+
+cdn_asns   = set(sys.argv[1].split())
+cloud_asns = set(sys.argv[2].split())
+
+# Optional: CNAME-based CDN suffix list (argv[5]) and dnsx file path (argv[6])
+cdn_cname_suffixes = tuple(s.lower() for s in sys.argv[5].split()) if len(sys.argv) > 5 and sys.argv[5] else ()
+dnsx_file = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else None
+
+cymru_map = {}   # ip → asn
+with open(sys.argv[3]) as f:
+    for line in f:
+        parts = line.strip().split('|')
+        if len(parts) >= 2:
+            cymru_map[parts[0].strip()] = parts[1].strip()
+
+ip_host_map = {}  # ip → [hosts]
+with open(sys.argv[4]) as f:
+    for line in f:
+        parts = line.strip().split('|')
+        if len(parts) >= 2:
+            ip_host_map.setdefault(parts[0].strip(), []).append(parts[1].strip())
+
+# Build host → [cnames] map from dnsx JSON (one record per line)
+host_cnames = {}  # host → [cname, ...]
+if dnsx_file and cdn_cname_suffixes:
+    try:
+        with open(dnsx_file) as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                    h = rec.get('host', '')
+                    cnames = rec.get('cname') or []
+                    if h and cnames:
+                        host_cnames[h] = [c.lower() for c in cnames]
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+host_data = {}
+for ip, hosts in ip_host_map.items():
+    asn = cymru_map.get(ip, '')
+    # Cloud always beats CDN (same ASN can serve both)
+    if asn in cloud_asns:
+        tier = 'cloud'
+    elif asn in cdn_asns:
+        tier = 'cdn'
+    else:
+        tier = 'direct'
+    for host in hosts:
+        if host not in host_data:
+            host_data[host] = {'host': host, 'ips': [], 'asns': [], 'tier': tier}
+        host_data[host]['ips'].append(ip)
+        if asn and asn not in host_data[host]['asns']:
+            host_data[host]['asns'].append(asn)
+        # Upgrade tier: cloud > direct > cdn
+        curr = host_data[host]['tier']
+        if curr == 'cdn' and tier in ('cloud', 'direct'):
+            host_data[host]['tier'] = tier
+        elif curr == 'direct' and tier == 'cloud':
+            host_data[host]['tier'] = 'cloud'
+
+# CNAME-based CDN override: if any CNAME chain matches a known CDN suffix,
+# force tier to cdn — unless the host is already classified as cloud.
+if cdn_cname_suffixes:
+    for host, data in host_data.items():
+        if data['tier'] == 'cloud':
+            continue
+        cnames = host_cnames.get(host, [])
+        if any(c.endswith(s) for c in cnames for s in cdn_cname_suffixes):
+            data['tier'] = 'cdn'
+
+print(json.dumps(list(host_data.values())))
+PYEOF
+
+	local cdn_asn_str="${CDN_ASNS[*]}"
+	local cloud_asn_str="${CLOUD_ASNS[*]}"
+	local cdn_cname_str="${CDN_CNAME_SUFFIXES[*]}"
+	python3 "$py_tmp" "$cdn_asn_str" "$cloud_asn_str" "$cymru_tmp" "$ip_host_map" \
+		"$cdn_cname_str" "$dnsx_file" \
+		>"$host_classification" 2>/dev/null || echo "[]" >"$host_classification"
+
+	# Write per-tier host files
+	jq -r '.[] | select(.tier == "cdn") | .host' \
+		"$host_classification" 2>/dev/null | sort -u >"$cdn_hosts" || true
+	jq -r '.[] | select(.tier != "cdn") | .host' \
+		"$host_classification" 2>/dev/null | sort -u >"$direct_hosts" || true
+
+	# Hosts with no A record (CNAME-only, AAAA-only, TXT-only) fall back to direct
+	local classified_tmp
+	classified_tmp=$(mktemp)
+	{ cat "$cdn_hosts" "$direct_hosts" 2>/dev/null; } | sort -u >"$classified_tmp"
+	comm -23 <(sort "$all_hosts_tmp") "$classified_tmp" >>"$direct_hosts" || true
+	sort -u "$direct_hosts" -o "$direct_hosts"
+
+	local cdn_count direct_count
+	cdn_count=$(wc -l <"$cdn_hosts" | tr -d ' ')
+	direct_count=$(wc -l <"$direct_hosts" | tr -d ' ')
+	info "  → ${cdn_count} CDN-fronted (web ports only) | ${direct_count} direct/cloud/unknown (full port scan)"
+
+	rm -f "$all_hosts_tmp" "$ip_host_map" "$ips_tmp" "$cymru_tmp" "$py_tmp" "$classified_tmp"
+}
+
+# ─── Web port expansion — CDN vs non-CDN split ──────────────────────────────
+# CDN hosts: probe CDN alternate ports (edge nodes use non-standard HTTPS ports).
+# Non-CDN resolved hosts: probe standard top-20 web ports as a safety net for
+# services that naabu may have missed (e.g. cloud hosts behind firewalls).
+augment_final_urls_with_webports() {
+	local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
+	local dnsx_file="$RUN_DIR/dnsx.json"
+	[[ ! -s "$dnsx_file" ]] && return
+
+	local cdn_hosts_file="$RUN_DIR/cdn_hosts.txt"
+	local cdn_ports="${WEB_PORTS_CDN:-80,443,2052,2053,2082,2083,2086,2087,2095,2096,8080,8443,4443,8888,8880,8081,2222}"
+	local direct_ports="${EFFECTIVE_WEB_PORTS:-$WEB_PORTS_TOP20}"
+
+	# All NOERROR-resolved hosts
+	local resolved_hosts_tmp
+	resolved_hosts_tmp=$(mktemp)
+	jq -r 'select(type=="object") | select(.status_code=="NOERROR") | .host' \
+		"$dnsx_file" 2>/dev/null | sort -u >"$resolved_hosts_tmp" || true
+
+	info "  → Web port expansion (CDN/non-CDN split)..."
+
+	# CDN hosts × CDN alternate ports
+	if [[ -s "$cdn_hosts_file" ]]; then
+		local cdn_count cdn_port_count
+		cdn_count=$(wc -l <"$cdn_hosts_file" | tr -d ' ')
+		cdn_port_count=$(echo "$cdn_ports" | tr ',' '\n' | sed '/^$/d' | wc -l | tr -d ' ')
+		info "    CDN hosts: ${cdn_count} × ${cdn_port_count} CDN ports"
+		awk -v ports="$cdn_ports" 'BEGIN { n=split(ports,pa,",") }
+		    { for(i=1;i<=n;i++) print $0":"pa[i] }' \
+			"$cdn_hosts_file" >>"$final_urls_ports"
+	fi
+
+	# Non-CDN resolved hosts × standard web ports
+	local non_cdn_tmp
+	non_cdn_tmp=$(mktemp)
+	if [[ -s "$cdn_hosts_file" ]]; then
+		comm -23 <(sort "$resolved_hosts_tmp") <(sort "$cdn_hosts_file") >"$non_cdn_tmp" || true
+	else
+		cp "$resolved_hosts_tmp" "$non_cdn_tmp"
+	fi
+
+	local non_cdn_count port_count
+	non_cdn_count=$(wc -l <"$non_cdn_tmp" | tr -d ' ')
+	port_count=$(echo "$direct_ports" | tr ',' '\n' | sed '/^$/d' | wc -l | tr -d ' ')
+	info "    Non-CDN hosts: ${non_cdn_count} × ${port_count} web ports"
+	if [[ -s "$non_cdn_tmp" ]]; then
+		awk -v ports="$direct_ports" 'BEGIN { n=split(ports,pa,",") }
+		    { for(i=1;i<=n;i++) print $0":"pa[i] }' \
+			"$non_cdn_tmp" >>"$final_urls_ports"
+	fi
+
+	sort -u "$final_urls_ports" -o "$final_urls_ports"
+	local total
+	total=$(wc -l <"$final_urls_ports" | tr -d ' ')
+	info "  → Total httpx targets after expansion: ${total}"
+	rm -f "$resolved_hosts_tmp" "$non_cdn_tmp"
 }
 
 # quick helper to glue list items together without duplicates
@@ -719,6 +1064,27 @@ merge_and_count() {
 
 }
 
+# filter a host-list file in-place using FROGY_EXCLUSIONS_FILE
+# each exclusion entry removes exact matches + all subdomains (*.entry)
+apply_exclusions() {
+	local target_file="$1"
+	local label="${2:-MASTER_SUBS}"
+	[[ -z "${FROGY_EXCLUSIONS_FILE:-}" || ! -f "$FROGY_EXCLUSIONS_FILE" ]] && return
+	local before after
+	before=$(wc -l <"$target_file" 2>/dev/null || echo 0)
+	cp "$target_file" "${target_file}.pre_excl"
+	while IFS= read -r excl; do
+		[[ -z "$excl" || "$excl" =~ ^# ]] && continue
+		local esc
+		esc=$(printf '%s' "$excl" | sed 's/\./\\./g')
+		grep -v -E "(^${esc}$|\\.${esc}$)" "${target_file}.pre_excl" >"${target_file}.excl_tmp" 2>/dev/null || true
+		mv "${target_file}.excl_tmp" "${target_file}.pre_excl"
+	done <"$FROGY_EXCLUSIONS_FILE"
+	mv "${target_file}.pre_excl" "$target_file"
+	after=$(wc -l <"$target_file" 2>/dev/null || echo 0)
+	info "Exclusions applied to ${label}: $((before - after)) entries removed"
+}
+
 # optional Chaos dataset pull for folks with API access
 run_chaos() {
 	if [[ "$USE_CHAOS" == "true" ]]; then
@@ -743,13 +1109,24 @@ run_chaos() {
 		fi
 		rm -f "$chaos_index"
 	fi
+
+	# If a PDCP/Chaos API key is set, also query via chaos CLI for live per-domain results
+	if [[ -n "${CHAOS_KEY:-}" ]] && command -v chaos >/dev/null 2>&1; then
+		local chaos_cli_out="$RUN_DIR/chaos_cli.txt"
+		: >"$chaos_cli_out"
+		while IFS= read -r domain; do
+			[[ -z "$domain" ]] && continue
+			chaos -d "$domain" -key "$CHAOS_KEY" -silent 2>/dev/null >>"$chaos_cli_out" || true
+		done <"$PRIMARY_DOMAINS_FILE"
+		merge_and_count "$chaos_cli_out" "Chaos-CLI"
+	fi
 }
 
 # bread-and-butter subdomain discovery via subfinder
 run_subfinder() {
 	if [[ "$USE_SUBFINDER" == "true" ]]; then
-		info "[1/22] Running Subfinder..."
-		subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent -all -o "$RUN_DIR/subfinder.txt" >/dev/null 2>&1 || true
+		info "[4/31] Running Subfinder..."
+		timeout 300 subfinder -dL "$PRIMARY_DOMAINS_FILE" -silent -all -o "$RUN_DIR/subfinder.txt" >/dev/null 2>&1 || { warning "subfinder timed out after 5 min — continuing with partial results."; true; }
 		merge_and_count "$RUN_DIR/subfinder.txt" "Subfinder"
 	fi
 }
@@ -759,7 +1136,7 @@ run_assetfinder() {
 	if [[ "$USE_ASSETFINDER" != "true" ]]; then
 		return 0
 	fi
-info "[2/22] Running Assetfinder..."
+info "[5/31] Running Assetfinder..."
 	local assetfinder_output="$RUN_DIR/assetfinder.txt"
 	>"$assetfinder_output"
 	local asset_status=0
@@ -777,7 +1154,7 @@ info "[2/22] Running Assetfinder..."
 
 # leaning on crt.sh to shake out certificate-disclosed hosts
 run_crtsh() {
-info "[3/22] Running crt.sh..."
+info "[6/31] Running crt.sh..."
 	local crt_file="$RUN_DIR/whois.txt"
 	>"$crt_file"
 	local crt_status=0
@@ -821,7 +1198,7 @@ run_gau() {
 	if [[ "$USE_GAU" != "true" ]]; then
 		return 0
 	fi
-info "[4/22] Running GAU…"
+info "[7/31] Running GAU…"
 
 	mkdir -p "$RUN_DIR/raw_output/gau"
 	local raw_urls="$RUN_DIR/raw_output/gau/urls.txt"
@@ -866,14 +1243,16 @@ info "[4/22] Running GAU…"
 # quick DNS sweep to see what actually resolves
 run_dnsx() {
 	if [[ "$USE_DNSX" == "true" ]]; then
-		info "[6/22] Running dnsx..."
-		dnsx -silent \
+		info "[10/31] Running dnsx..."
+		heartbeat_start "resolving subdomains with dnsx"
+		timeout 900 dnsx -silent \
 			-rl 50 \
 			-t 25 \
 			-l "$MASTER_SUBS" \
 			-o "$RUN_DIR/dnsx.json" \
 			-j \
-			>/dev/null 2>&1 || true
+			>/dev/null 2>&1 || { warning "dnsx timed out after 15 min — continuing with partial results."; true; }
+		heartbeat_stop
 		if [[ -s "$RUN_DIR/dnsx.json" ]]; then
 			# tally how many hosts actually resolved cleanly
 			DNSX_LIVE_COUNT=$(jq -r 'select(.status_code=="NOERROR") | .host' "$RUN_DIR/dnsx.json" | sort -u | wc -l)
@@ -884,39 +1263,86 @@ run_dnsx() {
 }
 
 # port scan time; naabu checks which services even bother replying
+# Only scans direct/cloud/unknown hosts; CDN-fronted hosts are handled by
+# augment_final_urls_with_webports (httpx-only probe on the web port list).
 run_naabu() {
 	if [[ "$USE_NAABU" == "true" ]]; then
-		info "[8/22] Running naabu..."
-		if [ ! -s "$MASTER_SUBS" ]; then
-			warning "Master subdomains file is empty. Skipping naabu."
+		info "[12/31] Running naabu..."
+
+		# Scan only direct/cloud hosts; CDN-fronted hosts are handled separately
+		# by augment_final_urls_with_webports (web-port probing only, no SYN scan).
+		local naabu_target="$RUN_DIR/naabu_targets.txt"
+		if [[ -s "$RUN_DIR/direct_hosts.txt" ]]; then
+			cp "$RUN_DIR/direct_hosts.txt" "$naabu_target"
+		elif [[ -s "$RUN_DIR/dnsx.json" ]]; then
+			# Fallback: no classification output — scan all NOERROR hosts
+			jq -r 'select(type=="object") | select(.status_code=="NOERROR") | .host' \
+				"$RUN_DIR/dnsx.json" 2>/dev/null | sort -u >"$naabu_target" || true
+		fi
+		if [[ ! -s "$naabu_target" ]]; then
+			naabu_target="$MASTER_SUBS"
+		fi
+		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
+		if [[ ! -s "$naabu_target" ]]; then
+			info "  → No hosts available for naabu scan."
+			> "$RUN_DIR/naabu.json"
+			> "$final_urls_ports"
+			# Always include root input domains on 80/443 so web checks still run
+			while IFS= read -r domain; do
+				domain=$(echo "$domain" | tr -d '\r' | xargs)
+				[[ -z "$domain" ]] && continue
+				printf '%s:80\n%s:443\nwww.%s:80\nwww.%s:443\n' "$domain" "$domain" "$domain" "$domain"
+			done <"$PRIMARY_DOMAINS_FILE" >>"$final_urls_ports"
+			sort -u "$final_urls_ports" -o "$final_urls_ports"
+			generate_portscan_summary
 			return
 		fi
-		local port_file="$RUN_DIR/naabu_ports.txt"
-		generate_port_list "$port_file"
-        local port_list
-        port_list=$(paste -sd, "$port_file")
-		if [[ -z "$port_list" ]]; then
-			warning "Port list generation returned empty set; falling back to default top 100 set."
-			port_list="7,9,13,21,22,23,25,26,37,53,79,80,81,88,106,110,111,113,119,135,139,143,144,179,199,389,427,443,444,445,465,513,514,515,548,554,587,631,873,990,993,995,1025,1026,1027,1028,1029,1110,1433,1521,1723,1900,2000,2049,2121,2717,3000,3128,3306,3389,3986,4899,5000,5009,5051,5060,5101,5190,5357,5432,5631,5666,5800,5900,6000,6001,6646,7070,8000,8008,8009,8080,8081,8443,8888,9100,9999,10000,32768,49152,49153,49154,49155,49156,49157"
+		local target_count
+		target_count=$(wc -l <"$naabu_target" | tr -d ' ')
+
+		# Build port argument from port-spec.txt; fallback to top-N if file missing.
+		local naabu_port_arg
+		local port_spec_file="$SCRIPT_DIR/assets/lists/port-spec.txt"
+		if [[ -s "$port_spec_file" ]]; then
+			naabu_port_arg=$(grep -v '^\s*#' "$port_spec_file" | grep -v '^\s*$' | tr '\n' ',' | sed 's/,$//')
+			info "  → Scanning ${target_count} direct/cloud hosts with naabu (port-spec.txt, $(echo "$naabu_port_arg" | tr ',' '\n' | wc -l | tr -d ' ') ports, rate=${NAABU_RATE:-300})."
+		else
+			local top_ports="${NAABU_TOP_PORTS:-100}"
+			if [[ ! "$top_ports" =~ ^[0-9]+$ ]] || (( top_ports <= 0 )); then
+				warning "Invalid NAABU_TOP_PORTS='${NAABU_TOP_PORTS}'. Falling back to 100."
+				top_ports=100
+			fi
+			naabu_port_arg=""
+			info "  → Scanning ${target_count} direct/cloud hosts with naabu top-${top_ports} (port-spec.txt not found)."
 		fi
+
 		local -a naabu_base_args=(
 			-silent
-			-l "$MASTER_SUBS"
-			-p "$port_list"
+			-l "$naabu_target"
+			-rate "${NAABU_RATE:-300}"
+			-c "${NAABU_CONCURRENCY:-25}"
+			-retries 1
 			-o "$RUN_DIR/naabu.json"
 			-json
 		)
+		if [[ -n "$naabu_port_arg" ]]; then
+			naabu_base_args+=(-p "$naabu_port_arg")
+		else
+			naabu_base_args+=(-top-ports "${top_ports:-100}")
+		fi
 
 		run_naabu_pass() {
 			rm -f "$RUN_DIR/naabu.json"
-			naabu "${naabu_base_args[@]}" "$@" >/dev/null || true
+			heartbeat_start "port scanning with naabu"
+			timeout 5400 naabu "${naabu_base_args[@]}" "$@" >/dev/null || { warning "naabu timed out after 90 min — continuing with partial results."; true; }
+			heartbeat_stop
 		}
 
 		local scan_mode="${NAABU_SCAN_MODE,,}"
 		case "$scan_mode" in
 		connect)
-			info "Running naabu in TCP connect mode (-sC -Pn)."
-			run_naabu_pass -sC -Pn
+			info "Running naabu in TCP connect mode (-s c -Pn)."
+			run_naabu_pass -s c -Pn
 			;;
 		syn | auto | "")
 			run_naabu_pass
@@ -931,12 +1357,18 @@ run_naabu() {
 		total_hits=$(json_count "$RUN_DIR/naabu.json")
 
 		# build a simple host:port list for later HTTP checks
-		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 		if [[ -s "$RUN_DIR/naabu.json" ]]; then
 			jq -r '"\(.host):\(.port)"' "$RUN_DIR/naabu.json" | sort -u >"$final_urls_ports"
 		else
 			> "$final_urls_ports"
 		fi
+		# Always include root input domains on 80/443 so CDN-fronted sites never get skipped
+		while IFS= read -r domain; do
+			domain=$(echo "$domain" | tr -d '\r' | xargs)
+			[[ -z "$domain" ]] && continue
+			printf '%s:80\n%s:443\nwww.%s:80\nwww.%s:443\n' "$domain" "$domain" "$domain" "$domain"
+		done <"$PRIMARY_DOMAINS_FILE" >>"$final_urls_ports"
+		sort -u "$final_urls_ports" -o "$final_urls_ports"
 	fi
 	generate_portscan_summary
 }
@@ -1038,7 +1470,7 @@ _ip_intel_worker() {
 export -f _ip_intel_worker
 
 generate_ip_intel() {
-	info "[9/22] Enriching IP intelligence (parallel workers)..."
+	info "[13/31] Enriching IP intelligence (parallel workers)..."
 	local intel_file="$RUN_DIR/ip_enrichment.json"
 	local ip_candidates="$RUN_DIR/ip_candidates.txt"
 	>"$ip_candidates"
@@ -1085,10 +1517,75 @@ generate_ip_intel() {
 	quality_check_json_array "IP enrichment" "$intel_file"
 }
 
+# Filter non-CDN host:port entries using naabu confirmed-open ports.
+# Hosts WITH naabu results  → keep only naabu-confirmed ports + {80,443}
+# Hosts WITH NO naabu data  → keep only 80,443 (safety net — may block naabu but serve HTTP)
+# CDN entries               → caller passes only the direct/non-CDN subset here
+# Edits $1 (direct targets file) in-place.
+_filter_direct_targets_via_naabu() {
+	local targets_file="$1"
+	local naabu_json="$RUN_DIR/naabu.json"
+	local direct_hosts_file="$RUN_DIR/direct_hosts.txt"
+	[[ ! -s "$naabu_json" ]] && return
+
+	local naabu_confirmed naabu_hosts direct_hosts keep_file before after
+	naabu_confirmed=$(mktemp)
+	naabu_hosts=$(mktemp)
+	direct_hosts=$(mktemp)
+	keep_file=$(mktemp)
+
+	jq -r 'select(type=="object") | "\(.host):\(.port)"' \
+		"$naabu_json" 2>/dev/null | sort -u >"$naabu_confirmed" || true
+
+	if [[ ! -s "$naabu_confirmed" ]]; then
+		rm -f "$naabu_confirmed" "$naabu_hosts" "$direct_hosts" "$keep_file"
+		return
+	fi
+
+	cut -d: -f1 "$naabu_confirmed" | sort -u >"$naabu_hosts"
+	# Load the known direct (non-cloud) hosts so cloud-tier entries pass through unchanged
+	[[ -s "$direct_hosts_file" ]] && sort -u "$direct_hosts_file" >"$direct_hosts" || true
+	before=$(wc -l <"$targets_file" | tr -d ' ')
+
+	awk -F: -v confirmed="$naabu_confirmed" -v has_naabu_file="$naabu_hosts" -v direct_file="$direct_hosts" '
+	BEGIN {
+		while ((getline line < confirmed) > 0)       cset[line]=1
+		while ((getline h    < has_naabu_file) > 0)  has_naabu[h]=1
+		while ((getline h    < direct_file) > 0)     is_direct[h]=1
+	}
+	{
+		host=$1; port=$2; entry=host":"port
+		# Cloud-tier hosts (not in direct_hosts.txt) bypass naabu filter entirely
+		if (!(host in is_direct)) {
+			print $0
+		} else if (host in has_naabu) {
+			if ((entry in cset) || port=="80" || port=="443") print $0
+		} else {
+			if (port=="80" || port=="443") print $0
+		}
+	}' "$targets_file" >"$keep_file" || true
+
+	mv "$keep_file" "$targets_file"
+	after=$(wc -l <"$targets_file" | tr -d ' ')
+	info "  → Naabu pre-filter: direct ${before} → ${after} targets (removed $(( before - after )) speculative combos)"
+	rm -f "$naabu_confirmed" "$naabu_hosts" "$direct_hosts"
+}
+
+# Split a host:port file into CDN and direct subsets using cdn_hosts.txt.
+# Returns 1 if cdn_hosts.txt is missing/empty so caller can fall back to monolithic pass.
+_split_httpx_targets() {
+	local src="$1" cdn_out="$2" direct_out="$3"
+	local cdn_hosts="$RUN_DIR/cdn_hosts.txt"
+	[[ ! -s "$cdn_hosts" ]] && return 1
+	awk -F: 'NR==FNR{h[$1]=1;next}  ($1 in h)' "$cdn_hosts" "$src" >"$cdn_out"  || true
+	awk -F: 'NR==FNR{h[$1]=1;next} !($1 in h)' "$cdn_hosts" "$src" >"$direct_out" || true
+	return 0
+}
+
 # httpx tells us which services are actually talking over HTTP/S
 run_httpx() {
 	if [[ "$USE_HTTPX" == "true" ]]; then
-		info "[10/22] Running httpx..."
+		info "[15/31] Running httpx..."
 		local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 		local httpx_json_file="$RUN_DIR/httpx.json"
 
@@ -1100,20 +1597,105 @@ run_httpx() {
 			return
 		fi
 
+		# Emit a quick launch estimate so profile impact is visible in logs.
+		local total_targets unique_hosts unique_ports cdn_targets direct_targets
+		total_targets=$(wc -l <"$final_urls_ports" | tr -d ' ')
+		unique_hosts=$(cut -d: -f1 "$final_urls_ports" | sort -u | wc -l | tr -d ' ')
+		unique_ports=$(cut -d: -f2 "$final_urls_ports" | sort -u | wc -l | tr -d ' ')
+		cdn_targets=0
+		direct_targets=0
+		if [[ -s "$RUN_DIR/cdn_hosts.txt" ]]; then
+			cdn_targets=$(awk -F: 'NR==FNR{h[$1]=1; next} (($1 in h)){c++} END{print c+0}' "$RUN_DIR/cdn_hosts.txt" "$final_urls_ports")
+		fi
+		if [[ -s "$RUN_DIR/direct_hosts.txt" ]]; then
+			direct_targets=$(awk -F: 'NR==FNR{h[$1]=1; next} (($1 in h)){c++} END{print c+0}' "$RUN_DIR/direct_hosts.txt" "$final_urls_ports")
+		fi
+		local rl est_seconds est_minutes
+		rl="${HTTPX_RATE:-15}"
+		if [[ "$rl" =~ ^[0-9]+$ ]] && (( rl > 0 )); then
+			est_seconds=$(( (total_targets + rl - 1) / rl ))
+		else
+			est_seconds=0
+		fi
+		est_minutes=$(( (est_seconds + 59) / 60 ))
+		info "  → httpx launch plan: targets=${total_targets} hosts=${unique_hosts} ports=${unique_ports} (cdn=${cdn_targets}, direct=${direct_targets}) est>=${est_minutes}m @rl=${rl}/s"
+
 		local -a httpx_base_args=(
 			-silent
-			-t 5
-			-rl 15
-			-timeout 15
-			-retries 2
+			-t "${HTTPX_THREADS:-5}"
+			-rl "${HTTPX_RATE:-15}"
+			-timeout "${HTTPX_TIMEOUT_SECS:-15}"
+			-retries "${HTTPX_RETRIES_COUNT:-2}"
 			-follow-redirects
 			-l "$final_urls_ports"
 		)
 
-		httpx "${httpx_base_args[@]}" \
-			-json \
-			-o "$httpx_json_file" \
-			>/dev/null || true
+		# ── Parallel CDN / Direct split ──────────────────────────────────────
+		local cdn_tmp direct_tmp cdn_jsonl direct_jsonl
+		cdn_tmp=$(mktemp); direct_tmp=$(mktemp)
+		cdn_jsonl=$(mktemp); direct_jsonl=$(mktemp)
+
+		local split_ok=0
+		_split_httpx_targets "$final_urls_ports" "$cdn_tmp" "$direct_tmp" && split_ok=1
+
+		if [[ "$split_ok" -eq 1 && ( -s "$cdn_tmp" || -s "$direct_tmp" ) ]]; then
+			# Apply naabu filter to direct targets only (CDN bypasses naabu by design)
+			[[ -s "$direct_tmp" ]] && _filter_direct_targets_via_naabu "$direct_tmp"
+
+			# CDN timeout: cap at 4s (fast) / 5s (balanced|deep); retries always 0
+			local cdn_timeout=5
+
+			info "  → httpx CDN pass   : $(wc -l <"$cdn_tmp"    | tr -d ' ') targets  timeout=${cdn_timeout}s retries=0"
+			info "  → httpx Direct pass: $(wc -l <"$direct_tmp"  | tr -d ' ') targets  timeout=${HTTPX_TIMEOUT_SECS}s retries=${HTTPX_RETRIES_COUNT}"
+
+			# Launch both passes in parallel
+			local cdn_pid="" direct_pid=""
+			if [[ -s "$cdn_tmp" ]]; then
+				timeout 3600 httpx -silent \
+					-t "${HTTPX_THREADS:-20}" -rl "${HTTPX_RATE:-80}" \
+					-timeout "$cdn_timeout" -retries 0 \
+					-follow-redirects -l "$cdn_tmp" \
+					-json -o "$cdn_jsonl" >/dev/null 2>&1 &
+				cdn_pid=$!
+			fi
+
+			if [[ -s "$direct_tmp" ]]; then
+				timeout 3600 httpx -silent \
+					-t "${HTTPX_THREADS:-20}" -rl "${HTTPX_RATE:-80}" \
+					-timeout "${HTTPX_TIMEOUT_SECS:-8}" -retries "${HTTPX_RETRIES_COUNT:-1}" \
+					-follow-redirects -l "$direct_tmp" \
+					-json -o "$direct_jsonl" >/dev/null 2>&1 &
+				direct_pid=$!
+			fi
+
+			heartbeat_start "probing web endpoints with httpx"
+			[[ -n "$cdn_pid"    ]] && wait "$cdn_pid"    2>/dev/null || true
+			[[ -n "$direct_pid" ]] && wait "$direct_pid" 2>/dev/null || true
+			heartbeat_stop
+
+			# Merge both JSONL outputs, dedup by input+url+status_code
+			{
+				[[ -s "$cdn_jsonl"    ]] && cat "$cdn_jsonl"
+				[[ -s "$direct_jsonl" ]] && cat "$direct_jsonl"
+			} | jq -sc '
+				map(select(type=="object"))
+				| unique_by((.input//"") + "|" + (.url//"") + "|" + ((.status_code//0)|tostring))
+				| .[]
+			' >"$httpx_json_file" 2>/dev/null || true
+
+		else
+			# Fallback: cdn_hosts.txt missing or both subsets empty → monolithic pass
+			info "  → httpx monolithic pass: $(wc -l <"$final_urls_ports" | tr -d ' ') targets"
+			heartbeat_start "probing web endpoints with httpx"
+			timeout 3600 httpx "${httpx_base_args[@]}" \
+				-json \
+				-o "$httpx_json_file" \
+				>/dev/null || { warning "httpx timed out after 60 min — continuing with partial results."; true; }
+			heartbeat_stop
+		fi
+
+		rm -f "$cdn_tmp" "$direct_tmp" "$cdn_jsonl" "$direct_jsonl"
+		# ── end parallel split ────────────────────────────────────────────────
 
 		# make sure the json file exists even if httpx stayed quiet
 		if [[ ! -f "$httpx_json_file" ]]; then
@@ -1122,75 +1704,6 @@ run_httpx() {
 
 		# keep track of how many URLs actually responded
 		HTTPX_LIVE_COUNT=$(wc -l <"$httpx_json_file" || echo 0)
-
-		local screenshot_staging_dir="output/screenshot"
-		local legacy_response_dir="output/response"
-		local response_dir="$RUN_DIR/response"
-
-		rm -rf "$screenshot_staging_dir" "$legacy_response_dir" "$response_dir"
-		mkdir -p "$screenshot_staging_dir" "$response_dir"
-
-		# double-checking we can actually write the screenshots and bodies
-		if [[ ! -w "$screenshot_staging_dir" || ! -w "$response_dir" ]]; then
-			error "Screenshot or response directories are not writable."
-			exit 1
-		fi
-
-		local screenshot_timeout="${FROGY_SCREENSHOT_TIMEOUT:-20}"
-		if ! [[ "$screenshot_timeout" =~ ^[0-9]+$ ]] || (( screenshot_timeout <= 0 )); then
-			screenshot_timeout=20
-		fi
-
-		local chrome_preference="${FROGY_HTTPX_SYSTEM_CHROME:-auto}"
-		local chrome_flag=""
-		if [[ "$chrome_preference" != "off" ]]; then
-			local -a chrome_candidates=("chromium" "chromium-browser" "google-chrome" "google-chrome-stable" "microsoft-edge" "msedge")
-			for candidate in "${chrome_candidates[@]}"; do
-				if command -v "$candidate" >/dev/null 2>&1; then
-					chrome_flag="-system-chrome"
-					break
-				fi
-			done
-			if [[ -z "$chrome_flag" && "$chrome_preference" == "require" ]]; then
-				warning "FROGY_HTTPX_SYSTEM_CHROME is set to require but no local Chrome/Chromium binary was found. Falling back to bundled renderer."
-			fi
-		fi
-
-		local -a httpx_screenshot_args=(
-			"${httpx_base_args[@]}"
-			-ss
-			-sr
-			-srd "$response_dir"
-			-st "$screenshot_timeout"
-		)
-		if [[ -n "$chrome_flag" ]]; then
-			httpx_screenshot_args+=("$chrome_flag")
-		fi
-
-		# grab screenshots and bodies so the report has something pretty to show
-		httpx "${httpx_screenshot_args[@]}" >/dev/null || true
-
-		local screenshot_count=0
-		if [[ -d "$screenshot_staging_dir" ]]; then
-			screenshot_count=$(find "$screenshot_staging_dir" -type f -iname '*.png' 2>/dev/null | wc -l | tr -d '[:space:]' || echo 0)
-			rm -rf "$RUN_DIR/screenshot"
-			if ! mv "$screenshot_staging_dir" "$RUN_DIR/"; then
-				warning "Failed to relocate screenshots into $RUN_DIR. Report links may be broken."
-			fi
-		fi
-
-		if [[ -d "$legacy_response_dir" ]]; then
-			rm -rf "$legacy_response_dir"
-		fi
-		if [[ ! -d "$RUN_DIR/screenshot" ]]; then
-			mkdir -p "$RUN_DIR/screenshot"
-		fi
-
-		if [[ "$screenshot_count" -gt 0 ]]; then
-			info "Captured ${screenshot_count} web screenshots."
-		elif [[ "$HTTPX_LIVE_COUNT" -gt 0 ]]; then
-			warning "httpx scraped ${HTTPX_LIVE_COUNT} live endpoints but produced no screenshots. Check Chrome/Chromium dependencies if you expect captures."
-		fi
 
 		# quick pulse check to catch rate limits or blocking
 		local naabu_target_count
@@ -1204,6 +1717,40 @@ run_httpx() {
 		local success_rate=0
 		if [[ "$naabu_target_count" -gt 0 ]]; then
 			success_rate=$((HTTPX_LIVE_COUNT * 100 / naabu_target_count))
+		fi
+
+		# Recovery pass: if success rate is extremely low, probe canonical 80/443
+		# endpoints per host with gentler settings to avoid false negatives.
+		if [[ "$naabu_target_count" -gt 10 && "$success_rate" -lt "$BLOCK_DETECTION_THRESHOLD" ]]; then
+			local hosts_tmp fallback_jsonl merged_json
+			hosts_tmp=$(mktemp)
+			fallback_jsonl=$(mktemp)
+			merged_json=$(mktemp)
+			cut -d: -f1 "$final_urls_ports" | sed '/^$/d' | sort -u >"$hosts_tmp"
+			if [[ -s "$hosts_tmp" ]]; then
+				info "  → Low hit-rate fallback: retrying canonical web ports (80/443) on $(wc -l <"$hosts_tmp" | tr -d ' ') hosts..."
+				httpx -silent -l "$hosts_tmp" -ports 80,443 -json -follow-redirects -t 10 -rl 25 -timeout 12 -retries 1 \
+					-o "$fallback_jsonl" >/dev/null 2>&1 || true
+				if [[ -s "$fallback_jsonl" ]]; then
+					jq -sc '
+						[
+						  (input // []),
+						  (input // [])
+						] | add
+						  | map(select(type=="object"))
+						  | unique_by((.input // "") + "|" + (.url // "") + "|" + ((.status_code // 0)|tostring))
+					' "$httpx_json_file" "$fallback_jsonl" >"$merged_json" 2>/dev/null || true
+					if [[ -s "$merged_json" ]]; then
+						jq -c '.[]' "$merged_json" >"$httpx_json_file" 2>/dev/null || true
+					fi
+				fi
+			fi
+			rm -f "$hosts_tmp" "$fallback_jsonl" "$merged_json"
+			HTTPX_LIVE_COUNT=$(wc -l <"$httpx_json_file" || echo 0)
+			success_rate=0
+			if [[ "$naabu_target_count" -gt 0 ]]; then
+				success_rate=$((HTTPX_LIVE_COUNT * 100 / naabu_target_count))
+			fi
 		fi
 
 		# shout if we dropped below the comfort threshold
@@ -1222,123 +1769,55 @@ run_httpx() {
 fi
 }
 
+# ─── CSP Subdomain Discovery ─────────────────────────────────────────────────
+# Extracts hostnames from Content-Security-Policy headers in httpx results.
+# Newly discovered and resolving hosts are probed and merged into the inventory.
+run_csp_discovery() {
+	local httpx_file="$RUN_DIR/httpx.json"
+	local output_file="$RUN_DIR/csp_subdomains.json"
+	[[ ! -s "$httpx_file" ]] && echo "[]" >"$output_file" && return
 
-# mapping screenshots so the HTML can reference them quickly
-gather_screenshots() {
-	info "[14/22] Gathering screenshots..."
-	local screenshot_map_file="$RUN_DIR/screenshot_map.json"
-	local screenshot_dir="$RUN_DIR/screenshot"
-	local response_screenshot_dir="$RUN_DIR/response/screenshot"
+	info "  → Extracting subdomains from Content-Security-Policy headers..."
+	local csp_tmp new_tmp resolved_tmp live_tmp
+	csp_tmp=$(mktemp); new_tmp=$(mktemp); resolved_tmp=$(mktemp); live_tmp=$(mktemp)
 
-	mkdir -p "$screenshot_dir"
-	printf '{\n' >"$screenshot_map_file"
+	# Parse CSP header values from httpx JSONL; try multiple field names
+	jq -r '
+		select(type=="object") |
+		(.csp // .header["content-security-policy"] // .headers["content-security-policy"] // "") |
+		split(";") | .[] | split(" ") | .[] |
+		ltrimstr("https://") | ltrimstr("http://") | ltrimstr("//") |
+		gsub("\\*\\."; "") |
+		select(test("^[a-zA-Z0-9][a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"))
+	' "$httpx_file" 2>/dev/null | grep -vE "^(none|self|unsafe|data|blob)" | sort -u >"$csp_tmp" || true
 
-	local first=true
-	declare -A seen_keys=()
-	local -a search_roots=()
+	# Only keep hosts not already known
+	comm -23 <(sort "$csp_tmp") <(tr '[:upper:]' '[:lower:]' <"$MASTER_SUBS" | sort) >"$new_tmp" 2>/dev/null || cp "$csp_tmp" "$new_tmp"
 
-	if [[ -d "$screenshot_dir" ]]; then
-		search_roots+=("$screenshot_dir")
-	fi
-	if [[ -d "$response_screenshot_dir" ]]; then
-		search_roots+=("$response_screenshot_dir")
-	fi
-
-	if [[ ${#search_roots[@]} -eq 0 ]]; then
-		printf '}\n' >>"$screenshot_map_file"
-		return
-	fi
-
-	derive_screenshot_key() {
-		local path="$1"
-		local parent_dir base_name
-		parent_dir=$(basename "$(dirname "$path")")
-		base_name="$(basename "$path")"
-		base_name="${base_name%.png}"
-
-		local candidates=()
-		candidates+=("$parent_dir")
-		candidates+=("$base_name")
-
-		for candidate in "${candidates[@]}"; do
-			[[ -z "$candidate" || "$candidate" == "." || "$candidate" == "screenshot" ]] && continue
-
-			local raw="$candidate"
-			local scheme=""
-			if [[ "$raw" == https___* ]]; then
-				scheme="https"
-				raw="${raw#https___}"
-			elif [[ "$raw" == http___* ]]; then
-				scheme="http"
-				raw="${raw#http___}"
-			fi
-
-			raw="${raw%_screenshot}"
-			raw="${raw%_full}"
-			raw="${raw//:/_}"
-			raw="${raw//\[/}"
-			raw="${raw//\]/}"
-			raw="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | tr -s '_' '_')"
-			raw="${raw##_}"
-			raw="${raw%_}"
-			[[ -z "$raw" ]] && continue
-
-			if [[ "$raw" =~ ^(.+)_([0-9]{1,5})$ ]]; then
-				local host="${BASH_REMATCH[1]}"
-				local port="${BASH_REMATCH[2]}"
-				if [[ -n "$host" && -n "$port" ]]; then
-					echo "${host}_${port}"
-					return 0
-				fi
-			else
-				if [[ "$scheme" == "https" ]]; then
-					echo "${raw}_443"
-					return 0
-				elif [[ "$scheme" == "http" ]]; then
-					echo "${raw}_80"
-					return 0
-				fi
-			fi
-		done
-
-		return 1
-	}
-
-	while IFS= read -r png; do
-		[[ -f "$png" ]] || continue
-		local relpath="${png#$RUN_DIR/}"
-		if [[ "$relpath" == "$png" ]]; then
-			relpath="$(basename "$png")"
+	if [[ -s "$new_tmp" ]]; then
+		dnsx -silent -l "$new_tmp" 2>/dev/null >"$resolved_tmp" || true
+		if [[ -s "$resolved_tmp" ]]; then
+			local n_new
+			n_new=$(wc -l <"$resolved_tmp")
+			info "  → CSP discovery: ${n_new} new hosts — probing with httpx..."
+			cat "$resolved_tmp" >>"$MASTER_SUBS"
+			sort -u "$MASTER_SUBS" -o "$MASTER_SUBS"
+			apply_exclusions "$MASTER_SUBS" "MASTER_SUBS (post-CSP)"
+			while IFS= read -r host; do
+				printf '%s:80\n%s:443\n' "$host" "$host"
+			done <"$resolved_tmp" >"$live_tmp"
+			httpx -silent -l "$live_tmp" -json -follow-redirects -timeout 10 -retries 1 2>/dev/null \
+				| grep '^{' >>"$httpx_file" || true
 		fi
-		local key
-		if ! key="$(derive_screenshot_key "$png")"; then
-			key=""
-		fi
-
-		if [[ -z "$key" ]]; then
-			continue
-		fi
-
-		[[ -n "${seen_keys[$key]:-}" ]] && continue
-		seen_keys["$key"]=1
-
-		if [[ "$first" == false ]]; then
-			printf ',\n' >>"$screenshot_map_file"
-		else
-			first=false
-		fi
-		printf '  "%s": "%s"' "$key" "$relpath" >>"$screenshot_map_file"
-		done < <(find "${search_roots[@]}" -type f -iname '*.png' -print 2>/dev/null | sort)
-
-	if [[ "$first" == false ]]; then
-		printf '\n' >>"$screenshot_map_file"
 	fi
-	printf '}\n' >>"$screenshot_map_file"
+
+	jq -Rc '[inputs | select(length>0)]' "$resolved_tmp" >"$output_file" 2>/dev/null || echo "[]" >"$output_file"
+	rm -f "$csp_tmp" "$new_tmp" "$resolved_tmp" "$live_tmp"
 }
 
 # quick crawl with katana to widen the URL funnel
 run_katana() {
-info "[12/22] Crawling links with Katana..."
+info "[18/31] Crawling links with Katana..."
 	local httpx_file="$RUN_DIR/httpx.json"
 	local output_file="$RUN_DIR/katana_links.json"
 
@@ -1353,9 +1832,10 @@ info "[12/22] Crawling links with Katana..."
 	echo "{" >"$output_file"
 	local first=true
 
-	local depth="${KATANA_DEPTH:-3}"
-	local timeout="${KATANA_TIMEOUT:-60}"
+	local depth="${KATANA_DEPTH:-${KATANA_DEPTH_ADAPTIVE:-3}}"
+	local timeout="${KATANA_TIMEOUT:-${KATANA_TIMEOUT_ADAPTIVE:-60}}"
 
+	heartbeat_start "crawling with katana"
 	while IFS= read -r url; do
 		[ -z "$url" ] && continue
 		local tmp="$RUN_DIR/katana_tmp.txt"
@@ -1369,6 +1849,7 @@ info "[12/22] Crawling links with Katana..."
 
 		rm -f "$tmp"
 	done <"$seeds"
+	heartbeat_stop
 
 	echo "}" >>"$output_file"
 }
@@ -1489,7 +1970,7 @@ _login_check_worker() {
 export -f _login_check_worker
 
 run_login_detection() {
-	info "[15/22] Detecting Login panels (parallel workers)..."
+	info "[21/31] Detecting Login panels (parallel workers)..."
 	local input_file="$RUN_DIR/httpx.json"
 	local output_file="$RUN_DIR/login.json"
 
@@ -1535,7 +2016,7 @@ run_login_detection() {
 
 # using tlsx to grab cert metadata and expiry windows
 run_tls_inventory() {
-	info "[16/22] Building TLS certificate inventory..."
+	info "[22/31] Building TLS certificate inventory..."
 	local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
 	local tls_json="$RUN_DIR/tls_inventory.json"
 	local tlsx_raw="$RUN_DIR/tls_inventory_raw.jsonl"
@@ -1548,13 +2029,16 @@ run_tls_inventory() {
 		return
 	fi
 
-	if ! tlsx -l "$final_urls_ports" -j >"$tlsx_raw" 2>>"$tlsx_log"; then
-		warning "tlsx scan failed; TLS inventory will be empty. Check $tlsx_log for details."
+	heartbeat_start "scanning TLS certificates with tlsx"
+	if ! timeout 1200 tlsx -l "$final_urls_ports" -j >"$tlsx_raw" 2>>"$tlsx_log"; then
+		heartbeat_stop
+		warning "tlsx scan failed or timed out after 20 min; TLS inventory will be empty. Check $tlsx_log for details."
 		echo "[]" >"$tls_json"
 		rm -f "$tlsx_raw"
 		quality_check_json_array "TLS inventory" "$tls_json"
 		return
 	fi
+	heartbeat_stop
 
 	if ! jq -cs '
 		def normalize_port($raw):
@@ -1595,7 +2079,9 @@ run_tls_inventory() {
 				IssuerCN: (.issuer_cn // ""),
 				IssuerOrg: (.issuer_org // [] | map(select(. != null and . != ""))),
 				TLSConnection: (.tls_connection // ""),
-				SNI: (.sni // "")
+				SNI: (.sni // ""),
+				PublicKeyBits: (.public_key_bits // null),
+				PublicKeyAlgo: (.public_key_algo // "")
 			}
 			| .EndpointURL = (
 				if .Host == "" then ""
@@ -1697,6 +2183,7 @@ _compliance_domain_worker() {
 
 	local spf dkim dmarc dnskey dnssec ns txt srv ptr mx soa caa
 	local a_records aaaa_records cname_records zone_transfer whois_summary
+	local bimi_record mta_sts_dns mta_sts_mode dane_tlsa_443 dane_tlsa_25 dane_tlsa
 
 	spf=$(dig "${dig_opts[@]}" +short TXT "$domain" 2>/dev/null | grep -i "v=spf1" | head -n 1 || true)
 	[ -z "$spf" ] && spf="No SPF Record"
@@ -1722,6 +2209,24 @@ _compliance_domain_worker() {
 	mx=$(dig "${dig_opts[@]}" +short MX "$domain" 2>/dev/null || true)
 	soa=$(dig "${dig_opts[@]}" +short SOA "$domain" 2>/dev/null || true)
 	caa=$(dig "${dig_opts[@]}" +short CAA "$domain" 2>/dev/null || true)
+
+	# BIMI
+	bimi_record=$(dig "${dig_opts[@]}" +short TXT "default._bimi.$domain" 2>/dev/null | tr -d '"' | head -1 || true)
+	[ -z "$bimi_record" ] && bimi_record="Not Found"
+
+	# MTA-STS DNS signal
+	mta_sts_dns=$(dig "${dig_opts[@]}" +short TXT "_mta-sts.$domain" 2>/dev/null | tr -d '"' | head -1 || true)
+	mta_sts_mode="not-found"
+	[[ -n "$mta_sts_dns" ]] && mta_sts_mode=$(echo "$mta_sts_dns" | grep -oP 'mode=\K\w+' | head -1 || echo "found")
+
+	# DANE/TLSA — check port 443 + 25
+	dane_tlsa_443=$(dig "${dig_opts[@]}" +short TLSA "_443._tcp.$domain" 2>/dev/null | head -1 || true)
+	dane_tlsa_25=$(dig "${dig_opts[@]}" +short TLSA "_25._tcp.$domain" 2>/dev/null | head -1 || true)
+	dane_tlsa="Not Found"
+	[[ -n "$dane_tlsa_443" ]] && dane_tlsa="port443: $dane_tlsa_443"
+	[[ -n "$dane_tlsa_25"  ]] && dane_tlsa="${dane_tlsa/#Not Found/}${dane_tlsa:+$([[ "$dane_tlsa" != "Not Found" ]] && echo " | ")}port25: $dane_tlsa_25"
+	# simplify dane_tlsa if only port25
+	[[ -z "$dane_tlsa_443" && -n "$dane_tlsa_25" ]] && dane_tlsa="port25: $dane_tlsa_25"
 
 	zone_transfer="AXFR Not Permitted"
 	if [ -z "$ns" ] || [ "$ns" = "No NS records found" ]; then
@@ -1756,6 +2261,7 @@ _compliance_domain_worker() {
 			whois_summary="WHOIS data unavailable"
 		else
 			local registrar created updated expires registrant_org registrant_country
+		registrar=""; created=""; updated=""; expires=""; registrant_org=""; registrant_country=""
 			for pattern in "Registrar:" "Sponsoring Registrar:" "Registrar Name:"; do
 				registrar=$(echo "$whois_raw" | grep -i "$pattern" | head -n 1 | cut -d':' -f2- | xargs || true)
 				[ -n "$registrar" ] && break
@@ -1797,6 +2303,10 @@ _compliance_domain_worker() {
 	fi
 
 	local safe_key="${domain_key//[^a-z0-9._-]/_}"
+	# pull structured whois fields from whois_summary context (set during whois block)
+	local _reg _created _expires _reg_org _reg_country
+	_reg="${registrar:-}"; _created="${created:-}"; _expires="${expires:-}"
+	_reg_org="${registrant_org:-}"; _reg_country="${registrant_country:-}"
 	jq -n \
 		--arg domain "$domain" \
 		--arg url "N/A" \
@@ -1821,6 +2331,14 @@ _compliance_domain_worker() {
 		--arg cert_expiry "$cert_expiry" \
 		--arg dns_status "${dns_status:-}" \
 		--arg resolvers "${dns_resolvers:-}" \
+		--arg bimi "$bimi_record" \
+		--arg mta_sts "$mta_sts_mode" \
+		--arg dane "$dane_tlsa" \
+		--arg registrar "$_reg" \
+		--arg domain_created "$_created" \
+		--arg domain_expires "$_expires" \
+		--arg registrant_org "$_reg_org" \
+		--arg registrant_country "$_reg_country" \
 		'{
 			Domain: $domain, URL: $url,
 			"SPF Record": $spf, "DKIM Record": $dkim, "DMARC Record": $dmarc,
@@ -1830,6 +2348,14 @@ _compliance_domain_worker() {
 			"A Records": $arecords, "AAAA Records": $aaaarecords,
 			"CNAME Records": $cname, "Zone Transfer": $zonetransfer,
 			"WHOIS Summary": $whois,
+			"Registrar": $registrar,
+			"DomainCreated": $domain_created,
+			"DomainExpires": $domain_expires,
+			"RegistrantOrg": $registrant_org,
+			"RegistrantCountry": $registrant_country,
+			"BIMI Record": $bimi,
+			"MTA-STS": $mta_sts,
+			"DANE/TLSA": $dane,
 			"SSL/TLS Version": $ssl_version, "SSL/TLS Issuer": $ssl_issuer,
 			"Cert Expiry Date": $cert_expiry,
 			"DNS Resolver": $resolvers, "DNS Status": $dns_status
@@ -1950,7 +2476,7 @@ export -f _compliance_domain_worker
 
 # checking DNS hygiene, email auth, and handy headers in one pass (parallelised)
 run_security_compliance() {
-	info "[17/22] Analyzing security hygiene (parallel workers)..."
+	info "[23/31] Analyzing security hygiene (parallel workers)..."
 	local compliance_output="$RUN_DIR/securitycompliance.json"
 	local headers_output="$RUN_DIR/sec_headers.json"
 
@@ -2053,19 +2579,22 @@ run_security_compliance() {
 }
 
 # turning jsonl blobs into tidy arrays for later steps
+# Uses a two-pass approach: fast jq first, line-by-line fallback if malformed lines exist
 combine_json() {
 	local infile="$1"
 	local outfile="$2"
 	if [[ -f "$infile" ]]; then
-		jq -cs . "$infile" >"$outfile" 2>/dev/null || echo "[]" >"$outfile"
+		jq -cs '.' "$infile" >"$outfile" 2>/dev/null \
+			|| jq -Rn '[inputs | fromjson? | select(type == "object")]' "$infile" >"$outfile" 2>/dev/null \
+			|| echo "[]" >"$outfile"
 	else
 		echo "[]" >"$outfile"
 	fi
 }
 
-# multi-signal API identification (domain keyword + content-type + swagger/graphql response)
+# multi-signal API identification (domain keyword + content-type)
 run_api_identification() {
-	info "[19/22] Identifying API endpoints (multi-signal)..."
+	info "[26/31] Identifying API endpoints (multi-signal)..."
 	local api_file="$RUN_DIR/api_identification.json"
 	local api_jsonl="$RUN_DIR/api_identification.jsonl"
 	: >"$api_jsonl"
@@ -2090,14 +2619,6 @@ run_api_identification() {
 		echo "{}" >"$ct_map_file"
 	fi
 
-	# load swagger/graphql confirmed endpoints from exposed_files if available
-	local swagger_hosts_file
-	swagger_hosts_file=$(mktemp)
-	if [[ -s "$RUN_DIR/exposed_files.json" ]]; then
-		jq -r '.[] | select(.finding_type == "api_doc" or (.path | test("swagger|openapi|graphql"; "i"))) | .url | sub("^https?://"; "") | split("/")[0] | split(":")[0] | ascii_downcase' \
-			"$RUN_DIR/exposed_files.json" 2>/dev/null | sort -u >"$swagger_hosts_file" || true
-	fi
-
 	while read -r domain; do
 		local domain_key
 		domain_key=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
@@ -2117,16 +2638,9 @@ run_api_identification() {
 			confidence="High"
 		fi
 
-		# signal 3: swagger/openapi/graphql confirmed from exposed_files
-		if grep -q "^${domain_key}$" "$swagger_hosts_file" 2>/dev/null; then
-			signals+=("api-doc-found")
-			confidence="Confirmed"
-		fi
-
 		# determine api_endpoint status
 		local api_status="No"
 		[[ "${#signals[@]}" -ge 1 ]] && api_status="Yes"
-		[[ "$confidence" == "Confirmed" ]] && api_status="Yes"
 
 		local signals_json='[]'
 		(( ${#signals[@]} )) && signals_json=$(printf '%s\n' "${signals[@]}" | jq -R . 2>/dev/null | jq -s . 2>/dev/null || echo '[]')
@@ -2141,15 +2655,15 @@ run_api_identification() {
 	done <"$MASTER_SUBS"
 
 	combine_json "$api_jsonl" "$api_file"
-	rm -f "$api_jsonl" "$ct_map_file" "$swagger_hosts_file"
+	rm -f "$api_jsonl" "$ct_map_file"
 	quality_check_json_array "API detection" "$api_file"
 }
 
 # looking for intranet-ish names so the team sees potential internal portals
 run_colleague_identification() {
-info "[20/22] Identifying colleague-facing endpoints..."
+info "[27/31] Identifying colleague-facing endpoints..."
 	local colleague_file="$RUN_DIR/colleague_identification.json"
-	local keywords_file="colleague_keywords.txt"
+	local keywords_file="$SCRIPT_DIR/assets/lists/colleague-keywords.txt"
 
 	if [ ! -f "$keywords_file" ]; then
 		warning "Keywords file '$keywords_file' not found. Skipping."
@@ -2207,7 +2721,7 @@ info "[20/22] Identifying colleague-facing endpoints..."
 
 # stitching DNS, HTTP, and TLS bits into a single cloud story
 run_cloud_infrastructure_inventory() {
-	info "[21/22] Building cloud infrastructure inventory..."
+	info "[30/31] Building cloud infrastructure inventory..."
 	local output_file="$RUN_DIR/cloud_infrastructure.json"
 	local dns_map_file httpx_map_file tls_map_file
 	dns_map_file=$(mktemp)
@@ -2603,9 +3117,9 @@ run_cloud_infrastructure_inventory() {
 
 # --- NEW MODULE: Subdomain Takeover Detection ---
 run_subdomain_takeover() {
-	info "[7/22] Detecting dangling DNS / subdomain takeover candidates..."
+	info "[11/31] Detecting dangling DNS / subdomain takeover candidates..."
 	local output_file="$RUN_DIR/takeover.json"
-	local fingerprints_file="assets/takeover_fingerprints.json"
+	local fingerprints_file="$SCRIPT_DIR/assets/lists/takeover_fingerprints.json"
 
 	if [[ ! -s "$RUN_DIR/dnsx.json" ]]; then
 		echo "[]" >"$output_file"
@@ -2708,81 +3222,9 @@ run_subdomain_takeover() {
 	quality_check_json_array "Takeover detection" "$output_file"
 }
 
-# --- NEW MODULE: Exposed Sensitive Files Detection ---
-run_exposed_files() {
-	info "[11/22] Probing for exposed sensitive files..."
-	local output_file="$RUN_DIR/exposed_files.json"
-	local paths_file="assets/exposed_paths.txt"
-	local jsonl_tmp="$RUN_DIR/exposed_files.jsonl"
-	: >"$jsonl_tmp"
-
-	if [[ ! -s "$RUN_DIR/httpx.json" ]]; then
-		echo "[]" >"$output_file"
-		quality_check_json_array "Exposed files" "$output_file"
-		return
-	fi
-	if [[ ! -f "$paths_file" ]]; then
-		warning "Exposed paths file not found at $paths_file; skipping."
-		echo "[]" >"$output_file"
-		return
-	fi
-
-	local -a paths=()
-	while IFS= read -r p; do
-		p=$(echo "$p" | tr -d '\r' | xargs)
-		[[ -z "$p" || "$p" == \#* ]] && continue
-		paths+=("$p")
-	done <"$paths_file"
-
-	local live_hosts
-	live_hosts=$(jq -r '(if type=="array" then .[] else . end) | .url // ""' "$RUN_DIR/httpx.json" 2>/dev/null | grep -v '^$' | sort -u || true)
-
-	while IFS= read -r base_url; do
-		[[ -z "$base_url" ]] && continue
-		# strip path from base URL
-		local base
-		base=$(echo "$base_url" | sed 's|/[^/]*$||; s|/$||')
-		[[ -z "$base" ]] && base="$base_url"
-
-		for path in "${paths[@]}"; do
-			local target="${base}${path}"
-			local finding_type="sensitive_file"
-			case "$path" in
-				*swagger*|*openapi*|*api-docs*|*graphql*) finding_type="api_doc" ;;
-				*.git*) finding_type="git_exposure" ;;
-				*.env*) finding_type="env_file" ;;
-				*config*|*database*|*credentials*|*secrets*) finding_type="config_file" ;;
-				*backup*|*.sql|*.zip|*.tar*) finding_type="backup_file" ;;
-				*phpinfo*|*server-status*|*server-info*) finding_type="debug_endpoint" ;;
-				*wp-config*|*wp-admin*|*wp-login*) finding_type="cms_admin" ;;
-			esac
-
-			local resp_code content_type content_len
-			resp_code=$(curl -sI --max-time 8 --connect-timeout 4 -o /dev/null -w "%{http_code}" "$target" 2>/dev/null || echo "000")
-			if [[ "$resp_code" == "200" ]]; then
-				content_type=$(curl -sI --max-time 5 --connect-timeout 4 -w "%{content_type}" -o /dev/null "$target" 2>/dev/null | tr -d '\r' || true)
-				content_len=$(curl -sI --max-time 5 --connect-timeout 4 "$target" 2>/dev/null | grep -i 'Content-Length:' | cut -d' ' -f2 | tr -d '\r' || echo "0")
-				jq -n \
-					--arg url "$target" \
-					--arg path "$path" \
-					--arg status_code "$resp_code" \
-					--arg content_type "${content_type:-unknown}" \
-					--arg content_length "${content_len:-0}" \
-					--arg finding_type "$finding_type" \
-					'{ url: $url, path: $path, status_code: $status_code, content_type: $content_type, content_length: $content_length, finding_type: $finding_type }' \
-					>>"$jsonl_tmp" 2>/dev/null || true
-			fi
-		done
-	done <<<"$live_hosts"
-
-	combine_json "$jsonl_tmp" "$output_file"
-	rm -f "$jsonl_tmp"
-	quality_check_json_array "Exposed files" "$output_file"
-}
-
 # --- NEW MODULE: JavaScript File Analysis ---
 run_js_analysis() {
-	info "[13/22] Analyzing JavaScript files for endpoints and secrets..."
+	info "[19/31] Analyzing JavaScript files for endpoints and secrets..."
 	local output_file="$RUN_DIR/js_analysis.json"
 	local jsonl_tmp="$RUN_DIR/js_analysis.jsonl"
 	: >"$jsonl_tmp"
@@ -2873,7 +3315,7 @@ run_js_analysis() {
 
 # --- NEW MODULE: Cloud Storage Public Exposure Check ---
 run_cloud_storage_check() {
-	info "[21/22] Checking cloud storage buckets for public exposure..."
+	info "[30/31] Checking cloud storage buckets and enhanced permutations..."
 	local output_file="$RUN_DIR/cloud_storage.json"
 	local jsonl_tmp="$RUN_DIR/cloud_storage.jsonl"
 	: >"$jsonl_tmp"
@@ -2946,65 +3388,9 @@ run_cloud_storage_check() {
 }
 
 # --- NEW MODULE: Change Detection vs. previous run ---
-generate_change_report() {
-	local output_file="$RUN_DIR/changes.json"
-	local project_dir
-	project_dir=$(dirname "$RUN_DIR")
-
-	# find the previous run directory (immediately before current)
-	local prev_run=""
-	local current_run_name
-	current_run_name=$(basename "$RUN_DIR")
-	while IFS= read -r run_dir; do
-		local run_name
-		run_name=$(basename "$run_dir")
-		[[ "$run_name" == "$current_run_name" ]] && break
-		prev_run="$run_dir"
-	done < <(find "$project_dir" -maxdepth 1 -name 'run-*' -type d 2>/dev/null | sort)
-
-	if [[ -z "$prev_run" ]]; then
-		echo '{"previous_run": null, "new_hosts": [], "removed_hosts": [], "new_findings": [], "removed_findings": []}' >"$output_file"
-		return
-	fi
-
-	local prev_run_name
-	prev_run_name=$(basename "$prev_run")
-
-	# compare hosts (from httpx)
-	local current_hosts prev_hosts
-	current_hosts=$(jq -r '(if type=="array" then .[] else . end) | .url // ""' "$RUN_DIR/httpx.json" 2>/dev/null | grep -v '^$' | sort -u || true)
-	prev_hosts=$(jq -r '(if type=="array" then .[] else . end) | .url // ""' "$prev_run/httpx.json" 2>/dev/null | grep -v '^$' | sort -u || true)
-
-	local new_hosts removed_hosts
-	new_hosts=$(comm -23 <(echo "$current_hosts") <(echo "$prev_hosts") | jq -Rc '[inputs]' 2>/dev/null || echo '[]')
-	removed_hosts=$(comm -13 <(echo "$current_hosts") <(echo "$prev_hosts") | jq -Rc '[inputs]' 2>/dev/null || echo '[]')
-
-	# compare findings (from takeover + exposed_files)
-	local current_findings prev_findings new_findings removed_findings
-	current_findings=$(jq -r '.[].domain // .[].url // ""' "$RUN_DIR/takeover.json" "$RUN_DIR/exposed_files.json" 2>/dev/null | sort -u || true)
-	prev_findings=$(jq -r '.[].domain // .[].url // ""' "$prev_run/takeover.json" "$prev_run/exposed_files.json" 2>/dev/null | sort -u || true)
-
-	new_findings=$(comm -23 <(echo "$current_findings") <(echo "$prev_findings") | jq -Rc '[inputs]' 2>/dev/null || echo '[]')
-	removed_findings=$(comm -13 <(echo "$current_findings") <(echo "$prev_findings") | jq -Rc '[inputs]' 2>/dev/null || echo '[]')
-
-	jq -n \
-		--arg prev_run "$prev_run_name" \
-		--argjson new_hosts "$new_hosts" \
-		--argjson removed_hosts "$removed_hosts" \
-		--argjson new_findings "$new_findings" \
-		--argjson removed_findings "$removed_findings" \
-		'{
-			previous_run: $prev_run,
-			new_hosts: $new_hosts,
-			removed_hosts: $removed_hosts,
-			new_findings: $new_findings,
-			removed_findings: $removed_findings
-		}' >"$output_file" 2>/dev/null || echo '{}' >"$output_file"
-}
-
 # glue the UI shell with the datasets and drop the finished HTML
 build_html_report() {
-info "[22/22] Building HTML report + change detection..."
+info "[32/32] Building HTML report..."
 	combine_json "$RUN_DIR/dnsx.json" "$RUN_DIR/dnsx_merged.json"
 	combine_json "$RUN_DIR/naabu.json" "$RUN_DIR/naabu_merged.json"
 	combine_json "$RUN_DIR/httpx.json" "$RUN_DIR/httpx_merged.json"
@@ -3054,29 +3440,68 @@ info "[22/22] Building HTML report + change detection..."
 	cat $RUN_DIR/katana_links.json | tr -d "\n" >>report.html
 	echo "" >>report.html
 	echo -n "const takeoverData = " >>report.html
-	cat ${RUN_DIR}/takeover.json 2>/dev/null | tr -d "\n" >>report.html || echo "[]" >>report.html
+	if [ -s "${RUN_DIR}/takeover.json" ] && jq -e . "${RUN_DIR}/takeover.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/takeover.json"; else echo "[]"; fi | tr -d "\n" >>report.html
 	echo "" >>report.html
 	echo -n "const exposedFilesData = " >>report.html
-	cat ${RUN_DIR}/exposed_files.json 2>/dev/null | tr -d "\n" >>report.html || echo "[]" >>report.html
+	echo "[]" | tr -d "\n" >>report.html
 	echo "" >>report.html
 	echo -n "const jsAnalysisData = " >>report.html
-	cat ${RUN_DIR}/js_analysis.json 2>/dev/null | tr -d "\n" >>report.html || echo "[]" >>report.html
+	if [ -s "${RUN_DIR}/js_analysis.json" ] && jq -e . "${RUN_DIR}/js_analysis.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/js_analysis.json"; else echo "[]"; fi | tr -d "\n" >>report.html
 	echo "" >>report.html
 	echo -n "const cloudStorageData = " >>report.html
-	cat ${RUN_DIR}/cloud_storage.json 2>/dev/null | tr -d "\n" >>report.html || echo "[]" >>report.html
+	if [ -s "${RUN_DIR}/cloud_storage.json" ] && jq -e . "${RUN_DIR}/cloud_storage.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/cloud_storage.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const seedExpansionData = " >>report.html
+	if [ -s "${RUN_DIR}/seed_expansion.json" ] && jq -e . "${RUN_DIR}/seed_expansion.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/seed_expansion.json"; else echo "{}"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const brandCandidates = " >>report.html
+	if [ -s "${RUN_DIR}/brand_candidates.json" ] && jq -e . "${RUN_DIR}/brand_candidates.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/brand_candidates.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const githubSurfaceData = " >>report.html
+	if [ -s "${RUN_DIR}/github_surface.json" ] && jq -e . "${RUN_DIR}/github_surface.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/github_surface.json"; else echo "{}"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const faviconClusters = " >>report.html
+	if [ -s "${RUN_DIR}/favicon_clusters.json" ] && jq -e . "${RUN_DIR}/favicon_clusters.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/favicon_clusters.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const saasTenants = " >>report.html
+	if [ -s "${RUN_DIR}/saas_tenants.json" ] && jq -e . "${RUN_DIR}/saas_tenants.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/saas_tenants.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const thirdPartyDeps = " >>report.html
+	if [ -s "${RUN_DIR}/third_party_intel.json" ] && jq -e . "${RUN_DIR}/third_party_intel.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/third_party_intel.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const thirdPartyIntelData = " >>report.html
+	if [ -s "${RUN_DIR}/third_party_intel.json" ] && jq -e . "${RUN_DIR}/third_party_intel.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/third_party_intel.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const shodanBanners = " >>report.html
+	if [ -s "${RUN_DIR}/shodan_banners.json" ] && jq -e . "${RUN_DIR}/shodan_banners.json" >/dev/null 2>&1; then jq -c . "${RUN_DIR}/shodan_banners.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const ipv6Data = " >>report.html
+	if [ -s "${RUN_DIR}/dnsx_ipv6.json" ] && jq -e . "${RUN_DIR}/dnsx_ipv6.json" >/dev/null 2>&1; then jq -sc '.' "${RUN_DIR}/dnsx_ipv6.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const cspSubdomains = " >>report.html
+	if [ -s "${RUN_DIR}/csp_subdomains.json" ] && jq -e . "${RUN_DIR}/csp_subdomains.json" >/dev/null 2>&1; then jq -c '.' "${RUN_DIR}/csp_subdomains.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const hostClassificationData = " >>report.html
+	if [ -s "${RUN_DIR}/host_classification.json" ] && jq -e . "${RUN_DIR}/host_classification.json" >/dev/null 2>&1; then jq -c '.' "${RUN_DIR}/host_classification.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	# ── Scoring wordlists (managed in assets/lists/) ──────────────────
+	echo -n "const scoringSubdomainKeywords = " >>report.html
+	if [ -s "assets/lists/scoring-subdomain-keywords.json" ]; then jq -c . "assets/lists/scoring-subdomain-keywords.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const scoringFinancialPaths = " >>report.html
+	if [ -s "assets/lists/scoring-financial-paths.json" ]; then jq -c . "assets/lists/scoring-financial-paths.json"; else echo "[]"; fi | tr -d "\n" >>report.html
+	echo "" >>report.html
+	echo -n "const scoringThirdPartyVendors = " >>report.html
+	if [ -s "assets/lists/scoring-thirdparty-vendors.json" ]; then jq -c . "assets/lists/scoring-thirdparty-vendors.json"; else echo '{"payment_processors":[],"identity_providers":[],"high_risk_categories":[]}'; fi | tr -d "\n" >>report.html
 	echo "" >>report.html
 	cat footer.html >>report.html
-	sed -i.bak '/%%SCREENSHOT_MAP%%/{
-    r '"$RUN_DIR/screenshot_map.json"'
-    d
-  }' report.html && rm -f report.html.bak
 
 	mkdir -p "$RUN_DIR/assets"
 	cp assets/report.css "$RUN_DIR/assets/report.css"
 
 	mv report.html $RUN_DIR/
 
-	info "[22/22] Report generated at $RUN_DIR/report.html"
+	info "[32/32] Report generated at $RUN_DIR/report.html"
 }
 
 # final sandbox of data checks so we ship trustworthy artifacts
@@ -3094,12 +3519,768 @@ quality_post_run_checks() {
 	quality_check_json_array "Port summary" "$RUN_DIR/portscan.json"
 	quality_check_json_array "IP enrichment" "$RUN_DIR/ip_enrichment.json"
 	quality_check_json_array "Takeover detection" "$RUN_DIR/takeover.json"
-	quality_check_json_array "Exposed files" "$RUN_DIR/exposed_files.json"
 	quality_check_json_array "JS analysis" "$RUN_DIR/js_analysis.json"
 	quality_check_json_array "Cloud storage" "$RUN_DIR/cloud_storage.json"
 	quality_check_hosts_against_master "HTTP inventory" "$RUN_DIR/httpx.json" '(if type=="array" then .[] else . end) | (.input // .url // .host // "") | sub("^https?://"; "") | split("/")[0] | split(":")[0] | ascii_downcase'
 	quality_check_hosts_against_master "TLS inventory" "$RUN_DIR/tls_inventory.json" '(if type=="array" then .[] else . end) | (.Host // .host // .Domain // .domain // "") | ascii_downcase'
 	quality_check_hosts_against_master "Cloud inventory" "$RUN_DIR/cloud_infrastructure.json" '(if type=="array" then .[] else . end) | (.Asset // "") | ascii_downcase'
+}
+
+# ─── NEW MODULE: Seed Expansion ─────────────────────────────────────────────
+# Uses free sources (crt.sh org filter, ARIN RDAP, TLD sweep) + optional WhoisXML
+run_seed_expansion() {
+	info "[2/31] Running seed expansion (crt.sh org · ASN CIDR · TLD sweep)..."
+	local output_file="$RUN_DIR/seed_expansion.json"
+	local company="${FROGY_COMPANY_NAME:-}"
+	local cidr_blocks=() tld_candidates=() org_subdomains=()
+
+	# crt.sh O= filter — extract subdomains issued to org name
+	if [[ -n "$company" ]]; then
+		local crt_org_url
+		crt_org_url="https://crt.sh/?O=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$company" 2>/dev/null)&output=json"
+		local crt_org_raw
+		crt_org_raw=$(curl -sf --max-time 20 "$crt_org_url" 2>/dev/null || true)
+		if [[ -n "$crt_org_raw" ]]; then
+			while IFS= read -r sub; do
+				[[ -z "$sub" || "$sub" == \** ]] && continue
+				org_subdomains+=("$sub")
+				echo "$sub" >>"$ALL_TEMP"
+			done < <(echo "$crt_org_raw" | jq -r '.[].name_value' 2>/dev/null | sed 's/\*\.//g' | grep -v '^$' | sort -u || true)
+		fi
+	fi
+
+	# BGP: resolve seed domain IPs → ASN via Team Cymru → announced prefixes via RIPE STAT
+	# RIPE STAT covers all RIRs (ARIN, RIPE, APNIC, LACNIC, AFRINIC) unlike ARIN-only RDAP.
+	# Known CDN ASNs are skipped since they don't represent the company's own network.
+	local -a cdn_asns=("13335" "209242" "20940" "21342" "54113" "16509" "15169" "8075" "14618" "2906" "16625")
+	local -A seen_asns=()
+	while IFS= read -r domain; do
+		local ips
+		ips=$(dig +short A "$domain" 2>/dev/null | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -5 || true)
+		while IFS= read -r ip; do
+			[[ -z "$ip" ]] && continue
+			local asn_info asn asn_name
+			asn_info=$(whois -h whois.cymru.com " -v $ip" 2>/dev/null \
+				| awk -F'|' 'NR>1 && $1 ~ /[0-9]/ {
+					gsub(/^[ \t]+|[ \t]+$/,"",$1);
+					gsub(/^[ \t]+|[ \t]+$/,"",$3);
+					print $1 "|" $3; exit }' || true)
+			[[ -z "$asn_info" ]] && continue
+			asn=$(echo "$asn_info" | cut -d'|' -f1 | sed 's/^AS//')
+			asn_name=$(echo "$asn_info" | cut -d'|' -f2)
+			# Skip CDN/hosting provider ASNs
+			local skip_cdn=false
+			for cdn_asn in "${cdn_asns[@]}"; do [[ "$asn" == "$cdn_asn" ]] && skip_cdn=true && break; done
+			"$skip_cdn" && continue
+			# Skip already-processed ASNs to avoid duplicate prefix lookups
+			[[ -n "${seen_asns[$asn]+_}" ]] && continue
+			seen_asns["$asn"]=1
+			# RIPE STAT: global routing data (works for any RIR region)
+			local stat_raw
+			stat_raw=$(curl -sf --max-time 15 \
+				"https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS${asn}" \
+				2>/dev/null || true)
+			if [[ -n "$stat_raw" ]]; then
+				while IFS= read -r cidr; do
+					[[ -z "$cidr" ]] && continue
+					local cidr_obj
+					cidr_obj=$(jq -n \
+						--arg asn "AS${asn}" \
+						--arg asn_name "$asn_name" \
+						--arg cidr "$cidr" \
+						--arg source_domain "$domain" \
+						'{"asn":$asn,"asn_name":$asn_name,"cidr":$cidr,"source_domain":$source_domain}' \
+						2>/dev/null) || continue
+					cidr_blocks+=("$cidr_obj")
+				done < <(echo "$stat_raw" | jq -r '.data.prefixes[]?.prefix // empty' 2>/dev/null | head -30 || true)
+			fi
+		done <<<"$ips"
+	done <"$PRIMARY_DOMAINS_FILE"
+
+	# TLD variation sweep — attempt {slug}.{tld} for common TLDs
+	local first_domain slug
+	first_domain=$(head -1 "$PRIMARY_DOMAINS_FILE" | tr -d '\r' | xargs)
+	slug=$(echo "$first_domain" | sed 's/\..*//')
+	local -a tlds=("io" "co" "net" "org" "app" "dev" "ai" "cloud" "tech" "digital")
+	local -a variation_targets=()
+	for tld in "${tlds[@]}"; do
+		variation_targets+=("${slug}.${tld}")
+	done
+	local var_tmp
+	var_tmp=$(mktemp)
+	printf '%s\n' "${variation_targets[@]}" >"$var_tmp"
+	local resolved_vars
+	resolved_vars=$(dnsx -silent -l "$var_tmp" 2>/dev/null | grep -v '^$' || true)
+	while IFS= read -r v; do
+		[[ -z "$v" ]] && continue
+		tld_candidates+=("$v")
+	done <<<"$resolved_vars"
+	rm -f "$var_tmp"
+
+	# WhoisXML pivot (optional)
+	local whois_candidates=()
+	if [[ -n "${WHOISXML_API_KEY:-}" ]]; then
+		local wx_raw
+		wx_raw=$(curl -sf --max-time 15 \
+			"https://www.whoisxmlapi.com/whoisserver/WhoisService?apiKey=${WHOISXML_API_KEY}&domainName=${first_domain}&outputFormat=JSON" \
+			2>/dev/null || true)
+		if [[ -n "$wx_raw" ]]; then
+			local reg_email
+			reg_email=$(echo "$wx_raw" | jq -r '.WhoisRecord.registrant.email // ""' 2>/dev/null || true)
+			if [[ -n "$reg_email" && "$reg_email" != "null" ]]; then
+				local wx_rev
+				wx_rev=$(curl -sf --max-time 15 \
+					"https://reverse-whois.whoisxmlapi.com/api/v2?apiKey=${WHOISXML_API_KEY}&searchType=current&mode=purchase&punycode=true&basicSearchTerms.include=${reg_email}" \
+					2>/dev/null || true)
+				while IFS= read -r dom; do
+					[[ -z "$dom" ]] && continue
+					whois_candidates+=("$dom")
+				done < <(echo "$wx_rev" | jq -r '.domainsList[]' 2>/dev/null | head -50 || true)
+			fi
+		fi
+	fi
+
+	# Write output JSON
+	local cidr_json tld_json org_json whois_json
+	cidr_json=$(printf '%s\n' "${cidr_blocks[@]+"${cidr_blocks[@]}"}" | jq -sc '.' 2>/dev/null || echo '[]')
+	tld_json=$(printf '%s\n' "${tld_candidates[@]+"${tld_candidates[@]}"}" | jq -Rc '[inputs | select(length>0)]' 2>/dev/null || echo '[]')
+	org_json=$(printf '%s\n' "${org_subdomains[@]+"${org_subdomains[@]}"}" | jq -Rc '[inputs | select(length>0)]' 2>/dev/null || echo '[]')
+	whois_json=$(printf '%s\n' "${whois_candidates[@]+"${whois_candidates[@]}"}" | jq -Rc '[inputs | select(length>0)]' 2>/dev/null || echo '[]')
+
+	jq -n \
+		--argjson cidr "$cidr_json" \
+		--argjson tld "$tld_json" \
+		--argjson org "$org_json" \
+		--argjson whois "$whois_json" \
+		'{ cidr_blocks: $cidr, tld_candidates: $tld, org_subdomains: $org, whois_candidates: $whois }' \
+		>"$output_file" 2>/dev/null || echo '{}' >"$output_file"
+}
+
+# ─── NEW MODULE: Brand Discovery ─────────────────────────────────────────────
+run_brand_discovery() {
+	info "[3/31] Running brand / subsidiary discovery (EDGAR + domain variants)..."
+	local output_file="$RUN_DIR/brand_candidates.json"
+	local jsonl_tmp="$RUN_DIR/brand_candidates.jsonl"
+	: >"$jsonl_tmp"
+
+	local first_domain slug company="${FROGY_COMPANY_NAME:-}"
+	first_domain=$(head -1 "$PRIMARY_DOMAINS_FILE" | tr -d '\r' | xargs)
+	slug=$(echo "$first_domain" | sed 's/\..*//')
+
+	# Brand variation domains
+	local -a brand_variants=()
+	local -a var_tlds=("com" "io" "co" "net" "org" "app")
+	local -a prefixes=("get" "try" "use" "my" "go" "" )
+	local -a suffixes=("" "hq" "app" "labs" "corp" "inc")
+	for pfx in "${prefixes[@]}"; do
+		for sfx in "${suffixes[@]}"; do
+			for tld in "${var_tlds[@]}"; do
+				local candidate="${pfx}${slug}${sfx}.${tld}"
+				brand_variants+=("$candidate")
+			done
+		done
+	done
+
+	local var_tmp
+	var_tmp=$(mktemp)
+	printf '%s\n' "${brand_variants[@]}" | sort -u >"$var_tmp"
+	local resolved
+	resolved=$(dnsx -silent -l "$var_tmp" 2>/dev/null | grep -v '^$' || true)
+	while IFS= read -r host; do
+		[[ -z "$host" ]] && continue
+		jq -n --arg host "$host" --arg source "brand-variation" --arg confidence "candidate" \
+			'{ host: $host, source: $source, confidence: $confidence }' \
+			>>"$jsonl_tmp" 2>/dev/null || true
+	done <<<"$resolved"
+	rm -f "$var_tmp"
+
+	# SEC EDGAR lookup (free)
+	if [[ -n "$company" ]]; then
+		local edgar_name
+		edgar_name=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$company" 2>/dev/null || echo "$company")
+		local edgar_raw
+		edgar_raw=$(curl -sf --max-time 15 \
+			"https://efts.sec.gov/LATEST/search-index?q=%22${edgar_name}%22&dateRange=custom&startdt=2020-01-01&forms=10-K" \
+			2>/dev/null || true)
+		if [[ -z "$edgar_raw" ]]; then
+			edgar_raw=$(curl -sf --max-time 15 \
+				"https://www.sec.gov/cgi-bin/browse-edgar?company=${edgar_name}&action=getcompany&output=atom" \
+				2>/dev/null || true)
+		fi
+		if [[ -n "$edgar_raw" ]]; then
+			local cik
+			cik=$(echo "$edgar_raw" | grep -oE 'CIK=[0-9]+' | head -1 | cut -d= -f2 || true)
+			if [[ -n "$cik" ]]; then
+				local sub_raw
+				sub_raw=$(curl -sf --max-time 15 \
+					"https://data.sec.gov/submissions/CIK$(printf '%010d' "$cik").json" \
+					2>/dev/null || true)
+				if [[ -n "$sub_raw" ]]; then
+					while IFS= read -r former; do
+						[[ -z "$former" ]] && continue
+						jq -n --arg host "$former" --arg source "edgar-former-name" --arg confidence "candidate" \
+							'{ host: $host, source: $source, confidence: $confidence }' \
+							>>"$jsonl_tmp" 2>/dev/null || true
+					done < <(echo "$sub_raw" | jq -r '.formerNames[]?.name // empty' 2>/dev/null | head -20 || true)
+				fi
+			fi
+		fi
+	fi
+
+	combine_json "$jsonl_tmp" "$output_file"
+	rm -f "$jsonl_tmp"
+}
+
+# ─── NEW MODULE: Enhanced Passive Sources ────────────────────────────────────
+run_enhanced_passive() {
+	info "[8/31] Running enhanced passive recon (Wayback · RapidDNS · OTX · VT)..."
+	# Wayback CDX (free)
+	while IFS= read -r domain; do
+		local wb_raw
+		wb_raw=$(curl -sf --max-time 20 \
+			"https://web.archive.org/cdx/search/cdx?url=*.${domain}&output=text&fl=original&collapse=urlkey&limit=5000" \
+			2>/dev/null || true)
+		if [[ -n "$wb_raw" ]]; then
+			echo "$wb_raw" | grep -oE '[a-zA-Z0-9._-]+\.'"$domain" | sort -u >>"$ALL_TEMP" || true
+		fi
+		# RapidDNS (free)
+		local rdns_raw
+		rdns_raw=$(curl -sf --max-time 15 \
+			"https://rapiddns.io/subdomain/${domain}?full=1&down=1" \
+			2>/dev/null || true)
+		if [[ -n "$rdns_raw" ]]; then
+			echo "$rdns_raw" | grep -oE '[a-zA-Z0-9._-]+\.'"$domain" | sort -u >>"$ALL_TEMP" || true
+		fi
+		# OTX AlienVault (optional)
+		if [[ -n "${OTX_API_KEY:-}" ]]; then
+			local otx_resp
+			otx_resp=$(curl -sf --max-time 15 \
+				-H "X-OTX-API-KEY: ${OTX_API_KEY}" \
+				"https://otx.alienvault.com/api/v1/indicators/domain/${domain}/passive_dns" \
+				2>/dev/null || true)
+			local otx_code="${otx_resp:0:3}"
+			if [[ "$otx_code" == "429" ]]; then
+				log_warn "⚠ OTX rate limit hit — skipping remaining OTX queries"
+				break
+			fi
+			if [[ -n "$otx_resp" ]]; then
+				echo "$otx_resp" | jq -r '.passive_dns[]?.hostname // empty' 2>/dev/null | grep -iE "\.${domain}$" | sort -u >>"$ALL_TEMP" || true
+			fi
+		fi
+		# VirusTotal (optional)
+		if [[ -n "${VIRUSTOTAL_API_KEY:-}" ]]; then
+			local vt_resp
+			vt_resp=$(curl -sf --max-time 15 \
+				"https://www.virustotal.com/vtapi/v2/domain/report?apikey=${VIRUSTOTAL_API_KEY}&domain=${domain}" \
+				2>/dev/null || true)
+			if [[ -n "$vt_resp" ]]; then
+				echo "$vt_resp" | jq -r '.subdomains[]? // empty' 2>/dev/null | sort -u >>"$ALL_TEMP" || true
+			fi
+		fi
+	done <"$PRIMARY_DOMAINS_FILE"
+}
+
+# ─── NEW MODULE: IPv6 Discovery ──────────────────────────────────────────────
+run_ipv6_discovery() {
+	info "[14/31] Collecting AAAA records (IPv6 discovery)..."
+	local ipv6_file="$RUN_DIR/dnsx_ipv6.json"
+	if [[ ! -s "$MASTER_SUBS" ]]; then
+		echo "[]" >"$ipv6_file"
+		return
+	fi
+	dnsx -silent -l "$MASTER_SUBS" -aaaa -json -o "$ipv6_file" >/dev/null 2>/dev/null || true
+	if [[ ! -f "$ipv6_file" ]]; then
+		echo "[]" >"$ipv6_file"
+	fi
+	# Append any AAAA IPs to the naabu target list so later HTTP probing covers them
+	local final_urls_ports="$RUN_DIR/final_urls_and_ports.txt"
+	if [[ -s "$ipv6_file" ]]; then
+		jq -r 'select(type=="object") | .aaaa[]?' "$ipv6_file" 2>/dev/null | grep -v '^$' | while IFS= read -r ipv6; do
+			echo "[${ipv6}]:80" >>"$final_urls_ports"
+			echo "[${ipv6}]:443" >>"$final_urls_ports"
+		done || true
+	fi
+}
+
+# ─── NEW MODULE: Shodan Banner Enrichment ────────────────────────────────────
+run_shodan_banner_enrichment() {
+	info "[16/31] Shodan banner enrichment (API-optional)..."
+	local output_file="$RUN_DIR/shodan_banners.json"
+	if [[ -z "${SHODAN_API_KEY:-}" ]]; then
+		log_warn "⚠ Shodan API key not configured — banner enrichment skipped"
+		echo "[]" >"$output_file"
+		return
+	fi
+	local jsonl_tmp="$RUN_DIR/shodan_banners.jsonl"
+	: >"$jsonl_tmp"
+
+	# Collect unique IPs from port scan
+	local -a ips=()
+	if [[ -s "$RUN_DIR/portscan.json" ]]; then
+		while IFS= read -r ip; do
+			[[ -z "$ip" ]] && continue
+			ips+=("$ip")
+		done < <(jq -r '.[].ip' "$RUN_DIR/portscan.json" 2>/dev/null | sort -u | head -50 || true)
+	fi
+
+	for ip in "${ips[@]+"${ips[@]}"}"; do
+		local resp
+		resp=$(curl -sf --max-time 10 \
+			"https://api.shodan.io/shodan/host/${ip}?key=${SHODAN_API_KEY}" \
+			2>/dev/null || true)
+		if echo "$resp" | grep -q '"error"'; then
+			log_warn "⚠ Shodan error for ${ip} — skipping"
+			continue
+		fi
+		if [[ -n "$resp" ]]; then
+			echo "$resp" | jq \
+				--arg ip "$ip" \
+				'{
+					ip: $ip,
+					ports: [(.data // [])[] | { port: .port, protocol: (.transport // "tcp"), service: (.product // ""), version: (.version // ""), banner: ((.banner // "")[0:200]) }]
+				}' 2>/dev/null >>"$jsonl_tmp" || true
+		fi
+		sleep 1  # respect free tier rate limit
+	done
+
+	combine_json "$jsonl_tmp" "$output_file"
+	rm -f "$jsonl_tmp"
+}
+
+# ─── NEW MODULE: SaaS Tenant Detection ──────────────────────────────────────
+run_saas_detection() {
+	info "[24/31] Detecting SaaS tenant footprint..."
+	local output_file="$RUN_DIR/saas_tenants.json"
+	local jsonl_tmp="$RUN_DIR/saas_tenants.jsonl"
+	: >"$jsonl_tmp"
+
+	local first_domain slug
+	first_domain=$(head -1 "$PRIMARY_DOMAINS_FILE" | tr -d '\r' | xargs)
+	slug=$(echo "$first_domain" | sed 's/\..*//')
+
+	_probe_saas() {
+		local url="$1" label="$2"
+		local code
+		# curl always writes http_code via -w even on failure (exit!=0); don't || echo "000" or it doubles
+		code=$(curl -so /dev/null --max-time 10 --connect-timeout 5 -w "%{http_code}" "$url" 2>/dev/null)
+		[[ -z "$code" ]] && code="000"
+		if [[ "$code" != "404" && "$code" != "410" && "$code" != "000" && "$code" != "400" ]]; then
+			jq -n --arg service "$label" --arg url "$url" --arg status_code "$code" \
+				'{ service: $service, url: $url, status_code: $status_code, detected: true }' \
+				>>"$jsonl_tmp" 2>/dev/null || true
+		fi
+	}
+
+	_probe_saas "https://${slug}.slack.com"              "Slack"
+	_probe_saas "https://${slug}.atlassian.net"          "Atlassian"
+	_probe_saas "https://${slug}.zendesk.com"            "Zendesk"
+	_probe_saas "https://${slug}.my.salesforce.com"      "Salesforce"
+	_probe_saas "https://${slug}.gitlab.io"              "GitLab Pages"
+	_probe_saas "https://${slug}.github.io"              "GitHub Pages"
+	_probe_saas "https://${slug}.freshdesk.com"          "Freshdesk"
+	_probe_saas "https://${slug}.intercom.io"            "Intercom"
+	_probe_saas "https://${slug}.hubspot.com"            "HubSpot"
+	_probe_saas "https://${slug}.monday.com"             "Monday.com"
+	_probe_saas "https://${slug}.notion.site"            "Notion"
+	_probe_saas "https://${slug}.sharepoint.com"         "SharePoint"
+
+	# HubSpot: detect via MX record
+	if dig +short MX "$first_domain" 2>/dev/null | grep -qi "hubspot"; then
+		jq -n --arg service "HubSpot (MX)" --arg url "https://www.hubspot.com" --arg status_code "mx" \
+			'{ service: $service, url: $url, status_code: $status_code, detected: true }' \
+			>>"$jsonl_tmp" 2>/dev/null || true
+	fi
+
+	combine_json "$jsonl_tmp" "$output_file"
+	rm -f "$jsonl_tmp"
+}
+
+# ─── MODULE: Third-Party Intelligence (multi-source, 100+ vendor patterns) ────
+# Aggregates third-party vendor signals from: CSP headers, Katana crawl links,
+# JS analysis, MX records, SPF includes, CNAME chains, and HTTP response headers.
+# A Python script handles classification against 100+ known vendor patterns.
+run_third_party_intel() {
+	info "[25/31] Analyzing third-party intelligence (multi-source, 100+ vendors)..."
+	local output_file="$RUN_DIR/third_party_intel.json"
+	local raw_tmp="$RUN_DIR/.tpi_raw.txt"
+	: >"$raw_tmp"
+
+	# Source 1: CSP headers from httpx.json (domain\tsource)
+	if [[ -s "$RUN_DIR/httpx.json" ]]; then
+		jq -r '
+			select(type=="object") |
+			(.headers // {}) | to_entries[] |
+			select(.key | ascii_downcase | contains("content-security-policy")) |
+			.value
+		' "$RUN_DIR/httpx.json" 2>/dev/null \
+		| grep -oE '[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' \
+		| grep -v '^[0-9.]*$' \
+		| sort -u | awk '{print $0 "\tcsp"}' >>"$raw_tmp" || true
+	fi
+
+	# Source 2: Katana crawl external links
+	if [[ -s "$RUN_DIR/katana_links.json" ]]; then
+		jq -r 'to_entries[] | .value[]' "$RUN_DIR/katana_links.json" 2>/dev/null \
+		| grep -oE 'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' \
+		| sed 's|https\?://||' | sort -u \
+		| awk '{print $0 "\tkatana"}' >>"$raw_tmp" || true
+	fi
+
+	# Source 3: JS analysis external URLs
+	if [[ -s "$RUN_DIR/js_analysis.json" ]]; then
+		jq -r '
+			select(type=="object") |
+			((.urls // []) + (.endpoints // []) + (.external_urls // [])) |
+			.[] | select(startswith("http")) |
+			ltrimstr("https://") | ltrimstr("http://") | split("/") | .[0]
+		' "$RUN_DIR/js_analysis.json" 2>/dev/null \
+		| grep -E '\.[a-zA-Z]{2,}$' | sort -u \
+		| awk '{print $0 "\tjs_analysis"}' >>"$raw_tmp" || true
+	fi
+
+	# Source 4: MX records → email provider fingerprinting
+	if [[ -s "$RUN_DIR/dnsx.json" ]]; then
+		jq -r '
+			select(type=="object") |
+			(.mx // [])[] | ascii_downcase |
+			split(" ") | last | rtrimstr(".")
+		' "$RUN_DIR/dnsx.json" 2>/dev/null \
+		| grep -E '\.[a-z]{2,}$' | sort -u \
+		| awk '{print $0 "\tmx_record"}' >>"$raw_tmp" || true
+
+		# Source 5: SPF includes → SaaS email vendors
+		jq -r '
+			select(type=="object") |
+			(.txt // [])[] | select(test("v=spf1")) |
+			split(" ") | .[] |
+			select(startswith("include:")) | ltrimstr("include:")
+		' "$RUN_DIR/dnsx.json" 2>/dev/null \
+		| sort -u | awk '{print $0 "\tspf_include"}' >>"$raw_tmp" || true
+
+		# Source 6: CNAME chains → service fingerprinting
+		jq -r '
+			select(type=="object") |
+			(.cname // [])[] | ascii_downcase | rtrimstr(".")
+		' "$RUN_DIR/dnsx.json" 2>/dev/null \
+		| grep -E '\.[a-z]{2,}$' | sort -u \
+		| awk '{print $0 "\tcname"}' >>"$raw_tmp" || true
+	fi
+
+	# Source 7: HTTP response headers (Set-Cookie domain, Via, X-Powered-By, Server)
+	if [[ -s "$RUN_DIR/httpx.json" ]]; then
+		jq -r '
+			select(type=="object") |
+			(.headers // {}) | to_entries[] |
+			select(.key | ascii_downcase | test("^(set-cookie|via|server|x-powered-by|x-cache|cdn-cache)")) |
+			.value
+		' "$RUN_DIR/httpx.json" 2>/dev/null \
+		| grep -oE '[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' \
+		| grep -v '^[0-9.]*$' | sort -u \
+		| awk '{print $0 "\tresponse_headers"}' >>"$raw_tmp" || true
+	fi
+
+	if [[ ! -s "$raw_tmp" ]]; then
+		echo "[]" >"$output_file"
+		rm -f "$raw_tmp"
+		return
+	fi
+
+	# Python-based vendor classification — 100+ patterns across 10 categories
+	local py_tmp
+	py_tmp=$(mktemp --suffix=.py)
+	# Write vendors file path as a Python variable so the quoted heredoc needs no changes
+	printf 'VENDORS_FILE = %s\n' "\"$SCRIPT_DIR/assets/lists/third-party-vendors.json\"" >"$py_tmp"
+	cat >>"$py_tmp" <<'PYEOF'
+import sys, json
+
+# Load vendor patterns from external file — edit assets/lists/third-party-vendors.json
+with open(VENDORS_FILE) as _vf:
+    VENDORS = [tuple(v) for v in json.load(_vf)]
+
+# (pattern_substring, category, risk, service_name) — kept as comment for reference
+# ("google-analytics.com","analytics","low","Google Analytics"),
+
+results = {}
+for line in sys.stdin:
+    parts = line.rstrip('\n').split('\t', 1)
+    domain = parts[0].strip().lower()
+    source = parts[1].strip() if len(parts) > 1 else 'unknown'
+    if not domain or '.' not in domain or len(domain) < 4 or len(domain) > 200:
+        continue
+    # Skip IP addresses
+    if all(c.isdigit() or c == '.' for c in domain):
+        continue
+    if domain not in results:
+        cat, risk, svc = 'other', 'low', ''
+        for pattern, c, r, n in VENDORS:
+            if pattern in domain:
+                cat, risk, svc = c, r, n
+                break
+        if cat == 'other':
+            continue
+        results[domain] = {
+            'domain': domain,
+            'category': cat,
+            'risk': risk,
+            'service_name': svc,
+            'sources': []
+        }
+    if source and source not in results[domain]['sources']:
+        results[domain]['sources'].append(source)
+
+output = sorted(results.values(), key=lambda x: (x['category'], x['domain']))
+print(json.dumps(output))
+PYEOF
+
+	python3 "$py_tmp" <"$raw_tmp" >"$output_file" 2>/dev/null || echo "[]" >"$output_file"
+	rm -f "$py_tmp" "$raw_tmp"
+
+	local count
+	count=$(jq 'length' "$output_file" 2>/dev/null || echo 0)
+	info "  → Third-party intelligence: ${count} classified vendors across all sources"
+}
+
+# Keep backward-compat alias so any callers referencing the old name still work
+run_third_party_deps() { run_third_party_intel "$@"; }
+
+# ─── MODULE: GitHub Subdomain Discovery ──────────────────────────────────────
+# Discovers subdomains from public GitHub org code using github-subdomains.
+# Any new subdomains found are resolved and merged into the main httpx inventory.
+# Secret scanning has been intentionally removed — use dedicated tools for that.
+run_github_surface() {
+	info "[28/31] GitHub subdomain discovery from public org code..."
+	local output_file="$RUN_DIR/github_surface.json"
+
+	if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+		log_warn "⚠ GitHub token not configured — GitHub subdomain discovery skipped"
+		echo '{"org_found":false,"reason":"no_token","subdomains":[]}' >"$output_file"
+		return
+	fi
+
+	local first_domain slug
+	first_domain=$(head -1 "$PRIMARY_DOMAINS_FILE" | tr -d '\r' | xargs)
+	slug=$(echo "$first_domain" | sed 's/\..*//')
+
+	# Check if GitHub org exists
+	local org_check
+	org_check=$(curl -sf --max-time 10 \
+		-H "Authorization: token ${GITHUB_TOKEN}" \
+		-H "User-Agent: frogy/2.0" \
+		"https://api.github.com/orgs/${slug}" 2>/dev/null || true)
+
+	if echo "$org_check" | jq -e '.message == "Not Found"' >/dev/null 2>&1; then
+		echo '{"org_found":false,"reason":"org_not_found","subdomains":[]}' >"$output_file"
+		return
+	fi
+
+	local -a gh_subdomains=()
+	if command -v github-subdomains >/dev/null 2>&1; then
+		while IFS= read -r sub; do
+			[[ -z "$sub" ]] && continue
+			gh_subdomains+=("$sub")
+		done < <(github-subdomains -t "$GITHUB_TOKEN" -d "$first_domain" 2>/dev/null | grep -v '^$' || true)
+	fi
+
+	# Merge any newly discovered subdomains into the live scan inventory
+	if [[ ${#gh_subdomains[@]} -gt 0 ]]; then
+		local new_subs_tmp
+		new_subs_tmp=$(mktemp)
+		printf '%s\n' "${gh_subdomains[@]}" | sort -u \
+			| comm -23 - <(sort "$MASTER_SUBS") >"$new_subs_tmp" 2>/dev/null || true
+		if [[ -s "$new_subs_tmp" ]]; then
+			info "  → GitHub discovery found $(wc -l <"$new_subs_tmp") new subdomains — probing..."
+			cat "$new_subs_tmp" >>"$MASTER_SUBS"
+			sort -u "$MASTER_SUBS" -o "$MASTER_SUBS"
+			apply_exclusions "$MASTER_SUBS" "MASTER_SUBS (post-GitHub)"
+			local new_live_tmp
+			new_live_tmp=$(mktemp)
+			dnsx -silent -l "$new_subs_tmp" 2>/dev/null | while IFS= read -r host; do
+				[[ -z "$host" ]] && continue
+				printf '%s:80\n%s:443\n' "$host" "$host"
+			done >"$new_live_tmp" || true
+			if [[ -s "$new_live_tmp" ]]; then
+				httpx -silent -l "$new_live_tmp" -json -follow-redirects -timeout 10 -retries 1 \
+					>>"$RUN_DIR/httpx.json" 2>/dev/null || true
+			fi
+			rm -f "$new_live_tmp"
+		fi
+		rm -f "$new_subs_tmp"
+	fi
+
+	local sub_json
+	sub_json=$(printf '%s\n' "${gh_subdomains[@]+"${gh_subdomains[@]}"}" | jq -Rc '[inputs | select(length>0)]' 2>/dev/null || echo '[]')
+	jq -n \
+		--argjson org_found true \
+		--arg org "$slug" \
+		--argjson subdomains "$sub_json" \
+		'{ org_found: $org_found, org: $org, subdomains: $subdomains }' \
+		>"$output_file" 2>/dev/null || echo '{"org_found":false}' >"$output_file"
+}
+
+# ─── NEW MODULE: Favicon Hash Clustering ─────────────────────────────────────
+run_favicon_clustering() {
+	info "[29/31] Computing favicon hashes and clustering assets..."
+	local output_file="$RUN_DIR/favicon_clusters.json"
+	local jsonl_tmp="$RUN_DIR/favicon_clusters.jsonl"
+	: >"$jsonl_tmp"
+
+	if [[ ! -s "$RUN_DIR/httpx.json" ]]; then
+		echo "[]" >"$output_file"
+		return
+	fi
+
+	# Generic hashes to skip (Apache, nginx, IIS, etc.)
+	# Edit assets/lists/favicon-skip-hashes.txt to add/remove hashes — no code change needed.
+	local -a skip_hashes
+	mapfile -t skip_hashes < "$SCRIPT_DIR/assets/lists/favicon-skip-hashes.txt"
+
+	local urls
+	urls=$(jq -r '(if type=="array" then .[] else . end) | .url // ""' "$RUN_DIR/httpx.json" 2>/dev/null | grep -v '^$' | head -50 || true)
+
+	if ! python3 -c "import mmh3" >/dev/null 2>&1; then
+		log_warn "⚠ Python mmh3 not installed — favicon clustering skipped"
+		echo "[]" >"$output_file"
+		return
+	fi
+
+	while IFS= read -r base_url; do
+		[[ -z "$base_url" ]] && continue
+		local fav_url="${base_url%/}/favicon.ico"
+		local fav_data
+		fav_data=$(curl -sfL --max-time 8 --connect-timeout 4 "$fav_url" 2>/dev/null | base64 -w 0 || true)
+		[[ -z "$fav_data" ]] && continue
+
+		local mmh3_hash
+		mmh3_hash=$(python3 - <<PYEOF 2>/dev/null || echo "0"
+import mmh3, base64
+data = base64.b64decode("${fav_data}")
+print(mmh3.hash(data))
+PYEOF
+)
+		# Skip generic/empty hashes
+		local skip=false
+		for h in "${skip_hashes[@]}"; do
+			[[ "$mmh3_hash" == "$h" ]] && skip=true && break
+		done
+		"$skip" && continue
+
+		# Shodan lookup by MMH3 hash
+		if [[ -n "${SHODAN_API_KEY:-}" ]]; then
+			local sh_resp
+			sh_resp=$(curl -sf --max-time 15 \
+				"https://api.shodan.io/shodan/host/search?query=http.favicon.hash:${mmh3_hash}&key=${SHODAN_API_KEY}&minify=true" \
+				2>/dev/null || true)
+			if [[ -n "$sh_resp" ]]; then
+				echo "$sh_resp" | jq \
+					--arg src "$base_url" \
+					--arg hash "$mmh3_hash" \
+					'.matches[]? | { source: $src, favicon_hash: $hash, candidate_ip: .ip_str, candidate_port: .port, confidence: "candidate" }' \
+					2>/dev/null >>"$jsonl_tmp" || true
+			fi
+		fi
+
+		# Censys lookup by MD5 favicon hash (independent of Shodan — runs if key is set)
+		if [[ -n "${CENSYS_API_KEY:-}" ]]; then
+			local md5_hash
+			md5_hash=$(python3 - <<PYEOF 2>/dev/null || true
+import hashlib, base64
+data = base64.b64decode("${fav_data}")
+print(hashlib.md5(data).hexdigest())
+PYEOF
+)
+			if [[ -n "$md5_hash" ]]; then
+				local censys_b64 censys_resp
+				censys_b64=$(python3 -c "import base64; print(base64.b64encode(b'${CENSYS_API_KEY}:${CENSYS_API_KEY}').decode())" 2>/dev/null || true)
+				censys_resp=$(curl -sf --max-time 15 \
+					-H "Authorization: Basic ${censys_b64}" \
+					-H "Content-Type: application/json" \
+					--data-raw "{\"q\":\"services.http.response.favicons.md5_hash:\\\"${md5_hash}\\\"\",\"per_page\":25}" \
+					"https://search.censys.io/api/v2/hosts/search" \
+					2>/dev/null || true)
+				if [[ -n "$censys_resp" ]]; then
+					echo "$censys_resp" | jq \
+						--arg src "$base_url" \
+						--arg hash "$mmh3_hash" \
+						'.result.hits[]? | { source: $src, favicon_hash: $hash, candidate_ip: .ip, candidate_port: (.services[0].port // null), confidence: "candidate" }' \
+						2>/dev/null >>"$jsonl_tmp" || true
+				fi
+			fi
+		fi
+
+		# Fallback: record hash-only if neither Shodan nor Censys is configured
+		if [[ -z "${SHODAN_API_KEY:-}" && -z "${CENSYS_API_KEY:-}" ]]; then
+			jq -n \
+				--arg src "$base_url" \
+				--arg hash "$mmh3_hash" \
+				'{ source: $src, favicon_hash: $hash, confidence: "hash-only" }' \
+				>>"$jsonl_tmp" 2>/dev/null || true
+		fi
+	done <<<"$urls"
+
+	combine_json "$jsonl_tmp" "$output_file"
+	rm -f "$jsonl_tmp"
+}
+
+# ─── ENHANCED MODULE: Cloud Bucket Permutation Check ─────────────────────────
+# Enhances existing run_cloud_storage_check with slug permutations
+run_cloud_bucket_enhanced() {
+	local first_domain slug
+	first_domain=$(head -1 "$PRIMARY_DOMAINS_FILE" | tr -d '\r' | xargs)
+	slug=$(echo "$first_domain" | sed 's/\..*//')
+
+	# Base slug always included; suffixes loaded from file — edit assets/lists/bucket-permutations.txt
+	local -a permutations=("${slug}")
+	while IFS= read -r suffix; do
+		[[ -n "$suffix" ]] && permutations+=("${slug}${suffix}")
+	done < "$SCRIPT_DIR/assets/lists/bucket-permutations.txt"
+
+	local output_file="$RUN_DIR/cloud_storage.json"
+	local jsonl_tmp="$RUN_DIR/cloud_storage.jsonl"
+
+	# Preserve any entries already written by run_cloud_storage_check
+	local existing="[]"
+	[[ -s "$output_file" ]] && existing=$(cat "$output_file")
+
+	for bucket in "${permutations[@]}"; do
+		for provider_url_template in \
+			"AWS|https://${bucket}.s3.amazonaws.com/" \
+			"Azure|https://${bucket}.blob.core.windows.net/" \
+			"GCP|https://storage.googleapis.com/${bucket}/"
+		do
+			local provider url
+			provider="${provider_url_template%%|*}"
+			url="${provider_url_template#*|}"
+			local code
+			code=$(curl -so /dev/null --max-time 8 --connect-timeout 4 -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+			local status="Unknown"
+			case "$code" in
+				200) status="Public" ;;
+				403) status="Private" ;;
+				404) status="Nonexistent" ;;
+				*) status="Unknown (${code})" ;;
+			esac
+			[[ "$status" == "Nonexistent" ]] && continue
+			local severity="info"
+			[[ "$status" == "Public" ]] && severity="critical"
+			jq -n \
+				--arg asset "$bucket" \
+				--arg provider "$provider" \
+				--arg url "$url" \
+				--arg status "$status" \
+				--arg severity "$severity" \
+				'{ asset: $asset, provider: $provider, url: $url, status: $status, finding_severity: $severity }' \
+				>>"$jsonl_tmp" 2>/dev/null || true
+		done
+	done
+
+	# Merge permutation results into existing cloud storage file
+	if [[ -s "$jsonl_tmp" ]]; then
+		local perm_json
+		perm_json=$(jq -cs '.' "$jsonl_tmp" 2>/dev/null || echo '[]')
+		echo "$existing" | jq --argjson new "$perm_json" '. + $new | unique_by(.url)' \
+			>"$output_file" 2>/dev/null || true
+	fi
+	rm -f "$jsonl_tmp"
 }
 
 # quick recap for the terminal once everything wraps up
@@ -3129,45 +4310,180 @@ show_summary() {
 # main path: run the scanners, enrich the output, and wrap it all up
 main() {
 	check_dependencies
-	run_chaos
-	run_subfinder
-	if ! run_assetfinder; then
+	load_api_config                    # load API keys from web UI config file
+	if ! run_chaos; then               # [1/31]
+		warning "Chaos step encountered an error and was skipped."
+	fi
+	if ! run_seed_expansion; then      # [2/31]
+		warning "Seed expansion step encountered an error and was skipped."
+	fi
+	if ! run_brand_discovery; then     # [3/31]
+		warning "Brand discovery step encountered an error and was skipped."
+	fi
+	run_subfinder                      # [4/31]
+	if ! run_assetfinder; then         # [5/31]
 		warning "Assetfinder step encountered an error and was skipped."
 	fi
-	if ! run_crtsh; then
+	if ! run_crtsh; then               # [6/31]
 		warning "crt.sh lookup step encountered an error and was skipped."
 	fi
-	if ! run_gau; then
+	if ! run_gau; then                 # [7/31]
 		warning "GAU step encountered an error and was skipped."
 	fi
-	info "[5/22] Merging subdomains..."
+	if ! run_enhanced_passive; then    # [8/31]
+		warning "Enhanced passive step encountered an error and was skipped."
+	fi
+	info "[9/31] Merging subdomains..."
 	while read -r domain; do
 		echo "$domain" >>"$ALL_TEMP"
 		echo "www.$domain" >>"$ALL_TEMP"
 	done <"$PRIMARY_DOMAINS_FILE"
 	sort -u "$ALL_TEMP" >"$MASTER_SUBS"
 	rm -f "$ALL_TEMP"
+	apply_exclusions "$MASTER_SUBS" "MASTER_SUBS"
 	tr '[:upper:]' '[:lower:]' <"$MASTER_SUBS" | sed '/^$/d' | sort -u >"$MASTER_HOST_INDEX"
-	run_dnsx
-	run_subdomain_takeover             # [7/22]  NEW: dangling CNAME / takeover detection
-	run_naabu
-	generate_ip_intel                  # [9/22]  IP enrichment (parallel)
-	run_httpx
-	run_exposed_files                  # [11/22] NEW: sensitive file exposure
-	run_katana
-	run_js_analysis                    # [13/22] NEW: JS endpoint/secret extraction
-	gather_screenshots                 # [14/22] screenshot capture
-	run_login_detection                # [15/22] parallel, 2+ signal threshold
-	run_tls_inventory                  # [16/22] TLS + grading
-	run_security_compliance            # [17/22] parallel, cookie + CORS analysis
-	run_api_identification             # [19/22] multi-signal API detection
-	run_colleague_identification       # [20/22]
-	run_cloud_infrastructure_inventory # [21/22]
-	run_cloud_storage_check            # [21/22] storage exposure (runs after cloud infra)
-	generate_change_report             # delta vs. previous run
-	build_html_report                  # [22/22]
+	run_dnsx                                   # [10/31]
+	classify_hosts_by_tier                     # CDN vs direct/cloud classification (post-dnsx)
+	EFFECTIVE_WEB_PORTS="$WEB_PORTS_TOP20"     # set web port list for httpx expansion
+	run_subdomain_takeover                     # [11/31] dangling CNAME / takeover detection
+	run_naabu                                  # [12/31] direct/cloud hosts only
+	augment_final_urls_with_webports           # tier-aware web port expansion for httpx
+	generate_ip_intel                          # [13/31] IP enrichment (parallel)
+	if ! run_ipv6_discovery; then              # [14/31]
+		warning "IPv6 discovery step encountered an error and was skipped."
+	fi
+	run_httpx                                  # [15/31]
+	run_csp_discovery                          # bonus: CSP-based subdomain expansion
+	if ! run_shodan_banner_enrichment; then    # [16/31]
+		warning "Shodan banner enrichment skipped."
+	fi
+	run_katana                                 # [18/31]
+	run_js_analysis                            # [19/31] JS endpoint/secret extraction
+	# [20/31] screenshot capture removed
+	run_login_detection                        # [21/31] parallel, 2+ signal threshold
+	run_tls_inventory                          # [22/31] TLS + grading
+	run_security_compliance                    # [23/31] parallel, cookie + CORS analysis
+	if ! run_saas_detection; then              # [24/31]
+		warning "SaaS detection step encountered an error and was skipped."
+	fi
+	if ! run_third_party_intel; then           # [25/31]
+		warning "Third-party intelligence step encountered an error and was skipped."
+	fi
+	run_api_identification                     # [26/31] multi-signal API detection
+	run_colleague_identification               # [27/31]
+	if ! run_github_surface; then              # [28/31]
+		warning "GitHub surface discovery step encountered an error and was skipped."
+	fi
+	if ! run_favicon_clustering; then          # [29/31]
+		warning "Favicon clustering step encountered an error and was skipped."
+	fi
+	run_cloud_infrastructure_inventory         # [30/32]
+	run_cloud_storage_check                    # [30/32] storage exposure (runs after cloud infra)
+	run_cloud_bucket_enhanced                  # [30/32] enhanced permutation check
+	build_html_report                          # [31/31]
 	quality_post_run_checks
 	show_summary
+	# write pipeline stats for the web UI dashboard
+	# Counts are computed to exactly match the HTML report's Attack Surface section:
+	#   subdomains = unique .host from dnsx.json (resolved domains)
+	#   live_assets = unique .host from dnsx.json that have A/AAAA records
+	#   web_hosts   = unique scheme://host:port variants from httpx.json
+	local _inputs=0
+	[[ -s "$PRIMARY_DOMAINS_FILE" ]] && _inputs=$(grep -cve '^\s*$' "$PRIMARY_DOMAINS_FILE" 2>/dev/null || echo 0)
+	python3 - "$RUN_DIR/dnsx.json" "$RUN_DIR/httpx.json" "$_inputs" "$RUN_DIR/scan_summary.json" <<'__PYSTATS__'
+import json, sys
+from urllib.parse import urlparse
+
+dnsx_file, httpx_file, inputs_str, out_file = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+inputs = int(inputs_str) if inputs_str.isdigit() else 0
+
+def load_jsonl(path):
+    records = []
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    parsed = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, dict):
+                    records.append(parsed)
+                elif isinstance(parsed, list):
+                    records.extend(r for r in parsed if isinstance(r, dict))
+    except Exception:
+        pass
+    return records
+
+dnsx  = load_jsonl(dnsx_file)
+httpx = load_jsonl(httpx_file)
+
+domain_set    = set()
+live_set      = set()
+for r in dnsx:
+    host = (r.get("host") or "").strip().lower()
+    if not host:
+        continue
+    domain_set.add(host)
+    if r.get("a") or r.get("aaaa"):
+        live_set.add(host)
+
+def url_parts(url_str):
+    """Return (scheme, host, effective_port) or None."""
+    if not url_str:
+        return None
+    try:
+        u = urlparse(url_str)
+        scheme = (u.scheme or "http").lower()
+        host   = (u.hostname or "").lower()
+        if not host:
+            return None
+        explicit_port = u.port
+        eff_port = explicit_port if explicit_port else (443 if scheme == "https" else 80)
+        return (scheme, host, eff_port)
+    except Exception:
+        return None
+
+# Build all raw variant keys first
+raw_entries = []  # list of (key, record)
+for r in httpx:
+    url_str = r.get("url") or ""
+    p = url_parts(url_str)
+    if not p:
+        host   = (r.get("host") or "").strip().lower()
+        scheme = (r.get("scheme") or "http").strip().lower() or "http"
+        port   = r.get("port")
+        try:
+            eff = int(port) if port else (443 if scheme == "https" else 80)
+        except Exception:
+            eff = 443 if scheme == "https" else 80
+        if host:
+            p = (scheme, host, eff)
+    if p:
+        raw_entries.append(p)
+
+# Build set of https:host:443 keys that exist
+https_hosts = {host for (scheme, host, port) in raw_entries if scheme == "https" and port == 443}
+
+# Apply Rule A: suppress http:host:80 when https:host:443 already exists (mirrors report dedup)
+web_variants = set()
+for (scheme, host, port) in raw_entries:
+    if scheme == "http" and port == 80 and host in https_hosts:
+        continue  # suppressed — report doesn't count this separately
+    key = f"{scheme}://{host}" if port in (80, 443) else f"{scheme}://{host}:{port}"
+    web_variants.add(key)
+
+out = json.dumps({
+    "inputs":      inputs,
+    "subdomains":  len(domain_set),
+    "live_assets": len(live_set),
+    "web_hosts":   len(web_variants)
+})
+with open(out_file, "w") as f:
+    f.write(out + "\n")
+__PYSTATS__
 }
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	main "$@"

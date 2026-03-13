@@ -1,0 +1,368 @@
+[
+  {
+    "provider": "GitHub Pages",
+    "cname_patterns": ["github.io", "githubusercontent.com"],
+    "body_patterns": ["There isn't a GitHub Pages site here", "404 There isn't a GitHub Pages site", "If you're trying to publish one, read the full documentation"],
+    "severity": "high"
+  },
+  {
+    "provider": "AWS S3",
+    "cname_patterns": [".s3.amazonaws.com", ".s3-website-", ".s3.us-", ".s3.eu-", ".s3.ap-"],
+    "body_patterns": ["NoSuchBucket", "The specified bucket does not exist", "NoSuchBucket"],
+    "severity": "critical"
+  },
+  {
+    "provider": "Heroku",
+    "cname_patterns": [".herokuapp.com", ".heroku.com"],
+    "body_patterns": ["No such app", "There is no app here", "herokucdn.com/error-pages/no-such-app.html"],
+    "severity": "high"
+  },
+  {
+    "provider": "Netlify",
+    "cname_patterns": [".netlify.app", ".netlify.com"],
+    "body_patterns": ["Not found", "no such site", "We don't have a site"],
+    "severity": "high"
+  },
+  {
+    "provider": "Vercel",
+    "cname_patterns": [".vercel.app", ".now.sh", "cname.vercel-dns.com"],
+    "body_patterns": ["The deployment could not be found", "DEPLOYMENT_NOT_FOUND"],
+    "severity": "high"
+  },
+  {
+    "provider": "Azure App Service",
+    "cname_patterns": [".azurewebsites.net", ".azureedge.net"],
+    "body_patterns": ["404 Web Site not found", "ErrorDocument", "App Service - The site looks familiar"],
+    "severity": "high"
+  },
+  {
+    "provider": "Shopify",
+    "cname_patterns": [".myshopify.com", "shops.myshopify.com"],
+    "body_patterns": ["Sorry, this shop is currently unavailable", "storefront.myshopify.com", "We couldn't find that store"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Tumblr",
+    "cname_patterns": [".tumblr.com"],
+    "body_patterns": ["There's nothing here.", "Whatever you were looking for doesn't currently exist at this address."],
+    "severity": "low"
+  },
+  {
+    "provider": "UserVoice",
+    "cname_patterns": [".uservoice.com"],
+    "body_patterns": ["This UserVoice subdomain is currently available!", "Subdomain not found"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Zendesk",
+    "cname_patterns": [".zendesk.com"],
+    "body_patterns": ["Oops, this help center no longer exists", "Help Center Closed"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Intercom",
+    "cname_patterns": ["custom.intercom.help", ".intercom.com"],
+    "body_patterns": ["This page is reserved for artistic discovery", "Uh oh. That page doesn't exist."],
+    "severity": "medium"
+  },
+  {
+    "provider": "Fastly",
+    "cname_patterns": [".fastly.net", ".fastlylb.net"],
+    "body_patterns": ["Fastly error: unknown domain", "Please check that this domain has been added to a service"],
+    "severity": "high"
+  },
+  {
+    "provider": "WordPress.com",
+    "cname_patterns": [".wordpress.com", "lb.wordpress.com"],
+    "body_patterns": ["Do you want to register", "WordPress.com no longer supports"],
+    "severity": "low"
+  },
+  {
+    "provider": "Ghost",
+    "cname_patterns": [".ghost.io"],
+    "body_patterns": ["The thing you were looking for is no longer here", "404"],
+    "severity": "medium"
+  },
+  {
+    "provider": "HubSpot",
+    "cname_patterns": [".hs-sites.com", ".hubspot.net", ".hsadspixel.net"],
+    "body_patterns": ["Domain not connected", "does not exist in our system"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Bitbucket",
+    "cname_patterns": [".bitbucket.io"],
+    "body_patterns": ["Repository not found", "The page you have requested does not exist"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Cargo",
+    "cname_patterns": [".cargocollective.com"],
+    "body_patterns": ["404 Not Found", "If you're the site owner, log in to launch this site"],
+    "severity": "low"
+  },
+  {
+    "provider": "ReadMe",
+    "cname_patterns": [".readme.io"],
+    "body_patterns": ["Project doesnt exist... yet!", "project not found"],
+    "severity": "medium"
+  },
+  {
+    "provider": "JetBrains Space",
+    "cname_patterns": [".jetbrains.space"],
+    "body_patterns": ["Page not found", "This page does not exist"],
+    "severity": "low"
+  },
+  {
+    "provider": "Survey Monkey",
+    "cname_patterns": [".surveymonkey.com"],
+    "body_patterns": ["Survey Not Found", "This survey does not exist"],
+    "severity": "low"
+  },
+  {
+    "provider": "Tilda",
+    "cname_patterns": [".tilda.cc", ".tilda.ws"],
+    "body_patterns": ["Please renew your project", "Domain is not configured"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Wix",
+    "cname_patterns": [".wixsite.com", ".wix.com"],
+    "body_patterns": ["Looks Like This Domain Isn't Connected To A Website Yet!", "Error connecting to the origin"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Squarespace",
+    "cname_patterns": [".squarespace.com", ".sqsp.com"],
+    "body_patterns": ["No Such Account", "This Square space domain is not currently associated"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Webflow",
+    "cname_patterns": [".webflow.io"],
+    "body_patterns": ["The page you are looking for doesn't exist or has been moved", "Page Not Found"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Fly.io",
+    "cname_patterns": [".fly.dev"],
+    "body_patterns": ["404 - Not Found", "No app found for"],
+    "severity": "high"
+  },
+  {
+    "provider": "Render",
+    "cname_patterns": [".onrender.com"],
+    "body_patterns": ["Service not found"],
+    "severity": "high"
+  },
+  {
+    "provider": "Railway",
+    "cname_patterns": [".railway.app"],
+    "body_patterns": ["Application not found", "404"],
+    "severity": "high"
+  },
+  {
+    "provider": "Surge.sh",
+    "cname_patterns": [".surge.sh"],
+    "body_patterns": ["project not found", "surge.sh"],
+    "severity": "high"
+  },
+  {
+    "provider": "AWS Elastic Beanstalk",
+    "cname_patterns": [".elasticbeanstalk.com"],
+    "body_patterns": ["404 Not Found", "No Application"],
+    "severity": "high"
+  },
+  {
+    "provider": "AWS CloudFront",
+    "cname_patterns": [".cloudfront.net"],
+    "body_patterns": ["Bad request", "ERROR: The request could not be satisfied", "CloudFront wasn't able to connect to the origin"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Pantheon",
+    "cname_patterns": [".pantheonsite.io"],
+    "body_patterns": ["The gods are wise", "404 error unknown site!"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Acquia",
+    "cname_patterns": [".acquia-sites.com"],
+    "body_patterns": ["Web Site not found", "The site you are trying to reach is not available"],
+    "severity": "medium"
+  },
+  {
+    "provider": "LaunchRock",
+    "cname_patterns": [".launchrock.com"],
+    "body_patterns": ["It looks like you may have taken a wrong turn"],
+    "severity": "low"
+  },
+  {
+    "provider": "Campaignmonitor",
+    "cname_patterns": [".cname.createsend.com"],
+    "body_patterns": ["Double check the URL", "Trying to access your account"],
+    "severity": "low"
+  },
+  {
+    "provider": "Strikingly",
+    "cname_patterns": [".strikingly.com"],
+    "body_patterns": ["page not found", "Build a free website with Strikingly"],
+    "severity": "low"
+  },
+  {
+    "provider": "Mailchimp",
+    "cname_patterns": [".list-manage.com"],
+    "body_patterns": ["Oops, That Page Doesn't Exist", "Invalid Mailchimp Signup Form URL"],
+    "severity": "medium"
+  },
+  {
+    "provider": "GetResponse",
+    "cname_patterns": [".gr8.com", ".getresponse.com"],
+    "body_patterns": ["With GetResponse Landing Pages, lead generation has never been easier"],
+    "severity": "low"
+  },
+  {
+    "provider": "Smartling",
+    "cname_patterns": [".smartling.com"],
+    "body_patterns": ["domain is not configured"],
+    "severity": "low"
+  },
+  {
+    "provider": "Kinsta",
+    "cname_patterns": [".kinsta.cloud", ".kinsta.app"],
+    "body_patterns": ["No Site For Domain", "kinsta"],
+    "severity": "medium"
+  },
+  {
+    "provider": "WP Engine",
+    "cname_patterns": [".wpengine.com"],
+    "body_patterns": ["The site you were looking for couldn't be found", "404"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Pagecloud",
+    "cname_patterns": [".pagecloud.com"],
+    "body_patterns": ["page not found"],
+    "severity": "low"
+  },
+  {
+    "provider": "Agile CRM",
+    "cname_patterns": [".agilecrm.com"],
+    "body_patterns": ["Sorry, this page is no longer available"],
+    "severity": "low"
+  },
+  {
+    "provider": "Desk",
+    "cname_patterns": [".desk.com"],
+    "body_patterns": ["Please try again or try Desk.com free for 14 days"],
+    "severity": "low"
+  },
+  {
+    "provider": "Pingdom",
+    "cname_patterns": [".stats.pingdom.com"],
+    "body_patterns": ["This public report page has not been activated"],
+    "severity": "low"
+  },
+  {
+    "provider": "StatusPage.io",
+    "cname_patterns": [".statuspage.io"],
+    "body_patterns": ["You are being redirected", "redirecting to the hosted status page"],
+    "severity": "low"
+  },
+  {
+    "provider": "Unbounce",
+    "cname_patterns": [".unbounce.com"],
+    "body_patterns": ["The requested URL was not found on this server", "Unbounce page not found"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Readme.io",
+    "cname_patterns": [".readme.io"],
+    "body_patterns": ["Project doesnt exist yet!", "We didn't find this page"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Freshdesk",
+    "cname_patterns": [".freshdesk.com"],
+    "body_patterns": ["May be this is still fresh!", "Oops, This Page Could Not Be Found!"],
+    "severity": "low"
+  },
+  {
+    "provider": "Teamwork",
+    "cname_patterns": [".teamwork.com"],
+    "body_patterns": ["Oops - We didn't find your site"],
+    "severity": "low"
+  },
+  {
+    "provider": "Jira",
+    "cname_patterns": [".atlassian.net"],
+    "body_patterns": ["Site doesn't exist", "This Jira site is not available"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Confluence",
+    "cname_patterns": [".atlassian.net"],
+    "body_patterns": ["If you need access to this content, please ask"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Helpjuice",
+    "cname_patterns": [".helpjuice.com"],
+    "body_patterns": ["We could not find what you're looking for"],
+    "severity": "low"
+  },
+  {
+    "provider": "Help Scout",
+    "cname_patterns": [".helpscoutdocs.com"],
+    "body_patterns": ["No settings were found for this company"],
+    "severity": "low"
+  },
+  {
+    "provider": "Instapage",
+    "cname_patterns": [".instapage.com", ".pageserve.co"],
+    "body_patterns": ["Looks like you're lost"],
+    "severity": "low"
+  },
+  {
+    "provider": "Leadpages",
+    "cname_patterns": [".lpages.co", ".leadpages.net"],
+    "body_patterns": ["The page you're looking for is gone, baby, gone"],
+    "severity": "low"
+  },
+  {
+    "provider": "Cloudflare Pages",
+    "cname_patterns": [".pages.dev"],
+    "body_patterns": ["project is not active", "Page not found"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Webnode",
+    "cname_patterns": [".webnode.com"],
+    "body_patterns": ["Site is not active", "page not found"],
+    "severity": "low"
+  },
+  {
+    "provider": "Simvoly",
+    "cname_patterns": [".simvoly.com"],
+    "body_patterns": ["This domain is not associated with any site"],
+    "severity": "low"
+  },
+  {
+    "provider": "Moosend",
+    "cname_patterns": [".moosend.com"],
+    "body_patterns": ["The page you are looking for could not be found"],
+    "severity": "low"
+  },
+  {
+    "provider": "Getstream.io",
+    "cname_patterns": [".getstream.io"],
+    "body_patterns": ["There is no Stream app configured"],
+    "severity": "medium"
+  },
+  {
+    "provider": "Intercom Articles",
+    "cname_patterns": [".intercom.com", "custom.intercom.help"],
+    "body_patterns": ["Uh oh. That page doesn't exist.", "This page is reserved for artistic discovery"],
+    "severity": "medium"
+  }
+]

@@ -1,0 +1,62 @@
+[
+  {
+    "keywords": ["pay", "payment", "payments", "billing", "checkout", "purchase", "invoice", "wallet", "finance", "bank", "banking", "credit", "debit", "subscription", "subscriptions", "stripe", "paypal", "fund", "funds", "money", "transaction", "transactions", "transfer"],
+    "bucket": "sensitivity",
+    "points": 12,
+    "reason": "Payment/financial keyword in subdomain"
+  },
+  {
+    "keywords": ["admin", "administrator", "console", "control", "panel", "manage", "manager", "management", "portal", "backoffice", "back-office", "cpanel", "plesk", "mgmt", "mgr", "ops", "operations", "root"],
+    "bucket": "sensitivity",
+    "points": 8,
+    "reason": "Admin panel keyword in subdomain"
+  },
+  {
+    "keywords": ["login", "auth", "authentication", "sso", "oauth", "saml", "idp", "identity", "signin", "sign-in", "iam", "accounts", "account", "session", "token", "tokens", "mfa", "2fa"],
+    "bucket": "sensitivity",
+    "points": 6,
+    "reason": "Authentication keyword in subdomain"
+  },
+  {
+    "keywords": ["data", "db", "database", "backup", "backups", "export", "exports", "dump", "dumps", "analytics", "warehouse", "lake", "reporting", "report", "etl", "pipeline", "store", "storage", "archive", "archives"],
+    "bucket": "sensitivity",
+    "points": 7,
+    "reason": "Data/database keyword in subdomain"
+  },
+  {
+    "keywords": ["secret", "internal", "private", "hidden", "confidential", "restricted", "secure", "classified", "priv", "corp", "intranet"],
+    "bucket": "sensitivity",
+    "points": 6,
+    "reason": "Sensitive/internal keyword in subdomain"
+  },
+  {
+    "keywords": ["dev", "development", "staging", "stage", "test", "testing", "uat", "qa", "sandbox", "demo", "preprod", "pre-prod", "preview", "sit", "int", "integration", "beta", "nightly", "canary"],
+    "bucket": "sensitivity",
+    "points": 5,
+    "reason": "Non-production environment exposed publicly"
+  },
+  {
+    "keywords": ["old", "legacy", "archive", "deprecated", "classic", "bak", "backup", "v1", "v2", "v3", "v4", "v5"],
+    "bucket": "sensitivity",
+    "points": 4,
+    "reason": "Legacy/deprecated surface keyword"
+  },
+  {
+    "keywords": ["api", "graphql", "rest", "rpc", "webhook", "webhooks", "ws", "wss", "service", "services", "gateway", "gw", "svc", "endpoint", "endpoints"],
+    "bucket": "sensitivity",
+    "points": 3,
+    "reason": "API/service keyword in subdomain"
+  },
+  {
+    "keywords": ["hr", "people", "employee", "employees", "staff", "talent", "payroll", "hris", "workday", "bamboo", "successfactors"],
+    "bucket": "sensitivity",
+    "points": 6,
+    "reason": "HR/employee keyword in subdomain"
+  },
+  {
+    "keywords": ["vpn", "remote", "citrix", "rdp", "jump", "jumpbox", "bastion", "shell", "ssh", "access"],
+    "bucket": "sensitivity",
+    "points": 7,
+    "reason": "Remote access keyword in subdomain"
+  }
+]

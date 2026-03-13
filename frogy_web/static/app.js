@@ -66,12 +66,14 @@ const el = {
   modalForm:           () => document.getElementById("modal-form"),
   modalName:           () => document.getElementById("modal-project-name"),
   modalTargets:        () => document.getElementById("modal-targets"),
+  modalExclusions:     () => document.getElementById("modal-exclusions"),
   modalScheduleField:  () => document.getElementById("modal-schedule-field"),
   modalSchedule:       () => document.getElementById("modal-schedule"),
   modalFeedback:       () => document.getElementById("modal-feedback"),
   modalClose:          () => document.getElementById("modal-close"),
   modalCancel:         () => document.getElementById("modal-cancel"),
   modalActionButtons:  () => document.querySelectorAll("#modal-form [data-run-mode]"),
+  modalCompanyName:    () => document.getElementById("modal-company-name"),
   targetsModal:        () => document.getElementById("targets-modal"),
   targetsModalClose:   () => document.getElementById("targets-modal-close"),
   targetsModalOk:      () => document.getElementById("targets-modal-ok"),
@@ -160,9 +162,9 @@ function renderProjectList(scans) {
     }
 
     const stats = scan.summary_stats;
-    const discoveryHtml = statusDone && stats
-      ? `<div class="proj-stats-line">${stats.subdomains || 0} subdomains · ${stats.live_assets || 0} live · ${stats.web_hosts || 0} web</div>`
-      : "";
+    const pipelineStats = statusDone && stats && Object.keys(stats).length
+      ? `<div class="proj-stats-line">${scan.targets_count ?? 0} input${(scan.targets_count ?? 0) !== 1 ? "s" : ""} → ${stats.subdomains ?? 0} unique subdomains → ${stats.live_assets ?? 0} live → ${stats.web_hosts ?? 0} web</div>`
+      : `<div class="project-card__meta">${scan.targets_count ?? 0} target${scan.targets_count !== 1 ? "s" : ""}</div>`;
 
     const hasArtifacts = typeof scan.run_id === "string" && scan.run_id.startsWith("run-");
     const reportBtn = hasArtifacts && scan.report
@@ -182,7 +184,7 @@ function renderProjectList(scans) {
         <div class="project-card__name">
           <a href="/projects/${escapeHtml(scan.slug)}" onclick="event.stopPropagation()">${escapeHtml(scan.name)}</a>
         </div>
-        <div class="project-card__meta">${scan.targets_count ?? 0} target${scan.targets_count !== 1 ? "s" : ""}</div>
+        ${pipelineStats}
       </div>
       <div>${statusBadgeHtml(scan.status)}</div>
       <div>
@@ -191,7 +193,6 @@ function renderProjectList(scans) {
         </div>
         <div class="progress-label">${stepTotal} · ${timeLabel}${durationStr}</div>
       </div>
-      <div>${discoveryHtml}</div>
       <div class="project-card__actions">
         ${reportBtn}
         <button class="btn btn--ghost btn--sm menu-btn" data-slug="${escapeHtml(scan.slug)}" type="button" title="More actions" onclick="event.stopPropagation()">···</button>
@@ -428,8 +429,12 @@ function openModal(mode, scan = null) {
   if (titleEl) titleEl.textContent = mode === "edit" ? "Modify Scan" : "New Scan";
   const nameEl = el.modalName();
   if (nameEl) nameEl.value = scan?.name || "";
+  const cnEl = el.modalCompanyName();
+  if (cnEl) cnEl.value = scan?.company_name || "";
   const targetsEl = el.modalTargets();
   if (targetsEl) targetsEl.value = scan?.targets || "";
+  const exclEl = el.modalExclusions();
+  if (exclEl) exclEl.value = (scan?.exclusions || []).join("\n");
   const scheduleEl = el.modalSchedule();
   if (scheduleEl) scheduleEl.value = "";
   const sfEl = el.modalScheduleField();
@@ -537,7 +542,12 @@ async function submitScan(mode) {
     scheduledFor = toIsoString(scheduleEl.value);
   }
 
-  const payload = { project_name: projectName, targets: targetsText, start_mode: mode };
+  const cnEl = el.modalCompanyName();
+  const companyName = (cnEl?.value || "").trim();
+  const exclEl = el.modalExclusions();
+  const exclusions = (exclEl?.value || "").split("\n").map(s => s.trim()).filter(Boolean);
+  const payload = { project_name: projectName, targets: targetsText, start_mode: mode, exclusions };
+  if (companyName) payload.company_name = companyName;
   if (scheduledFor) payload.scheduled_for = scheduledFor;
 
   const slug     = state.modalMode === "edit" ? state.editingSlug : null;
@@ -679,6 +689,149 @@ function closeLogPanel() {
   if (out) out.textContent = '';
 }
 
+/* ── API Keys Panel ─────────────────────────────────────────────── */
+const API_KEY_META = {
+  github_token:       { label: "GitHub Token",       note: "Enables GitHub surface discovery (repos + secrets)" },
+  shodan_api_key:     { label: "Shodan API Key",     note: "Enables banner enrichment + favicon clustering" },
+  censys_api_key:     { label: "Censys API Key",     note: "Censys Search v2 — single Bearer token (new platform)" },
+  otx_api_key:        { label: "OTX API Key",        note: "Enhanced passive DNS from AlienVault OTX" },
+  virustotal_api_key: { label: "VirusTotal API Key", note: "Additional passive subdomain source" },
+  whoisxml_api_key:   { label: "WhoisXML API Key",   note: "Registrant email pivot for seed expansion" },
+  chaos_api_key:      { label: "Chaos/PDCP Key",     note: "ProjectDiscovery passive subdomain feed" },
+};
+
+function openApiPanel() {
+  const panel = document.getElementById("api-panel");
+  const bd = document.getElementById("api-panel-backdrop");
+  if (!panel) return;
+  panel.classList.remove("hidden");
+  bd?.classList.remove("hidden");
+  loadApiPanelContent();
+}
+
+function closeApiPanel() {
+  document.getElementById("api-panel")?.classList.add("hidden");
+  document.getElementById("api-panel-backdrop")?.classList.add("hidden");
+}
+
+async function loadApiPanelContent() {
+  const body = document.getElementById("api-panel-body");
+  if (!body) return;
+  body.innerHTML = '<p class="api-panel-loading">Loading…</p>';
+  try {
+    const res = await fetch("/api/config");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderApiPanel(body, data.api_keys || {}, data.settings || {});
+  } catch (err) {
+    body.innerHTML = `<p class="api-panel-loading" style="color:var(--danger)">Failed to load: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function renderApiPanel(body, apiKeys, settings) {
+  let html = '<div class="api-panel-list">';
+  for (const [keyName, meta] of Object.entries(API_KEY_META)) {
+    const info = apiKeys[keyName] || { configured: false, preview: "" };
+    const statusCls = info.configured ? "api-status--ok" : "api-status--none";
+    const statusLabel = info.configured ? "✓ Configured" : "— Not set";
+    html += `
+      <div class="api-row" data-key="${escapeHtml(keyName)}">
+        <div class="api-row__header">
+          <span class="api-row__label">${escapeHtml(meta.label)}</span>
+          <span class="api-status ${statusCls}">${statusLabel}</span>
+        </div>
+        <div class="api-row__note">${escapeHtml(meta.note)}</div>
+        ${info.configured ? `<div class="api-row__preview">${escapeHtml(info.preview)}</div>` : ""}
+        <div class="api-row__controls">
+          <input type="password" class="api-input" placeholder="${info.configured ? "Enter new value to update" : "Paste API key"}" autocomplete="off" data-key="${escapeHtml(keyName)}">
+          <button class="btn btn--ghost btn--sm api-save-btn" type="button" data-key="${escapeHtml(keyName)}">Save</button>
+          <button class="btn btn--ghost btn--sm api-test-btn" type="button" data-key="${escapeHtml(keyName)}"${!info.configured ? " disabled" : ""}>Test</button>
+          ${info.configured ? `<button class="btn btn--danger-ghost btn--sm api-clear-btn" type="button" data-key="${escapeHtml(keyName)}">Clear</button>` : ""}
+        </div>
+        <div class="api-row__feedback"></div>
+      </div>`;
+  }
+  html += "</div>";
+
+  body.innerHTML = html;
+
+  body.querySelectorAll(".api-save-btn").forEach((btn) => {
+    btn.addEventListener("click", () => saveApiKey(btn.dataset.key));
+  });
+  body.querySelectorAll(".api-test-btn").forEach((btn) => {
+    btn.addEventListener("click", () => testApiKey(btn.dataset.key));
+  });
+  body.querySelectorAll(".api-clear-btn").forEach((btn) => {
+    btn.addEventListener("click", () => clearApiKey(btn.dataset.key));
+  });
+}
+
+async function saveApiKey(keyName) {
+  const row = document.querySelector(`.api-row[data-key="${keyName}"]`);
+  if (!row) return;
+  const input = row.querySelector(".api-input");
+  const feedback = row.querySelector(".api-row__feedback");
+  const value = input?.value?.trim() || "";
+  try {
+    const res = await fetch("/api/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_keys: { [keyName]: value } }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (feedback) { feedback.textContent = "Saved."; feedback.style.color = "var(--success)"; }
+    if (input) input.value = "";
+    setTimeout(() => loadApiPanelContent(), 800);
+  } catch (err) {
+    if (feedback) { feedback.textContent = err.message; feedback.style.color = "var(--danger)"; }
+  }
+}
+
+async function testApiKey(keyName) {
+  const row = document.querySelector(`.api-row[data-key="${keyName}"]`);
+  if (!row) return;
+  const feedback = row.querySelector(".api-row__feedback");
+  const btn = row.querySelector(".api-test-btn");
+  if (btn) btn.disabled = true;
+  if (feedback) { feedback.textContent = "Testing…"; feedback.style.color = "var(--text-3)"; }
+  try {
+    const res = await fetch(`/api/config/test/${encodeURIComponent(keyName)}`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    const ok = data.ok === true;
+    if (feedback) {
+      feedback.textContent = data.message || (ok ? "OK" : "Failed");
+      feedback.style.color = ok ? "var(--success)" : "var(--danger)";
+    }
+  } catch (err) {
+    if (feedback) { feedback.textContent = err.message; feedback.style.color = "var(--danger)"; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function clearApiKey(keyName) {
+  const row = document.querySelector(`.api-row[data-key="${keyName}"]`);
+  if (!row) return;
+  const feedback = row.querySelector(".api-row__feedback");
+  const btn = row.querySelector(".api-clear-btn");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch("/api/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_keys: { [keyName]: "" } }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (feedback) { feedback.textContent = "Cleared."; feedback.style.color = "var(--success)"; }
+    setTimeout(() => loadApiPanelContent(), 800);
+  } catch (err) {
+    if (feedback) { feedback.textContent = err.message; feedback.style.color = "var(--danger)"; }
+    if (btn) btn.disabled = false;
+  }
+}
+
 /* ── Theme ───────────────────────────────────────────────────────── */
 function applyTheme(theme) {
   document.body.dataset.theme = theme;
@@ -708,10 +861,13 @@ function startPolling() {
 
 /* ── Project Detail Page ─────────────────────────────────────────── */
 async function loadProjectDetail(slug) {
+  window._currentSlug = slug;
   try {
     const res = await fetch(`/api/projects/${encodeURIComponent(slug)}`);
     if (!res.ok) throw new Error(`Project not found (${res.status})`);
     const d = await res.json();
+
+    loadProjectExclusions(slug);
 
     // Title / breadcrumb
     document.querySelectorAll(".js-project-name").forEach(el => { el.textContent = d.name; });
@@ -758,6 +914,57 @@ async function loadProjectDetail(slug) {
   }
 }
 
+/* ── Project Exclusions ──────────────────────────────────────────── */
+async function loadProjectExclusions(slug) {
+  try {
+    const r = await fetch(`/api/projects/${encodeURIComponent(slug)}/exclusions`);
+    if (!r.ok) return;
+    const data = await r.json();
+    renderExclusions(data.exclusions || []);
+  } catch (_) {}
+}
+
+function renderExclusions(list) {
+  window._currentExclusions = list;
+  const badge = document.getElementById("excl-count-badge");
+  const display = document.getElementById("excl-list-display");
+  if (badge) badge.textContent = `${list.length} entr${list.length === 1 ? "y" : "ies"}`;
+  if (display) {
+    display.innerHTML = list.length
+      ? list.map(e => `<span class="excl-pill">${escapeHtml(e)}</span>`).join("")
+      : '<span class="excl-empty">No exclusions set.</span>';
+  }
+}
+
+function editExclusions() {
+  document.getElementById("excl-read-view").style.display = "none";
+  document.getElementById("excl-edit-view").style.display = "";
+  document.getElementById("excl-textarea").value = (window._currentExclusions || []).join("\n");
+}
+
+function cancelEditExclusions() {
+  document.getElementById("excl-edit-view").style.display = "none";
+  document.getElementById("excl-read-view").style.display = "";
+}
+
+async function saveExclusions() {
+  const slug = window._currentSlug;
+  if (!slug) return;
+  const raw = document.getElementById("excl-textarea").value;
+  const list = raw.split("\n").map(s => s.trim()).filter(Boolean);
+  try {
+    const r = await fetch(`/api/projects/${encodeURIComponent(slug)}/exclusions`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exclusions: list }),
+    });
+    if (r.ok) {
+      renderExclusions(list);
+      cancelEditExclusions();
+    }
+  } catch (_) {}
+}
+
 function renderRunHistory(runs, slug, container) {
   container.innerHTML = "";
 
@@ -791,6 +998,11 @@ function renderRunHistory(runs, slug, container) {
       ? `<a class="btn btn--ghost btn--sm" href="${escapeHtml(run.report_url)}" target="_blank" rel="noopener noreferrer">Report →</a>`
       : "";
 
+    const graphUrl = `/projects/${encodeURIComponent(slug)}/graph?run=${encodeURIComponent(run.run_id || "")}`;
+    const graphBtn = run.run_id
+      ? `<a class="btn btn--ghost btn--sm" href="${escapeHtml(graphUrl)}" title="Attack Graph">◈ Graph</a>`
+      : "";
+
     const logBtn = run.has_log
       ? `<button class="btn btn--ghost btn--sm" type="button" onclick="openRunLog('${escapeHtml(slug)}','${escapeHtml(run.run_id)}')">Logs</button>`
       : "";
@@ -801,7 +1013,7 @@ function renderRunHistory(runs, slug, container) {
       <div>${statusBadgeHtml(run.status)}</div>
       <div class="run-row__stat">${run.duration_seconds ? formatDuration(run.duration_seconds) : "—"}</div>
       <div class="run-row__stat">${discoveryHtml}</div>
-      <div class="run-row__actions">${reportBtn}${logBtn}</div>`;
+      <div class="run-row__actions">${reportBtn}${graphBtn}${logBtn}</div>`;
 
     container.appendChild(row);
   });
@@ -887,6 +1099,8 @@ function setupDashboard() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       closeContextMenu();
+      const ap = document.getElementById("api-panel");
+      if (ap && !ap.classList.contains("hidden")) { closeApiPanel(); return; }
       const lp = document.getElementById('log-panel');
       if (lp && !lp.classList.contains("hidden")) { closeLogPanel(); return; }
       const m  = el.modal();
@@ -899,6 +1113,14 @@ function setupDashboard() {
   // Theme
   const tt = el.themeToggle();
   if (tt) tt.addEventListener("click", toggleTheme);
+
+  // API Keys panel
+  const apiBtn = document.getElementById("api-settings-btn");
+  if (apiBtn) apiBtn.addEventListener("click", openApiPanel);
+  const apiClose = document.getElementById("api-panel-close");
+  if (apiClose) apiClose.addEventListener("click", closeApiPanel);
+  const apiBd = document.getElementById("api-panel-backdrop");
+  if (apiBd) apiBd.addEventListener("click", closeApiPanel);
 }
 
 /* ── DOMContentLoaded ────────────────────────────────────────────── */

@@ -2,9 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Orbis — Attack Surface Intelligence</title>
+    <title>Orbis - Attack Surface Intelligence</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -174,16 +175,78 @@
         background: #3b82f6;
         min-width: 44px;
       }
-      .score-badge--moderate {
-        background: #3b82f6;
+      .score-badge--critical {
+        background: #ef4444;
       }
       .score-badge--high {
         background: #f97316;
       }
-
+      .score-badge--moderate {
+        background: #3b82f6;
+      }
       .score-badge--low {
         background: #10b981;
       }
+      /* ── Mini Scorecard ──────────────────────────────────────────── */
+      .score-card__btn {
+        cursor: pointer;
+        background: none;
+        border: none;
+        padding: 0;
+        font: inherit;
+        display: inline-flex;
+        align-items: center;
+        outline: none;
+      }
+      .score-card__panel {
+        display: none;
+        position: fixed;
+        z-index: 9999;
+        min-width: 260px;
+        max-width: 320px;
+        background: #1a1a22;
+        border: 1px solid rgba(255,255,255,.14);
+        border-radius: 9px;
+        padding: 13px 15px;
+        box-shadow: 0 12px 36px rgba(0,0,0,.7);
+        white-space: normal;
+        text-align: left;
+        color: #e2e8f0;
+      }
+      .score-card__panel.is-open { display: block; }
+      .score-bars { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
+      .score-bar-row {
+        display: grid;
+        grid-template-columns: 76px 1fr 30px;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: #94a3b8;
+      }
+      .score-bar-track {
+        height: 5px;
+        background: rgba(255,255,255,.1);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .score-bar__fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width .3s ease;
+      }
+      .score-bar__fill--exposure   { background: #ef4444; }
+      .score-bar__fill--hygiene    { background: #f97316; }
+      .score-bar__fill--sensitivity { background: #a78bfa; }
+      .score-bar__val { font-size: 11px; font-weight: 600; color: #cbd5e1; text-align: right; }
+      .score-divider { border: none; border-top: 1px solid rgba(255,255,255,.08); margin: 8px 0; }
+      .score-reasons {
+        margin: 0; padding: 0; list-style: none;
+        font-size: 11px; line-height: 1.55; color: #94a3b8;
+      }
+      .score-reasons li { padding: 2px 0; }
+      .score-reasons li + li { border-top: 1px solid rgba(255,255,255,.06); }
+      .score-reason--scored { color: #cbd5e1; }
+      .score-reason--capped { opacity: .5; font-style: italic; }
       .chip-group {
         display: flex;
         flex-wrap: wrap;
@@ -289,8 +352,8 @@
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 16px;
-        padding: 8px 0;
+        gap: 8px;
+        padding: 4px 0 8px;
       }
       .table-top-controls input[type="text"] {
         min-width: 220px;
@@ -436,7 +499,12 @@
       .focus-header {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        align-items: flex-start;
+        gap: 2px;
+        margin-bottom: 2px;
+      }
+      .focus-header .focus-description {
+        margin-bottom: 6px;
       }
       .focus-title {
         margin: 0;
@@ -483,6 +551,58 @@
       }
       .focus-table tbody td {
         min-height: auto;
+      }
+      /* ── New expansion sections ────────────────────────────────────── */
+      .section-sub-title {
+        font-size: .85rem;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--color-text-muted, #9ca3af);
+        margin: 0 0 .5rem;
+        padding-bottom: .25rem;
+        border-bottom: 1px solid var(--color-border, rgba(255,255,255,.08));
+      }
+      .kpi-inline-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+      .kpi-inline {
+        background: var(--color-surface-raised, rgba(255,255,255,.04));
+        border: 1px solid var(--color-border, rgba(255,255,255,.08));
+        border-radius: 6px;
+        padding: .35rem .75rem;
+        font-size: .82rem;
+        color: var(--color-text, #e5e7eb);
+      }
+      .kpi-inline--warn { border-color: var(--color-warning, #f59e0b); }
+      .badge {
+        display: inline-block;
+        padding: .15rem .45rem;
+        border-radius: 4px;
+        font-size: .75rem;
+        font-weight: 600;
+      }
+      .badge--red    { background: rgba(239,68,68,.15);  color: #f87171; }
+      .badge--green  { background: rgba(34,197,94,.15);  color: #4ade80; }
+      .badge--yellow { background: rgba(234,179,8,.15);  color: #facc15; }
+      .badge--orange { background: rgba(249,115,22,.15); color: #fb923c; }
+      .badge--neutral{ background: rgba(156,163,175,.1); color: #9ca3af; }
+      .badge--blue   { background: rgba(59,130,246,.15); color: #60a5fa; }
+      .badge--gray   { background: rgba(156,163,175,.1); color: #9ca3af; font-weight: 400; }
+      .badge--mono   { background: rgba(156,163,175,.08); color: var(--color-text-muted); font-weight: 400; font-family: monospace; font-size: .7rem; }
+
+
+      .sub-section-label {
+        font-size: .78rem;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: var(--color-primary, #06b6d4);
+        margin: 1.75rem 0 .4rem;
+        padding: 0;
+      }
+      .sub-section-desc {
+        font-size: .8rem;
+        color: var(--color-text-muted, #9ca3af);
+        margin: 0 0 .5rem;
       }
       .table-container.table-view > table {
         width: max(1600px, 100%);
@@ -592,42 +712,6 @@
       }
       .view-toggle-btn.is-active { background: var(--color-surface); color: var(--color-text); }
 
-      /* ── Endpoint Gallery ────────────────────────────────────── */
-      .endpoint-gallery {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr));
-        gap: 14px; padding: 4px;
-      }
-      .endpoint-card {
-        background: var(--color-surface); border: 1px solid var(--color-border);
-        border-radius: 8px; overflow: hidden; cursor: pointer;
-        transition: border-color 0.15s;
-      }
-      .endpoint-card:hover { border-color: var(--color-primary); }
-      .endpoint-card__thumb {
-        width: 100%; height: 120px; object-fit: cover; display: block;
-        background: var(--color-surface-muted);
-      }
-      .endpoint-card__thumb-placeholder {
-        width: 100%; height: 120px; display: flex; align-items: center; justify-content: center;
-        background: var(--color-surface-muted); color: var(--color-text-muted); font-size: 0.75rem;
-      }
-      .endpoint-card__body { padding: 9px 11px; display: flex; flex-direction: column; gap: 5px; }
-      .endpoint-card__url {
-        font-size: 0.78rem; font-weight: 600; color: var(--color-text);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
-      .endpoint-card__row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-      .sc-badge { padding: 2px 6px; border-radius: 3px; font-size: 0.68rem; font-weight: 700; }
-      .sc-badge--2xx { background: rgba(34,197,94,0.15);  color: #22c55e; }
-      .sc-badge--3xx { background: rgba(59,130,246,0.15);  color: #3b82f6; }
-      .sc-badge--4xx { background: rgba(245,158,11,0.15);  color: #f59e0b; }
-      .sc-badge--5xx { background: rgba(239,68,68,0.15);   color: #ef4444; }
-      .tech-chip {
-        padding: 2px 5px; background: var(--color-surface-muted);
-        border: 1px solid var(--color-border); border-radius: 3px;
-        font-size: 0.64rem; color: var(--color-text-muted);
-      }
-
       /* ── Cert Expiry Colors ──────────────────────────────────── */
       .expiry-urgent { color: var(--color-danger); font-weight: 700; }
       .expiry-soon   { color: #f59e0b; font-weight: 600; }
@@ -656,14 +740,15 @@
 
       /* ── Executive Banner ────────────────────────────────────── */
       .exec-banner { display:grid; grid-template-columns:180px 1fr; gap:0; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:20px }
-      .exec-score-panel { background:var(--color-surface-muted); border-right:1px solid var(--color-border); padding:28px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px }
-      .exec-score-label { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; color:var(--color-text-muted) }
-      .exec-score-value { font-size:3.5rem; font-weight:800; line-height:1; letter-spacing:-0.03em }
-      .exec-score-value.score-critical { color:#ef4444 }
-      .exec-score-value.score-high     { color:#f97316 }
-      .exec-score-value.score-medium   { color:#f59e0b }
-      .exec-score-value.score-low      { color:#22c55e }
-      .exec-score-grade { font-size:0.8rem; font-weight:600; color:var(--color-text-muted) }
+      .exec-score-panel { background:var(--color-surface-muted); border-right:1px solid var(--color-border); padding:20px 24px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:0 }
+      .exec-score-label { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; color:var(--color-text-muted); margin-bottom:12px }
+      .exec-tier-row { display:flex; align-items:baseline; gap:6px; margin-bottom:8px }
+      .exec-tier-row:last-child { margin-bottom:0 }
+      .exec-tier-val { font-size:1.4rem; font-weight:700; line-height:1; color:var(--color-text) }
+      .exec-tier-val.cdn   { color:#06b6d4 }
+      .exec-tier-val.cloud { color:#a78bfa }
+      .exec-tier-val.onprem { color:#34d399 }
+      .exec-tier-lbl { font-size:0.72rem; color:var(--color-text-muted) }
       .exec-metrics { display:grid; grid-template-columns:repeat(4,1fr); padding:0 }
       .exec-metric-group { padding:20px; border-right:1px solid var(--color-border) }
       .exec-metric-group:last-child { border-right:none }
@@ -680,18 +765,136 @@
         .exec-metrics { grid-template-columns:repeat(2,1fr) }
         .exec-metric-group { border-right:none; border-bottom:1px solid var(--color-border) }
       }
+
+      /* ── Asset Topology Graph ── */
+      .ag-wrap { display:flex; flex-direction:column; gap:0; width:100% }
+      .ag-toolbar {
+        display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+        padding:12px 16px;
+        background:var(--color-surface); border:1px solid var(--color-border);
+        border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+      }
+      .ag-search {
+        width:180px; padding:6px 10px; font-size:12px; font-family:inherit;
+        background:var(--color-bg); color:var(--color-text);
+        border:1px solid var(--color-border); border-radius:6px; outline:none;
+      }
+      .ag-search:focus { border-color:var(--color-primary); box-shadow:0 0 0 2px rgba(6,182,212,0.18) }
+      .ag-filter-group { display:flex; flex-wrap:wrap; align-items:center; gap:5px }
+      .ag-filter-label { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--color-text-muted); margin-right:2px }
+      .ag-pill {
+        display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
+        font-size:11px; font-weight:500; color:var(--color-text-muted);
+        background:var(--color-bg); border:1px solid var(--color-border); border-radius:20px;
+        cursor:pointer; user-select:none; transition:all 0.15s;
+      }
+      .ag-pill:hover { border-color:var(--pill-color, var(--color-primary)); color:var(--color-text) }
+      .ag-pill:has(input:checked) { border-color:var(--pill-color, var(--color-primary)); color:var(--color-text); background:color-mix(in srgb, var(--pill-color, var(--color-primary)) 12%, var(--color-bg)) }
+      .ag-pill input { display:none }
+      .ag-pill-dot { width:8px; height:8px; border-radius:50%; background:var(--pill-color, var(--color-primary)); opacity:0.5; transition:opacity 0.15s }
+      .ag-pill:has(input:checked) .ag-pill-dot { opacity:1 }
+      .ag-pill--edge { padding:3px 7px }
+      .ag-stats { font-size:11px; color:var(--color-text-muted); font-variant-numeric:tabular-nums; margin-left:auto }
+      .ag-zoom-ctrls { display:flex; gap:4px }
+      .ag-zoom-btn {
+        width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+        font-size:14px; font-weight:600; color:var(--color-text-muted);
+        background:var(--color-bg); border:1px solid var(--color-border); border-radius:6px;
+        cursor:pointer; transition:all 0.15s;
+      }
+      .ag-zoom-btn:hover { border-color:var(--color-primary); color:var(--color-text) }
+      .ag-large-banner {
+        padding:8px 16px; font-size:12px; color:var(--color-warning);
+        background:color-mix(in srgb, var(--color-warning) 8%, var(--color-surface));
+        border-left:1px solid var(--color-border); border-right:1px solid var(--color-border);
+        text-align:center;
+      }
+      .ag-body { display:flex; position:relative; border:1px solid var(--color-border); border-top:none; border-radius:0 0 var(--radius-lg) var(--radius-lg); overflow:hidden; background:var(--color-bg) }
+      .ag-canvas { flex:1; height:680px; display:block; cursor:grab; background:var(--color-bg) }
+      .ag-canvas:active { cursor:grabbing }
+      .ag-canvas .ag-edge { stroke-opacity:0.35; transition:stroke-opacity 0.25s }
+      .ag-canvas .ag-edge--takeover { stroke-width:2.5 }
+      .ag-canvas .ag-node-shape { transition:opacity 0.25s, filter 0.25s; cursor:pointer }
+      .ag-canvas .ag-node-shape:hover { filter:url(#ag-glow) }
+      .ag-canvas .ag-node-label { font-family:'Inter',sans-serif; fill:var(--color-text-muted); pointer-events:none; font-size:9px; text-anchor:middle; opacity:0; transition:opacity 0.2s }
+      .ag-canvas.ag-labels-visible .ag-node-label { opacity:1 }
+
+      /* Highlight / dim states */
+      .ag-canvas .ag-node-shape.ag--dimmed { opacity:0.08 }
+      .ag-canvas .ag-node-label.ag--dimmed { opacity:0 }
+      .ag-canvas .ag-edge.ag--dimmed { stroke-opacity:0.03 }
+      .ag-canvas .ag-node-shape.ag--highlighted { filter:url(#ag-glow-strong) }
+      .ag-canvas .ag-node-shape.ag--selected { filter:url(#ag-glow-strong); stroke:#fff; stroke-width:2 }
+
+      /* Takeover pulse */
+      @keyframes ag-pulse-red {
+        0%, 100% { filter:drop-shadow(0 0 4px #ef4444) }
+        50% { filter:drop-shadow(0 0 12px #ef4444) drop-shadow(0 0 24px rgba(239,68,68,0.4)) }
+      }
+      .ag-canvas .ag-node-shape.ag--takeover { animation:ag-pulse-red 2s ease-in-out infinite }
+
+      /* Info panel */
+      .ag-info-panel {
+        position:absolute; top:0; right:0; width:320px; height:100%;
+        background:color-mix(in srgb, var(--color-surface) 92%, transparent);
+        backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+        border-left:1px solid var(--color-border);
+        padding:20px 18px; overflow-y:auto;
+        transform:translateX(100%); transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);
+        z-index:10;
+      }
+      .ag-info-panel.ag-info--open { transform:translateX(0) }
+      .ag-info-close {
+        position:absolute; top:12px; right:12px; width:24px; height:24px;
+        display:flex; align-items:center; justify-content:center;
+        background:none; border:none; color:var(--color-text-muted); font-size:18px;
+        cursor:pointer; border-radius:4px;
+      }
+      .ag-info-close:hover { background:var(--color-border); color:var(--color-text) }
+      .ag-info-title { margin:0 0 6px; font-size:14px; font-weight:600; color:var(--color-text); word-break:break-all }
+      .ag-info-type-badge {
+        display:inline-block; padding:2px 8px; font-size:10px; font-weight:600; text-transform:uppercase;
+        letter-spacing:0.06em; border-radius:4px; margin-bottom:12px;
+      }
+      .ag-info-meta { font-size:12px; color:var(--color-text-muted); line-height:1.6 }
+      .ag-info-meta dt { font-weight:600; color:var(--color-text); float:left; clear:left; width:90px; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+      .ag-info-meta dd { margin:0 0 4px 96px; word-break:break-all }
+      .ag-info-conn-heading { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--color-text-muted); margin:16px 0 8px }
+      .ag-info-connections { font-size:12px; color:var(--color-text-muted); line-height:1.7 }
+      .ag-info-conn-type { font-weight:600; color:var(--color-text); font-size:11px; margin-top:8px; display:block }
+      .ag-info-conn-item { display:block; padding-left:8px; border-left:2px solid var(--color-border); margin:2px 0 }
+      .ag-info-conn-item code { font-size:11px; font-family:'JetBrains Mono',monospace; color:var(--color-primary) }
+
+      /* Legend */
+      .ag-legend {
+        display:flex; flex-wrap:wrap; align-items:center; gap:14px;
+        padding:10px 16px; font-size:11px; color:var(--color-text-muted);
+        border:1px solid var(--color-border); border-top:none;
+        border-radius:0 0 var(--radius-lg) var(--radius-lg);
+        background:var(--color-surface); margin-bottom:24px;
+      }
+      .ag-legend-item { display:inline-flex; align-items:center; gap:5px }
+      .ag-legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0 }
+      .ag-legend-dot--diamond { border-radius:2px; transform:rotate(45deg); width:9px; height:9px }
+      .ag-legend-dot--hex { border-radius:2px; clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); width:11px; height:11px }
+      .ag-legend-dot--square { border-radius:2px; width:9px; height:9px }
+      .ag-legend-dot--tri { border-radius:0; width:0; height:0; background:none !important; border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:10px solid #22c55e }
+      .ag-legend-dot--penta { clip-path:polygon(50% 0%,100% 38%,82% 100%,18% 100%,0% 38%); width:11px; height:11px }
+      .ag-legend-dot--rect { border-radius:3px; width:14px; height:9px }
     </style>
     <script>
-      const screenshotMap =
-      %%SCREENSHOT_MAP%%
-      ;
       const VIEW_LABELS = Object.freeze({
         overview: "Overview",
         domain: "Domain Intelligence",
         endpoints: "Application Endpoints",
         ips: "IP Addresses",
+        mail: "Mail Infrastructure",
         tls: "TLS Certificates",
-        cloud: "Cloud Infrastructure"
+        cloud: "Cloud Infrastructure",
+        "seed-expansion": "Internet Footprint",
+        "saas-cloud": "SaaS Tenants",
+        "third-parties": "Third Parties",
+        "asset-topology": "Asset Topology"
       });
       const TABLE_VIEW_CLASSNAMES = Object.freeze(Object.keys(VIEW_LABELS).map(view => `table-view--${view}`));
       const COLUMN_CLASS_MAP = Object.freeze([
@@ -770,12 +973,13 @@
         ["col-cloud"] // 72
       ]);
     </script>
+  <style id="col-vis-css"></style>
   </head>
   <body>
     <header class="header">
       <div class="header__content">
         <div class="header__titles">
-          <h1>● Orbis — Attack Surface Intelligence</h1>
+          <h1>Orbis - External Attack Surface Intelligence</h1>
           <p class="header__subtitle">Full-Spectrum Attack Surface Intelligence · Unified visibility across internet-exposed assets, live services, and defensive readiness indicators.</p>
         </div>
         <div class="header__actions">
@@ -807,8 +1011,13 @@
               <button type="button" class="report-nav__item" data-view="domain" aria-pressed="false">Domain Intelligence</button>
               <button type="button" class="report-nav__item" data-view="endpoints" aria-pressed="false">Application Endpoints</button>
               <button type="button" class="report-nav__item" data-view="ips" aria-pressed="false">IP Addresses</button>
+              <button type="button" class="report-nav__item" data-view="mail" aria-pressed="false">Mail Infrastructure</button>
               <button type="button" class="report-nav__item" data-view="tls" aria-pressed="false">TLS Certificates</button>
               <button type="button" class="report-nav__item" data-view="cloud" aria-pressed="false">Cloud Infrastructure</button>
+              <button type="button" class="report-nav__item" data-view="seed-expansion" aria-pressed="false">Internet Footprint</button>
+              <button type="button" class="report-nav__item" data-view="saas-cloud" aria-pressed="false">SaaS Tenants</button>
+              <button type="button" class="report-nav__item" data-view="third-parties" aria-pressed="false">Third Parties</button>
+              <button type="button" class="report-nav__item" data-view="asset-topology" aria-pressed="false">Asset Topology</button>
             </div>
           </nav>
         </aside>
@@ -818,34 +1027,35 @@
         <div class="report-content">
           <div class="exec-banner view-block" data-view-group="overview" id="exec-banner">
             <div class="exec-score-panel">
-              <span class="exec-score-label">Risk Score</span>
-              <span class="exec-score-value" id="exec-score-value">—</span>
-              <span class="exec-score-grade" id="exec-score-grade">—</span>
+              <span class="exec-score-label">Asset Tiers</span>
+              <div class="exec-tier-row"><span class="exec-tier-val cdn" id="em-tier-cdn">-</span><span class="exec-tier-lbl">CDN tier</span></div>
+              <div class="exec-tier-row"><span class="exec-tier-val cloud" id="em-tier-cloud">-</span><span class="exec-tier-lbl">Cloud tier</span></div>
+              <div class="exec-tier-row"><span class="exec-tier-val onprem" id="em-tier-onprem">-</span><span class="exec-tier-lbl">On-Prem tier</span></div>
             </div>
             <div class="exec-metrics">
               <div class="exec-metric-group">
                 <p class="exec-metric-group-title">Attack Surface</p>
-                <div class="exec-metric-row"><span class="exec-metric-val" id="em-subdomains">—</span><span class="exec-metric-lbl">subdomains</span></div>
-                <div class="exec-metric-row"><span class="exec-metric-val accent" id="em-live">—</span><span class="exec-metric-lbl">live hosts</span></div>
-                <div class="exec-metric-row"><span class="exec-metric-val" id="em-web">—</span><span class="exec-metric-lbl">web endpoints</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-subdomains">-</span><span class="exec-metric-lbl">subdomains</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val accent" id="em-live">-</span><span class="exec-metric-lbl">live hosts</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-web">-</span><span class="exec-metric-lbl">web endpoints</span></div>
               </div>
               <div class="exec-metric-group">
                 <p class="exec-metric-group-title">Email Security</p>
-                <div class="exec-metric-row"><span class="exec-metric-val" id="em-spf">—</span><span class="exec-metric-lbl">SPF configured</span></div>
-                <div class="exec-metric-row"><span class="exec-metric-val" id="em-dmarc">—</span><span class="exec-metric-lbl">DMARC configured</span></div>
-                <div class="exec-metric-row"><span class="exec-metric-val" id="em-dkim">—</span><span class="exec-metric-lbl">DKIM configured</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-spf">-</span><span class="exec-metric-lbl">SPF configured</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-dmarc">-</span><span class="exec-metric-lbl">DMARC configured</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-dkim">-</span><span class="exec-metric-lbl">DKIM configured</span></div>
               </div>
               <div class="exec-metric-group">
                 <p class="exec-metric-group-title">Web Security</p>
-                <div class="exec-metric-row"><span class="exec-metric-val" id="em-hsts">—</span><span class="exec-metric-lbl">HSTS enabled</span></div>
-                <div class="exec-metric-row"><span class="exec-metric-val danger" id="em-logins">—</span><span class="exec-metric-lbl">login panels found</span></div>
-                <div class="exec-metric-row"><span class="exec-metric-val warning" id="em-takeover">—</span><span class="exec-metric-lbl">takeover risks</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-hsts">-</span><span class="exec-metric-lbl">HSTS enabled</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val danger" id="em-logins">-</span><span class="exec-metric-lbl">login panels found</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val warning" id="em-takeover">-</span><span class="exec-metric-lbl">takeover risks</span></div>
               </div>
               <div class="exec-metric-group">
                 <p class="exec-metric-group-title">Network / TLS</p>
-                <div class="exec-metric-row"><span class="exec-metric-val" id="em-open-ports">—</span><span class="exec-metric-lbl">open ports</span></div>
-                <div class="exec-metric-row"><span class="exec-metric-val danger" id="em-cert-expiring">—</span><span class="exec-metric-lbl">certs expiring &lt;30d</span></div>
-                <div class="exec-metric-row"><span class="exec-metric-val" id="em-cloud-assets">—</span><span class="exec-metric-lbl">cloud assets</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-open-ports">-</span><span class="exec-metric-lbl">open ports</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val danger" id="em-cert-expiring">-</span><span class="exec-metric-lbl">certs expiring &lt;30d</span></div>
+                <div class="exec-metric-row"><span class="exec-metric-val" id="em-cloud-assets">-</span><span class="exec-metric-lbl">cloud assets</span></div>
               </div>
             </div>
           </div>
@@ -891,9 +1101,14 @@
             </div>
           </section>
 
+          <section class="focus-header view-block" data-view-group="overview">
+            <span class="view-indicator">Overview</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Combined intelligence master view - all 31 pipeline stages consolidated into a single filterable table across every asset discovered.</p>
+          </section>
           <section class="table-top-controls view-block" data-view-group="overview">
             <input type="text" id="searchBox" placeholder="Search anything here...)" />
-            <div class="hint">Hover the Attack Surface Score to review the contextual risk factors.</div>
+            <div class="hint">Click the Attack Surface Score to review contextual risk factors for that asset.</div>
+            <button type="button" class="about-section-btn" data-section="overview">ⓘ About</button>
             <div class="table-controls">
               <label for="rowsPerPageSelect">Rows per page</label>
               <select id="rowsPerPageSelect">
@@ -911,6 +1126,7 @@
           </section>
           <section class="table-top-controls view-block" data-view-group="domain">
             <input type="text" class="table-search-input" data-table-id="domain-table" placeholder="Search Domain Intelligence..." />
+            <button type="button" class="about-section-btn" data-section="domain">ⓘ About</button>
           </section>
 
         <div class="table-scroll-controls view-block" data-view-group="domain" role="group" aria-label="Domain intelligence table scroll controls">
@@ -921,25 +1137,32 @@
           <table id="domain-table" class="focus-table focus-table--domains">
               <thead>
                 <tr>
-                  <th>Domain Name</th>
-                  <th>Resolution Status</th>
-                  <th>A Record</th>
-                  <th>AAAA Record</th>
-                  <th>NS Records</th>
-                  <th>MX Records</th>
-                  <th>CNAME Records</th>
-                  <th>TXT Records (SPF/DMARC)</th>
-                  <th>SOA Record</th>
-                  <th>SRV Records</th>
-                  <th>CAA Records</th>
-                  <th>Zone Transfer</th>
-                  <th>WHOIS Registrar &amp; Dates</th>
-                  <th>Subdomain Category/Keyword</th>
+                  <th data-col-key="domain-name">Domain Name</th>
+                  <th data-col-key="resolution-status">Resolution Status</th>
+                  <th data-col-key="a-record">A Record</th>
+                  <th data-col-key="aaaa-record">AAAA Record</th>
+                  <th data-col-key="ns-records">NS Records / Cluster</th>
+                  <th data-col-key="cname-records">CNAME Records</th>
+                  <th data-col-key="txt-records">TXT Records</th>
+                  <th data-col-key="soa-record">SOA Record</th>
+                  <th data-col-key="srv-records">SRV Records</th>
+                  <th data-col-key="caa-records">CAA Records</th>
+                  <th data-col-key="zone-transfer">Zone Transfer</th>
+                  <th data-col-key="registrar">Registrar</th>
+                  <th data-col-key="domain-created">Domain Created</th>
+                  <th data-col-key="domain-expires">Domain Expires</th>
+                  <th data-col-key="domain-age">Domain Age</th>
+                  <th data-col-key="bimi">BIMI</th>
+                  <th data-col-key="mta-sts">MTA-STS</th>
+                  <th data-col-key="dane-tlsa">DANE/TLSA</th>
+                  <th data-col-key="whois-summary">WHOIS Summary</th>
+                  <th data-col-key="subdomain-category">Subdomain Category/Keyword</th>
                 </tr>
               </thead>
               <tbody id="domain-table-body"></tbody>
             </table>
           </div>
+          <div id="domain-pagination" class="section-pagination view-block" data-view-group="domain"></div>
 
           <section class="focus-header view-block" data-view-group="endpoints">
             <span class="view-indicator">Application Endpoints</span>
@@ -948,13 +1171,9 @@
           <section class="table-top-controls view-block" data-view-group="endpoints">
             <div class="endpoints-toolbar">
               <input type="text" class="table-search-input" data-table-id="endpoints-table" placeholder="Search Application Endpoints..." />
-              <div class="view-toggle" aria-label="View mode">
-                <button class="view-toggle-btn is-active" data-endpoints-view="table" type="button">Table</button>
-                <button class="view-toggle-btn" data-endpoints-view="gallery" type="button">Gallery</button>
-              </div>
             </div>
+            <button type="button" class="about-section-btn" data-section="endpoints">ⓘ About</button>
           </section>
-          <div id="endpoints-gallery" class="endpoint-gallery view-block" data-view-group="endpoints" style="display:none"></div>
 
         <div class="table-scroll-controls view-block" data-view-group="endpoints" role="group" aria-label="Application endpoints table scroll controls">
           <button type="button" class="table-scroll-button" data-direction="left">◀</button>
@@ -964,26 +1183,26 @@
           <table id="endpoints-table" class="focus-table focus-table--endpoints">
               <thead>
                 <tr>
-                  <th>Domain / Subdomain</th>
-                  <th>Endpoint URL</th>
-                  <th>HTTP Status</th>
-                  <th>Final Redirect URL</th>
-                  <th>Homepage Title</th>
-                  <th>Screenshot</th>
-                  <th>Web Server</th>
-                  <th>Technology Stack</th>
-                  <th>Content Length</th>
-                  <th>Login Interface</th>
-                  <th>API Detected</th>
-                  <th>Colleague Facing Portal</th>
-                  <th>Security Headers</th>
-                  <th>WAF / CDN Presence</th>
-                  <th>Crawled Links Count</th>
+                  <th data-col-key="ep-domain">Domain / Subdomain</th>
+                  <th data-col-key="ep-url">Endpoint URL</th>
+                  <th data-col-key="ep-status">HTTP Status</th>
+                  <th data-col-key="ep-redirect">Final Redirect URL</th>
+                  <th data-col-key="ep-title">Homepage Title</th>
+                  <th data-col-key="ep-webserver">Web Server</th>
+                  <th data-col-key="ep-techstack">Technology Stack</th>
+                  <th data-col-key="ep-contentlength">Content Length</th>
+                  <th data-col-key="ep-login">Login Interface</th>
+                  <th data-col-key="ep-api">API Detected</th>
+                  <th data-col-key="ep-internal">Colleague Facing Portal</th>
+                  <th data-col-key="ep-secheaders">Security Headers</th>
+                  <th data-col-key="ep-waf">WAF / CDN Presence</th>
+                  <th data-col-key="ep-crawledlinks">Crawled Links Count</th>
                 </tr>
               </thead>
               <tbody id="endpoints-table-body"></tbody>
             </table>
           </div>
+          <div id="endpoints-pagination" class="section-pagination view-block" data-view-group="endpoints"></div>
 
           <section class="focus-header view-block" data-view-group="ips">
             <span class="view-indicator">IP Addresses</span>
@@ -991,6 +1210,7 @@
           </section>
           <section class="table-top-controls view-block" data-view-group="ips">
             <input type="text" class="table-search-input" data-table-id="ip-table" placeholder="Search IP Intelligence..." />
+            <button type="button" class="about-section-btn" data-section="ips">ⓘ About</button>
           </section>
 
         <div class="table-scroll-controls view-block" data-view-group="ips" role="group" aria-label="IP addresses table scroll controls">
@@ -1001,18 +1221,53 @@
           <table id="ip-table" class="focus-table focus-table--ips">
               <thead>
                 <tr>
-                  <th>IP Address</th>
-                  <th>Hostnames on IP</th>
-                  <th>Reverse DNS (PTR)</th>
-                  <th>ASN / Provider</th>
-                  <th>Network Block</th>
-                  <th>Open Ports / Services</th>
-                  <th>Notable Ports / Services</th>
+                  <th data-col-key="ip-address">IP Address</th>
+                  <th data-col-key="ip-hostnames">Hostnames on IP</th>
+                  <th data-col-key="ip-ptr">Reverse DNS (PTR)</th>
+                  <th data-col-key="ip-asn">ASN / Provider</th>
+                  <th data-col-key="ip-netblock">Network Block</th>
+                  <th data-col-key="ip-openports">Open Ports / Services</th>
+                  <th data-col-key="ip-notableports">Notable Ports / Services</th>
+                  <th data-col-key="ip-shodan">Shodan Services</th>
                 </tr>
               </thead>
               <tbody id="ip-table-body"></tbody>
             </table>
           </div>
+          <div id="ips-pagination" class="section-pagination view-block" data-view-group="ips"></div>
+
+          <section class="focus-header view-block" data-view-group="mail">
+            <span class="view-indicator">Mail Infrastructure</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Email security controls, MX routing, and mail provider detection per domain.</p>
+          </section>
+          <section class="table-top-controls view-block" data-view-group="mail">
+            <input type="text" class="table-search-input" data-table-id="mail-table" placeholder="Search Mail Infrastructure..." />
+            <button type="button" class="about-section-btn" data-section="mail">ⓘ About</button>
+          </section>
+          <div class="table-scroll-controls view-block" data-view-group="mail" role="group" aria-label="Mail infrastructure table scroll controls">
+            <button type="button" class="table-scroll-button" data-direction="left">◀</button>
+            <button type="button" class="table-scroll-button" data-direction="right">▶</button>
+          </div>
+          <div class="table-container view-block" data-view-group="mail">
+            <table id="mail-table" class="focus-table focus-table--mail">
+              <thead>
+                <tr>
+                  <th data-col-key="mail-domain">Domain</th>
+                  <th data-col-key="mail-riskscore">Email Risk Score</th>
+                  <th data-col-key="mail-mx">MX Records</th>
+                  <th data-col-key="mail-provider">MX Provider</th>
+                  <th data-col-key="mail-spf">SPF</th>
+                  <th data-col-key="mail-dkim">DKIM</th>
+                  <th data-col-key="mail-dmarc">DMARC</th>
+                  <th data-col-key="mail-bimi">BIMI</th>
+                  <th data-col-key="mail-mta-sts">MTA-STS</th>
+                  <th data-col-key="mail-dane">DANE/TLSA</th>
+                </tr>
+              </thead>
+              <tbody id="mail-table-body"></tbody>
+            </table>
+          </div>
+          <div id="mail-pagination" class="section-pagination view-block" data-view-group="mail"></div>
 
           <section class="focus-header view-block" data-view-group="tls">
             <span class="view-indicator">TLS Certificates</span>
@@ -1020,6 +1275,7 @@
           </section>
           <section class="table-top-controls view-block" data-view-group="tls">
             <input type="text" class="table-search-input" data-table-id="tls-table" placeholder="Search TLS Certificates..." />
+            <button type="button" class="about-section-btn" data-section="tls">ⓘ About</button>
           </section>
 
         <div class="table-scroll-controls view-block" data-view-group="tls" role="group" aria-label="TLS certificates table scroll controls">
@@ -1030,25 +1286,32 @@
           <table id="tls-table" class="focus-table focus-table--tls">
               <thead>
                 <tr>
-                  <th>Asset</th>
-                  <th>IP Address</th>
-                  <th>Port</th>
-                  <th>TLS Version</th>
-                  <th>Cipher</th>
-                  <th>Not After</th>
-                  <th>Days Until Expiry</th>
-                  <th>Subject DN</th>
-                  <th>Subject CN</th>
-                  <th>Subject AN</th>
-                  <th>Serial</th>
-                  <th>Issuer DN</th>
-                  <th>Issuer CN</th>
-                  <th>Issuer Org</th>
+                  <th data-col-key="tls-asset">Asset</th>
+                  <th data-col-key="tls-certscore">Cert Score</th>
+                  <th data-col-key="tls-ip">IP Address</th>
+                  <th data-col-key="tls-port">Port</th>
+                  <th data-col-key="tls-version">TLS Version</th>
+                  <th data-col-key="tls-cipher">Cipher</th>
+                  <th data-col-key="tls-notafter">Not After</th>
+                  <th data-col-key="tls-expiry">Days Until Expiry</th>
+                  <th data-col-key="tls-subjectdn">Subject DN</th>
+                  <th data-col-key="tls-subjectcn">Subject CN</th>
+                  <th data-col-key="tls-subjectan">Subject AN</th>
+                  <th data-col-key="tls-serial">Serial</th>
+                  <th data-col-key="tls-issuerdn">Issuer DN</th>
+                  <th data-col-key="tls-issuercn">Issuer CN</th>
+                  <th data-col-key="tls-issuerorg">Issuer Org</th>
+                  <th data-col-key="tls-keyalgo">Key Algorithm</th>
+                  <th data-col-key="tls-keysize">Key Size</th>
+                  <th data-col-key="tls-wildcard">Wildcard Cert</th>
+                  <th data-col-key="tls-selfsigned">Self-Signed</th>
+                  <th data-col-key="tls-catype">CA Type</th>
                 </tr>
               </thead>
               <tbody id="tls-table-body"></tbody>
             </table>
           </div>
+          <div id="tls-pagination" class="section-pagination view-block" data-view-group="tls"></div>
 
           <section class="focus-header view-block" data-view-group="cloud">
             <span class="view-indicator">Cloud Infrastructure</span>
@@ -1056,6 +1319,7 @@
           </section>
           <section class="table-top-controls view-block" data-view-group="cloud">
             <input type="text" class="table-search-input" data-table-id="cloud-table" placeholder="Search Cloud Infrastructure..." />
+            <button type="button" class="about-section-btn" data-section="cloud">ⓘ About</button>
           </section>
 
         <div class="table-scroll-controls view-block" data-view-group="cloud" role="group" aria-label="Cloud infrastructure table scroll controls">
@@ -1066,22 +1330,207 @@
           <table id="cloud-table" class="focus-table focus-table--cloud">
               <thead>
                 <tr>
-                  <th>Asset</th>
-                  <th>Resource Type</th>
-                  <th>Cloud Provider</th>
-                  <th>Service Family</th>
-                  <th>Resource Identifier</th>
-                  <th>Load Balancer / Traffic Manager</th>
-                  <th>WAF / CDN Shielding</th>
-                  <th>Storage</th>
-                  <th>Evidence</th>
+                  <th data-col-key="cloud-asset">Asset</th>
+                  <th data-col-key="cloud-resourcetype">Resource Type</th>
+                  <th data-col-key="cloud-provider">Cloud Provider</th>
+                  <th data-col-key="cloud-servicefamily">Service Family</th>
+                  <th data-col-key="cloud-resourceid">Resource Identifier</th>
+                  <th data-col-key="cloud-lb">Load Balancer / Traffic Manager</th>
+                  <th data-col-key="cloud-waf">WAF / CDN Shielding</th>
+                  <th data-col-key="cloud-storage">Storage</th>
+                  <th data-col-key="cloud-evidence">Evidence</th>
                 </tr>
               </thead>
               <tbody id="cloud-table-body"></tbody>
             </table>
           </div>
+          <div id="cloud-pagination" class="section-pagination view-block" data-view-group="cloud"></div>
 
-          <div class="table-scroll-controls view-block" data-view-group="overview" role="group" aria-label="Overview table scroll controls">
+            <!-- ── Internet Footprint (Seed Expansion) ──────────────── -->
+          <section class="focus-header view-block" data-view-group="seed-expansion">
+            <span class="view-indicator">Internet Footprint</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Autonomous systems and network ranges owned by the organisation, domains found in certificate transparency logs, and DNS-resolved alternative domain extensions.</p>
+          </section>
+          <section class="table-top-controls view-block" data-view-group="seed-expansion">
+            <button type="button" class="about-section-btn" data-section="seed-expansion">ⓘ About</button>
+          </section>
+
+          <p class="sub-section-label view-block" data-view-group="seed-expansion">Autonomous Systems &amp; Network Ranges</p>
+          <div class="table-container view-block" data-view-group="seed-expansion">
+            <table id="seed-cidr-table" class="focus-table">
+              <thead><tr><th data-col-key="seed-asn">ASN</th><th data-col-key="seed-netname">Network Name</th><th data-col-key="seed-prefix">Announced Prefix</th><th data-col-key="seed-domain">Seed Domain</th></tr></thead>
+              <tbody id="seed-cidr-body"></tbody>
+            </table>
+          </div>
+
+          <p class="sub-section-label view-block" data-view-group="seed-expansion">Certificate Transparency Domains</p>
+          <p class="sub-section-desc view-block" data-view-group="seed-expansion">Domains issued to this organisation's name via crt.sh - may include internal and legacy assets not in your primary scope.</p>
+          <div class="table-container view-block" data-view-group="seed-expansion">
+            <table id="seed-org-table" class="focus-table">
+              <thead><tr><th data-col-key="ct-hostname">Hostname</th><th data-col-key="ct-source">Source</th></tr></thead>
+              <tbody id="seed-org-body"></tbody>
+            </table>
+          </div>
+
+          <p class="sub-section-label view-block" data-view-group="seed-expansion">Related Domain Extensions</p>
+          <p class="sub-section-desc view-block" data-view-group="seed-expansion">Same brand name registered under alternative TLDs (.io, .co, .app, etc.) that resolve via DNS - potential shadow assets or squatted domains.</p>
+          <div class="table-container view-block" data-view-group="seed-expansion">
+            <table id="seed-tld-table" class="focus-table">
+              <thead><tr><th data-col-key="tld-domain">Domain</th><th data-col-key="tld-resolved">Resolved</th></tr></thead>
+              <tbody id="seed-tld-body"></tbody>
+            </table>
+          </div>
+
+          <p class="sub-section-label view-block" data-view-group="seed-expansion">WHOIS Registrant Pivot</p>
+          <div class="table-container view-block" data-view-group="seed-expansion">
+            <table id="seed-whois-table" class="focus-table">
+              <thead><tr><th data-col-key="whois-domain">Domain</th><th data-col-key="whois-regemail">Registrant Email</th><th data-col-key="whois-confidence">Confidence</th></tr></thead>
+              <tbody id="seed-whois-body"></tbody>
+            </table>
+          </div>
+
+          <!-- ── SaaS Tenants ────────────────────────────────────────── -->
+          <section class="focus-header view-block" data-view-group="saas-cloud">
+            <span class="view-indicator">SaaS Tenants</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Detected SaaS platform tenants for this organisation. Each entry represents a probed URL in the form <code>{slug}.platform.com</code> - a non-404 response confirms the tenant exists. Unreachable services (000) are excluded.</p>
+          </section>
+          <section class="table-top-controls view-block" data-view-group="saas-cloud">
+            <button type="button" class="about-section-btn" data-section="saas-cloud">ⓘ About</button>
+          </section>
+
+          <p class="sub-section-label view-block" data-view-group="saas-cloud">Active SaaS Tenants</p>
+          <div class="table-container view-block" data-view-group="saas-cloud">
+            <table id="saas-table" class="focus-table">
+              <thead><tr><th data-col-key="saas-service">Service</th><th data-col-key="saas-url">Tenant URL</th><th data-col-key="saas-status">HTTP Status</th></tr></thead>
+              <tbody id="saas-table-body"></tbody>
+            </table>
+          </div>
+
+          <p class="sub-section-label view-block" data-view-group="saas-cloud">Open / Accessible Cloud Buckets</p>
+          <div class="table-container view-block" data-view-group="saas-cloud">
+            <table id="open-buckets-table" class="focus-table">
+              <thead><tr><th data-col-key="bucket-url">Bucket URL</th><th data-col-key="bucket-provider">Provider</th><th data-col-key="bucket-status">Status</th><th data-col-key="bucket-slug">Slug Variant</th></tr></thead>
+              <tbody id="open-buckets-body"></tbody>
+            </table>
+          </div>
+
+          <!-- ── Third Parties ───────────────────────────────────────────── -->
+          <section class="focus-header view-block" data-view-group="third-parties">
+            <span class="view-indicator">Third-Party Vendors</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Vendor dependency map across all attack surfaces - CSP, JavaScript, DNS, and HTTP headers.</p>
+          </section>
+          <section class="table-top-controls view-block" data-view-group="third-parties">
+            <button type="button" class="about-section-btn" data-section="third-parties">ⓘ About</button>
+          </section>
+          <p class="sub-section-label view-block" data-view-group="third-parties">Vendor Summary</p>
+          <p class="sub-section-desc view-block" data-view-group="third-parties">Third-party services discovered across all surfaces - CSP headers, JavaScript analysis, DNS records (MX/SPF/CNAME), and HTTP response headers.</p>
+          <div class="table-container view-block" data-view-group="third-parties">
+            <table id="tpi-summary-table" class="focus-table">
+              <thead><tr><th data-col-key="tpi-category">Category</th><th data-col-key="tpi-vendors">Vendors Found</th><th data-col-key="tpi-maxrisk">Max Risk</th></tr></thead>
+              <tbody id="tpi-summary-body"></tbody>
+            </table>
+          </div>
+
+          <p class="sub-section-label view-block" data-view-group="third-parties">All Third-Party Vendors</p>
+          <div class="table-container view-block" data-view-group="third-parties">
+            <table id="tpi-detail-table" class="focus-table">
+              <thead><tr><th data-col-key="tpi-service">Service</th><th data-col-key="tpi-domain">Domain</th><th data-col-key="tpi-cat">Category</th><th data-col-key="tpi-risk">Risk</th><th data-col-key="tpi-evidence">Evidence (Sources)</th></tr></thead>
+              <tbody id="tpi-detail-body"></tbody>
+            </table>
+          </div>
+
+          <!-- ── Asset Topology ── -->
+          <section class="focus-header view-block" data-view-group="asset-topology">
+            <span class="view-indicator">Asset Topology</span>
+            <p class="focus-description">&nbsp;&nbsp;&nbsp;Interactive graph of all discovered assets and their relationships - domains, IPs, ASNs, certificates, vendors, and more.</p>
+            <button type="button" class="about-section-btn" data-section="asset-topology">ⓘ About</button>
+          </section>
+          <div class="view-block ag-wrap" data-view-group="asset-topology">
+            <div class="ag-toolbar">
+              <input type="text" id="ag-search" class="ag-search" placeholder="Search nodes…" autocomplete="off" />
+              <div class="ag-filter-group">
+                <span class="ag-filter-label">Nodes</span>
+                <label class="ag-pill" style="--pill-color:#06b6d4"><input type="checkbox" data-ag-node="dom" checked /><span class="ag-pill-dot"></span>Domain</label>
+                <label class="ag-pill" style="--pill-color:#a78bfa"><input type="checkbox" data-ag-node="ip" checked /><span class="ag-pill-dot"></span>IP</label>
+                <label class="ag-pill" style="--pill-color:#64748b"><input type="checkbox" data-ag-node="asn" checked /><span class="ag-pill-dot"></span>ASN</label>
+                <label class="ag-pill" style="--pill-color:#3b82f6"><input type="checkbox" data-ag-node="ns" checked /><span class="ag-pill-dot"></span>NS</label>
+                <label class="ag-pill" style="--pill-color:#22c55e"><input type="checkbox" data-ag-node="mx" checked /><span class="ag-pill-dot"></span>MX</label>
+                <label class="ag-pill" style="--pill-color:#f97316"><input type="checkbox" data-ag-node="cloud" checked /><span class="ag-pill-dot"></span>Cloud</label>
+                <label class="ag-pill" style="--pill-color:#ec4899"><input type="checkbox" data-ag-node="cert" checked /><span class="ag-pill-dot"></span>Cert</label>
+                <label class="ag-pill" style="--pill-color:#eab308"><input type="checkbox" data-ag-node="vendor" checked /><span class="ag-pill-dot"></span>Vendor</label>
+              </div>
+              <div class="ag-filter-group">
+                <span class="ag-filter-label">Edges</span>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#06b6d4"><input type="checkbox" data-ag-edge="dns" checked />DNS</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#2dd4bf"><input type="checkbox" data-ag-edge="cname" checked />CNAME</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#3b82f6"><input type="checkbox" data-ag-edge="ns" checked />NS</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#22c55e"><input type="checkbox" data-ag-edge="mx" checked />MX</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#64748b"><input type="checkbox" data-ag-edge="asn" checked />ASN</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#f97316"><input type="checkbox" data-ag-edge="cloud" checked />Cloud</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#ec4899"><input type="checkbox" data-ag-edge="san" checked />TLS SAN</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#eab308"><input type="checkbox" data-ag-edge="vendor" checked />Vendor</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#ef4444"><input type="checkbox" data-ag-edge="takeover" checked />Takeover</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#71717a"><input type="checkbox" data-ag-edge="redirect" checked />Redirect</label>
+                <label class="ag-pill ag-pill--edge" style="--pill-color:#f472b6"><input type="checkbox" data-ag-edge="favicon" checked />Favicon</label>
+              </div>
+              <span id="ag-stats" class="ag-stats"></span>
+              <div class="ag-zoom-ctrls">
+                <button type="button" id="ag-zoom-in" class="ag-zoom-btn" title="Zoom in">+</button>
+                <button type="button" id="ag-zoom-out" class="ag-zoom-btn" title="Zoom out">−</button>
+                <button type="button" id="ag-zoom-fit" class="ag-zoom-btn" title="Fit all">⊡</button>
+                <button type="button" id="ag-zoom-reset" class="ag-zoom-btn" title="Reset layout">↺</button>
+              </div>
+            </div>
+            <div id="ag-large-banner" class="ag-large-banner" style="display:none">
+              Simplified view - large graph detected. Toggle node/edge layers to expand.
+            </div>
+            <div class="ag-body">
+              <svg id="asset-graph-svg" class="ag-canvas">
+                <defs>
+                  <filter id="ag-glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="3.5" result="blur" />
+                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  </filter>
+                  <filter id="ag-glow-strong" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="6" result="blur" />
+                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  </filter>
+                  <marker id="ag-arrow-dns" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#06b6d4" opacity="0.6" /></marker>
+                  <marker id="ag-arrow-cname" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#2dd4bf" opacity="0.6" /></marker>
+                  <marker id="ag-arrow-ns" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#3b82f6" opacity="0.6" /></marker>
+                  <marker id="ag-arrow-mx" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#22c55e" opacity="0.6" /></marker>
+                  <marker id="ag-arrow-asn" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#64748b" opacity="0.6" /></marker>
+                  <marker id="ag-arrow-cloud" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#f97316" opacity="0.6" /></marker>
+                  <marker id="ag-arrow-san" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#ec4899" opacity="0.6" /></marker>
+                  <marker id="ag-arrow-vendor" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#eab308" opacity="0.6" /></marker>
+                  <marker id="ag-arrow-takeover" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#ef4444" opacity="0.8" /></marker>
+                  <marker id="ag-arrow-redirect" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#71717a" opacity="0.6" /></marker>
+                  <marker id="ag-arrow-favicon" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#f472b6" opacity="0.6" /></marker>
+                </defs>
+              </svg>
+              <aside id="ag-info-panel" class="ag-info-panel">
+                <button type="button" id="ag-info-close" class="ag-info-close" aria-label="Close">&times;</button>
+                <h3 id="ag-info-title" class="ag-info-title"></h3>
+                <span id="ag-info-type-badge" class="ag-info-type-badge"></span>
+                <div id="ag-info-meta" class="ag-info-meta"></div>
+                <h4 class="ag-info-conn-heading">Connections</h4>
+                <div id="ag-info-connections" class="ag-info-connections"></div>
+              </aside>
+            </div>
+            <div class="ag-legend">
+              <span class="ag-legend-item"><span class="ag-legend-dot" style="background:#06b6d4"></span>Domain</span>
+              <span class="ag-legend-item"><span class="ag-legend-dot ag-legend-dot--diamond" style="background:#a78bfa"></span>IP</span>
+              <span class="ag-legend-item"><span class="ag-legend-dot ag-legend-dot--hex" style="background:#64748b"></span>ASN</span>
+              <span class="ag-legend-item"><span class="ag-legend-dot ag-legend-dot--square" style="background:#3b82f6"></span>NS</span>
+              <span class="ag-legend-item"><span class="ag-legend-dot ag-legend-dot--tri" style="background:#22c55e"></span>MX</span>
+              <span class="ag-legend-item"><span class="ag-legend-dot ag-legend-dot--penta" style="background:#f97316"></span>Cloud</span>
+              <span class="ag-legend-item"><span class="ag-legend-dot ag-legend-dot--rect" style="background:#ec4899"></span>Cert</span>
+              <span class="ag-legend-item"><span class="ag-legend-dot" style="background:#eab308"></span>Vendor</span>
+            </div>
+          </div>
+
+
+        <div class="table-scroll-controls view-block" data-view-group="overview" role="group" aria-label="Overview table scroll controls">
             <button type="button" class="table-scroll-button" data-direction="left">◀</button>
             <button type="button" class="table-scroll-button" data-direction="right">▶</button>
           </div>
@@ -1097,7 +1546,7 @@
               <th>A Records</th>
               <th>AAAA Records</th>
               <th>CNAME Records</th>
-              <th>NS Records</th>
+              <th>NS Records / Cluster</th>
               <th>MX Records</th>
               <th>Reverse DNS (PTR)</th>
               <th>TXT Records (SPF/DMARC)</th>
@@ -1106,6 +1555,13 @@
               <th>CAA Records</th>
               <th>Zone Transfer</th>
               <th>WHOIS Summary</th>
+              <th>Registrar</th>
+              <th>Domain Age</th>
+              <th>Domain Created</th>
+              <th>Domain Expires</th>
+              <th>BIMI</th>
+              <th>MTA-STS</th>
+              <th>DANE/TLSA</th>
               <th>Subdomain Keywords</th>
               <th>SPF Record</th>
               <th>DKIM Record</th>
@@ -1114,7 +1570,6 @@
               <th>DNS Status</th>
               <th>Port</th>
               <th>URL</th>
-              <th>Screenshot</th>
               <th>Redirect Location</th>
               <th>Homepage Title</th>
               <th>Web Server</th>
@@ -1139,6 +1594,7 @@
               <th>CDN Flag</th>
               <th>Open Ports / Services</th>
               <th>Notable Ports / Services</th>
+              <th>Shodan Services</th>
               <th>Hostnames on IP</th>
               <th>ASN / Provider</th>
               <th>Network Block</th>
@@ -1154,6 +1610,11 @@
               <th>Subject AN</th>
               <th>Certificate Serial</th>
               <th>TLS Endpoint IP</th>
+              <th>Key Algorithm</th>
+              <th>Key Size</th>
+              <th>Wildcard Cert</th>
+              <th>Self-Signed</th>
+              <th>CA Type</th>
               <th>Cloud Provider</th>
               <th>Cloud Resource Type</th>
               <th>Cloud Service Family</th>
@@ -1290,244 +1751,237 @@
                 </select>
               </th>
               <th>
-                <select id="screenshot-filter" data-column-index="25">
-                  <option value="">All</option>
-                  <option value="has screenshot">Has screenshot</option>
-                  <option value="no screenshot">No screenshot</option>
-                </select>
-              </th>
-              <th>
-                <select id="redirect-filter" data-column-index="26">
+                <select id="redirect-filter" data-column-index="25">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="title-filter" data-column-index="27">
+                <select id="title-filter" data-column-index="26">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="webserver-filter" data-column-index="28">
+                <select id="webserver-filter" data-column-index="27">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="tech-filter" data-column-index="29">
+                <select id="tech-filter" data-column-index="28">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="login-filter" data-column-index="30">
+                <select id="login-filter" data-column-index="29">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="api-detected-filter" data-column-index="31">
+                <select id="api-detected-filter" data-column-index="30">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="colleague-filter" data-column-index="32">
+                <select id="colleague-filter" data-column-index="31">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="security-headers-filter" data-column-index="33">
+                <select id="security-headers-filter" data-column-index="32">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="sts-filter" data-column-index="34">
+                <select id="sts-filter" data-column-index="33">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="xfo-filter" data-column-index="35">
+                <select id="xfo-filter" data-column-index="34">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="csp-filter" data-column-index="36">
+                <select id="csp-filter" data-column-index="35">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="xss-filter" data-column-index="37">
+                <select id="xss-filter" data-column-index="36">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="rp-filter" data-column-index="38">
+                <select id="rp-filter" data-column-index="37">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="pp-filter" data-column-index="39">
+                <select id="pp-filter" data-column-index="38">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="acao-filter" data-column-index="40">
+                <select id="acao-filter" data-column-index="39">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="statuscode-filter" data-column-index="41">
+                <select id="statuscode-filter" data-column-index="40">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="contentlength-filter" data-column-index="42">
+                <select id="contentlength-filter" data-column-index="41">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="crawledlinks-filter" data-column-index="43">
+                <select id="crawledlinks-filter" data-column-index="42">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cdnname-filter" data-column-index="44">
+                <select id="cdnname-filter" data-column-index="43">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cdntype-filter" data-column-index="45">
+                <select id="cdntype-filter" data-column-index="44">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="wafcdn-filter" data-column-index="46">
+                <select id="wafcdn-filter" data-column-index="45">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cdn-filter" data-column-index="47">
+                <select id="cdn-filter" data-column-index="46">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="ports-services-filter" data-column-index="48">
+                <select id="ports-services-filter" data-column-index="47">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="notable-ports-filter" data-column-index="49">
+                <select id="notable-ports-filter" data-column-index="48">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="hostnames-filter" data-column-index="50">
+                <select id="hostnames-filter" data-column-index="49">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="asn-filter" data-column-index="51">
+                <select id="asn-filter" data-column-index="50">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="network-filter" data-column-index="52">
+                <select id="network-filter" data-column-index="51">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="sslversion-filter" data-column-index="53">
+                <select id="sslversion-filter" data-column-index="52">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="sslcipher-filter" data-column-index="54">
+                <select id="sslcipher-filter" data-column-index="53">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="certexpiry-filter" data-column-index="55">
+                <select id="certexpiry-filter" data-column-index="54">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="days-expiry-filter" data-column-index="56">
+                <select id="days-expiry-filter" data-column-index="55">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="sslissuer-filter" data-column-index="57">
+                <select id="sslissuer-filter" data-column-index="56">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="issuercn-filter" data-column-index="58">
+                <select id="issuercn-filter" data-column-index="57">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="issuerorg-filter" data-column-index="59">
+                <select id="issuerorg-filter" data-column-index="58">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="subjectdn-filter" data-column-index="60">
+                <select id="subjectdn-filter" data-column-index="59">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="subjectcn-filter" data-column-index="61">
+                <select id="subjectcn-filter" data-column-index="60">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="subjectan-filter" data-column-index="62">
+                <select id="subjectan-filter" data-column-index="61">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="certserial-filter" data-column-index="63">
+                <select id="certserial-filter" data-column-index="62">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="tlsip-filter" data-column-index="64">
+                <select id="tlsip-filter" data-column-index="63">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cloudprovider-filter" data-column-index="65">
+                <select id="cloudprovider-filter" data-column-index="64">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cloudtype-filter" data-column-index="66">
+                <select id="cloudtype-filter" data-column-index="65">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cloudfamily-filter" data-column-index="67">
+                <select id="cloudfamily-filter" data-column-index="66">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cloudresource-filter" data-column-index="68">
+                <select id="cloudresource-filter" data-column-index="67">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="loadbalancer-filter" data-column-index="69">
+                <select id="loadbalancer-filter" data-column-index="68">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cloudshield-filter" data-column-index="70">
+                <select id="cloudshield-filter" data-column-index="69">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cloudstorage-filter" data-column-index="71">
+                <select id="cloudstorage-filter" data-column-index="70">
                   <option value="">All</option>
                 </select>
               </th>
               <th>
-                <select id="cloudevidence-filter" data-column-index="72">
+                <select id="cloudevidence-filter" data-column-index="71">
                   <option value="">All</option>
                 </select>
               </th>
@@ -1538,13 +1992,6 @@
         </div>
       </div>
 
-      <div id="screenshotModal">
-        <div id="screenshotModalContent">
-          <button id="closeModalBtn" onclick="closeModal()" aria-label="Close screenshot viewer">&times;</button>
-          <img id="screenshotModalImg" src="" alt="Full Screenshot" />
-        </div>
-      </div>
-
       <div id="linksModal">
         <div>
           <button onclick="closeLinksModal()" aria-label="Close links viewer">&times;</button>
@@ -1552,6 +1999,30 @@
         </div>
       </div>
     </main>
+
+    <!-- ── Column Visibility Dropdown ───────────────────────────────── -->
+    <div id="col-vis-dropdown" class="col-vis-dropdown" hidden>
+      <div class="col-vis-dropdown-header">
+        <span class="col-vis-dropdown-title">Show / Hide Columns</span>
+        <div class="col-vis-actions">
+          <button type="button" class="col-vis-action-btn" id="col-vis-all">All</button>
+          <button type="button" class="col-vis-action-btn" id="col-vis-reset">Reset</button>
+        </div>
+      </div>
+      <div id="col-vis-list" class="col-vis-list"></div>
+    </div>
+
+    <!-- ── Section Intelligence Panel ────────────────────────────────── -->
+    <aside id="section-intel-panel" class="section-intel-panel" role="complementary" aria-label="Section intelligence">
+      <button type="button" id="si-close" class="si-close" aria-label="Close">&times;</button>
+      <h3 id="si-title" class="si-title"></h3>
+      <p class="si-section-label">What is this section?</p>
+      <p id="si-purpose" class="si-purpose"></p>
+      <p class="si-section-label">Red flags to watch</p>
+      <ul id="si-flags" class="si-flags"></ul>
+      <p class="si-section-label">Data collected by</p>
+      <p id="si-source" class="si-source"></p>
+    </aside>
     <script>
       // Plugin for displaying labels on bars in charts
       const barLabelPlugin = {
@@ -2091,6 +2562,15 @@
       let minRiskScore = Infinity;
       let maxRiskScore = -Infinity;
       let riskSortOrder = "desc";
+      const SECTION_PAGE_SIZE = 50;
+      const sectionPagination = {
+        "domain-table":    { page: 1 },
+        "endpoints-table": { page: 1 },
+        "ip-table":        { page: 1 },
+        "mail-table":      { page: 1 },
+        "tls-table":       { page: 1 },
+        "cloud-table":     { page: 1 },
+      };
       let riskEntries = [];
 
       // Export Helpers
@@ -2468,22 +2948,44 @@
       function initializeViewControls() {
         const navButtons = Array.from(document.querySelectorAll(".report-nav__item"));
         if (!navButtons.length) return;
-        const viewTargets = Array.from(document.querySelectorAll(".view-block"));
         const tableContainer = document.querySelector(".table-container.table-view");
         const viewLabel = document.getElementById("activeViewLabel");
         let currentView = document.body.dataset.activeView || "overview";
         if (!VIEW_LABELS[currentView]) currentView = "overview";
 
+        // Track which sections have had their tables rendered into the DOM.
+        // Overview is always rendered at page load; all others are lazy.
+        const renderedSections = new Set(["overview"]);
+        const sectionRenderers = {
+          domain:          () => renderDomainTable(),
+          endpoints:       () => renderEndpointsTable(),
+          ips:             () => renderIpTable(),
+          mail:            () => { try { renderMailTable(); } catch(e) { console.error("renderMail:", e); } },
+          tls:             () => renderTlsTable(),
+          cloud:           () => renderCloudTable(),
+          "seed-expansion": () => { try { renderSeedExpansionTables(); } catch(e) { console.error("renderSeedExpansion:", e); } },
+          "saas-cloud":    () => { try { renderSaasCloudTables(); } catch(e) { console.error("renderSaasCloud:", e); } },
+          "third-parties": () => { try { renderThirdPartyTables(); } catch(e) { console.error("renderThirdParty:", e); } },
+          "asset-topology": () => { try { renderAssetTopologyGraph(); } catch(e) { console.error("renderAssetTopology:", e); } },
+        };
+
         const applyView = (view) => {
           const nextView = VIEW_LABELS[view] ? view : "overview";
           currentView = nextView;
           document.body.dataset.activeView = nextView;
+
+          // Lazy-render section table on first visit before making it visible
+          if (!renderedSections.has(nextView) && sectionRenderers[nextView]) {
+            sectionRenderers[nextView]();
+            renderedSections.add(nextView);
+          }
+
           navButtons.forEach(btn => {
             const isActive = btn.dataset.view === nextView;
             btn.classList.toggle("is-active", isActive);
             btn.setAttribute("aria-pressed", isActive ? "true" : "false");
           });
-          viewTargets.forEach(target => {
+          document.querySelectorAll('.view-block').forEach(target => {
             const groups = (target.dataset.viewGroup || "").split(/\s+/).filter(Boolean);
             const shouldShow = !groups.length || groups.includes(nextView) || groups.includes("all");
             if (shouldShow) {
@@ -2695,10 +3197,150 @@
         return signals;
       }
 
+      function scorePublicKey(bits, algo) {
+        const n = Number(bits);
+        if (!n || !Number.isFinite(n)) return [];
+        const a = (algo || "").toUpperCase();
+        if (a.includes("EC") || a.includes("ECDSA") || a.includes("ECDH")) {
+          if (n < 224) return [{ bucket: 'hygiene', points: 12, reason: `Critically weak EC key (${n} bits)` }];
+        } else {
+          // RSA / DSA / default
+          if (n < 1024) return [{ bucket: 'hygiene', points: 15, reason: `Critically weak RSA key (${n} bits)` }];
+          if (n < 2048) return [{ bucket: 'hygiene', points: 10, reason: `Weak RSA key (${n} bits, < 2048)` }];
+        }
+        return [];
+      }
+
+      // ── New expansion scoring signal helpers ─────────────────────────────
+
+      // GitHub verified secrets (exposure) + subdomains from code (sensitivity)
+      // Open cloud bucket (exposure)
+      function scoreCloudBucket(url) {
+        const cloudData = (typeof cloudStorageData !== "undefined" ? cloudStorageData : []) || [];
+        const match = cloudData.find(r => (r.URL || r.url || "") === url
+          && /open|accessible/i.test(r.Status || r.status || ""));
+        if (!match) return [];
+        return [{ bucket: 'exposure', points: 20, reason: 'Open/publicly accessible cloud storage bucket' }];
+      }
+
+      // SaaS footprint (sensitivity)
+      function scoreSaaSFootprint(domain) {
+        const tenants = (typeof saasTenants !== "undefined" ? saasTenants : []) || [];
+        const matched = tenants.filter(r => r.url && domain && r.url.includes(domain));
+        if (!matched.length) return [];
+        return [{ bucket: 'sensitivity', points: 3, reason: `SaaS tenant: ${matched.map(r=>r.service||r.platform||"").join(', ')}` }];
+      }
+
+      // ── Business context / asset attractiveness scoring ───────────────
+      function scoreBusinessContext(url, domain, links) {
+        const signals = [];
+        if (!domain) return signals;
+        const parts = domain.split('.');
+        const tld = parts[parts.length - 1].toLowerCase();
+        const sub = parts.slice(0, -2).join('.').toLowerCase();
+
+        // TLD-level public/regulated sensitivity
+        if (/^(gov|mil|edu|nhs|gc)$/.test(tld))
+          signals.push({ bucket: 'sensitivity', points: 8, reason: `Regulated-sector TLD (.${tld})` });
+        else if (/^(com|net|org|io|co|app|ai|cloud|dev)$/.test(tld))
+          signals.push({ bucket: 'sensitivity', points: 3, reason: 'Public-facing TLD' });
+
+        // Subdomain keyword signals - loaded from assets/lists/scoring-subdomain-keywords.json
+        const kwList = (typeof scoringSubdomainKeywords !== 'undefined' ? scoringSubdomainKeywords : []);
+        for (const entry of kwList) {
+          if (!entry.keywords || !entry.reason) continue;
+          const matched = entry.keywords.some(kw => {
+            // match as whole word or separated by hyphens/dots
+            const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp('(?:^|[.-])' + escaped + '(?:[.-]|$)').test(sub);
+          });
+          if (matched) {
+            signals.push({ bucket: entry.bucket || 'sensitivity', points: entry.points || 3, reason: entry.reason });
+            break; // one match per category group (entry already represents one category)
+          }
+        }
+
+        // Financial URL paths from crawled links - loaded from assets/lists/scoring-financial-paths.json
+        const finPaths = (typeof scoringFinancialPaths !== 'undefined' ? scoringFinancialPaths : [
+          'checkout','cart','payment','billing','subscribe','invoice','order','purchase','wallet'
+        ]);
+        const finRe = new RegExp('\\/(' + finPaths.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?:\\/|$|\\?)', 'i');
+        if ((links || []).some(l => finRe.test(String(l))))
+          signals.push({ bucket: 'sensitivity', points: 8, reason: 'Payment/transaction paths found in crawled links' });
+
+        return signals;
+      }
+
+      // ── Third-party vendor risk scoring ───────────────────────────────
+      function scoreThirdPartyRisk(vendors) {
+        const signals = [];
+        const v = vendors || [];
+        if (!v.length) return signals;
+        const vendorCfg = typeof scoringThirdPartyVendors !== 'undefined'
+          ? scoringThirdPartyVendors
+          : { payment_processors: ['stripe','paypal','braintree','square','adyen'], identity_providers: ['okta','auth0','onelogin','cognito'], high_risk_categories: ['payment','identity'] };
+
+        const paymentRe = new RegExp(vendorCfg.payment_processors.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
+        const idpRe     = new RegExp(vendorCfg.identity_providers.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
+        const hrCats    = (vendorCfg.high_risk_categories || []).map(c => c.toLowerCase());
+
+        const hasPayment = v.some(x => hrCats.includes((x.category || '').toLowerCase()) && x.category === 'payment'
+          || paymentRe.test(x.service_name || x.vendor || ''));
+        if (hasPayment)
+          signals.push({ bucket: 'sensitivity', points: 10, reason: 'Payment processor integrated (financial data in scope)' });
+
+        const hasIDP = v.some(x => idpRe.test(x.service_name || x.vendor || ''));
+        if (hasIDP)
+          signals.push({ bucket: 'sensitivity', points: 6, reason: 'Identity provider integrated (SSO/auth in scope)' });
+
+        const highRisk = v.filter(x => /high|critical/i.test(x.risk || x.risk_level || ''));
+        if (highRisk.length >= 3)
+          signals.push({ bucket: 'exposure', points: Math.min(8, highRisk.length * 2), reason: `${highRisk.length} high-risk third-party vendors detected` });
+        else if (v.length >= 10)
+          signals.push({ bucket: 'exposure', points: 4, reason: `${v.length} third-party vendor dependencies` });
+
+        return signals;
+      }
+
+      // ── Weighted security headers scoring ─────────────────────────────
+      // Replaces flat count × 2 with individual header weights
+      function scoreSecurityHeadersWeighted(missingHeaders) {
+        if (!Array.isArray(missingHeaders) || !missingHeaders.length) return [];
+        const WEIGHTS = {
+          'content-security-policy': 8, 'csp': 8,
+          'strict-transport-security': 6, 'hsts': 6,
+          'x-frame-options': 4,
+          'x-content-type-options': 3,
+          'referrer-policy': 2,
+          'permissions-policy': 2,
+          'cross-origin-opener-policy': 2,
+          'cross-origin-embedder-policy': 1,
+          'cross-origin-resource-policy': 1,
+        };
+        return missingHeaders.map(h => {
+          const key = String(h).toLowerCase().replace(/\s+/g, '-');
+          const pts = WEIGHTS[key] ?? 2;
+          return { bucket: 'hygiene', points: pts, reason: `Missing ${h}` };
+        });
+      }
+
+      // ── Content-type / response signals ───────────────────────────────
+      function scoreContentSignals(contentType, statusCode) {
+        if (!contentType) return [];
+        const ct  = String(contentType).toLowerCase();
+        const sc  = Number(statusCode);
+        const signals = [];
+        if (/application\/json/.test(ct) && sc === 200)
+          signals.push({ bucket: 'sensitivity', points: 4, reason: 'JSON response - potential data API endpoint' });
+        if (/text\/xml|application\/xml|application\/soap/.test(ct))
+          signals.push({ bucket: 'sensitivity', points: 3, reason: 'XML/SOAP endpoint - legacy protocol surface' });
+        return signals;
+      }
+
       // Compute risk score
       function computePriority({
-        purpose,
         url,
+        finalUrl,
         loginFound,
         loginDetails,
         statusCode,
@@ -2706,12 +3348,13 @@
         webserver,
         corsHeader,
         sslVersion,
-        tlsDeprecated,
         tlsCipher,
         tlsIssuerCN,
         tlsSubjectCN,
         tlsSubjectAN,
         tlsProbeOk,
+        publicKeyBits,
+        publicKeyAlgo,
         certExpiry,
         scheme,
         securityHeadersMissing,
@@ -2727,9 +3370,13 @@
         isApiSurface,
         isEmployeeAsset,
         cloudProfile,
-        takeoverRisk
+        takeoverRisk,
+        domain,
+        linksForDomain,
+        thirdPartyVendors,
+        contentType
       }) {
-        const bucketCaps = { exposure: 45, hygiene: 35, sensitivity: 20 };
+        const bucketCaps = { exposure: 35, hygiene: 25, sensitivity: 40 };
         const bucketScores = { exposure: 0, hygiene: 0, sensitivity: 0 };
         const contributions = [];
         const addContribution = (bucket, points, reason) => {
@@ -2755,7 +3402,7 @@
         } else if (loginDetected) {
           addContribution("exposure", 12, "Authenticated surface exposed");
         }
-        // Login panel type bonus — scored on top of base login signal
+        // Login panel type bonus - scored on top of base login signal
         if (loginDetected) {
           const panelBonus = scoreLoginPanelBonus(loginDetails);
           if (panelBonus > 0) addContribution("exposure", panelBonus, "High-value login panel type detected");
@@ -2802,9 +3449,9 @@
           const sev = takeoverRisk.severity || 'low';
           const tStatus = (takeoverRisk.status || '').toLowerCase();
           if (tStatus === 'confirmed') {
-            addContribution("exposure", sev === 'critical' ? 20 : 15, `Confirmed subdomain takeover — ${takeoverRisk.provider}`);
+            addContribution("exposure", sev === 'critical' ? 20 : 15, `Confirmed subdomain takeover - ${takeoverRisk.provider}`);
           } else if (tStatus === 'potential') {
-            addContribution("exposure", sev === 'critical' ? 12 : 8, `Potential takeover — dangling CNAME to ${takeoverRisk.provider}`);
+            addContribution("exposure", sev === 'critical' ? 12 : 8, `Potential takeover - dangling CNAME to ${takeoverRisk.provider}`);
           }
         }
 
@@ -2842,10 +3489,6 @@
         } else if (/^sslv/i.test(normalizedVersion)) {
           addContribution("hygiene", 18, `Deprecated SSL protocol (${normalizedVersion})`);
         }
-        const deprecatedProtocols = Array.isArray(tlsDeprecated) ? tlsDeprecated.filter(Boolean) : [];
-        if (deprecatedProtocols.length) {
-          addContribution("hygiene", 8, `Legacy protocol support (${deprecatedProtocols.join(", ")})`);
-        }
         if (certExpiry && certExpiry !== "N/A") {
           const days = computeDaysUntil(certExpiry);
           if (days !== null) {
@@ -2864,14 +3507,16 @@
         // TLS cipher, self-signed, wildcard, broken handshake
         applySignals(scoreTLSDetails(tlsCipher, tlsIssuerCN, tlsSubjectCN, tlsSubjectAN, tlsProbeOk));
 
-        const missingHeaders = Array.isArray(securityHeadersMissing) ? securityHeadersMissing : [];
-        if (missingHeaders.length) {
-          addContribution(
-            "hygiene",
-            Math.min(12, missingHeaders.length * 2),
-            `Missing security headers (${missingHeaders.join(", ")})`
-          );
+        // Weak public key
+        applySignals(scorePublicKey(publicKeyBits, publicKeyAlgo));
+
+        // HTTPS → HTTP redirect downgrade
+        if ((scheme || "").toLowerCase() === "https" && typeof finalUrl === "string" && finalUrl.startsWith("http://")) {
+          addContribution("hygiene", 8, "HTTPS downgrades to HTTP via redirect");
         }
+
+        const missingHeaders = Array.isArray(securityHeadersMissing) ? securityHeadersMissing : [];
+        applySignals(scoreSecurityHeadersWeighted(missingHeaders));
 
         // CORS misconfiguration
         applySignals(scoreCORSHeader(corsHeader));
@@ -2885,7 +3530,7 @@
         if (!hasDnssec) addContribution("hygiene", 2, "DNSSEC not enabled");
 
         // ── Sensitivity ──────────────────────────────────────────────────────
-        if (isEmployeeAsset || (purpose && purpose.toLowerCase().includes("employee"))) {
+        if (isEmployeeAsset) {
           addContribution("sensitivity", 12, "Employee-facing asset");
         }
         if (isApiSurface) {
@@ -2898,6 +3543,16 @@
         if (cloudProfile && cloudProfile.CloudProvider) {
           addContribution("sensitivity", 3, `${cloudProfile.CloudProvider} managed surface`);
         }
+
+        // ── Business context + third-party + content signals ─────────────
+        const assetDomain = domain || (url || "").replace(/^https?:\/\//, "").split(/[/:?#]/)[0];
+        applySignals(scoreBusinessContext(url, assetDomain, linksForDomain || []));
+        applySignals(scoreThirdPartyRisk(thirdPartyVendors || []));
+        applySignals(scoreContentSignals(contentType, statusCode));
+
+        // ── Expansion signals ─────────────────────────────────────────────
+        applySignals(scoreCloudBucket(url));
+        applySignals(scoreSaaSFootprint(assetDomain));
 
         const totalScore = Math.min(
           100,
@@ -3186,29 +3841,20 @@ function generateExecutiveSummary({ summarySignals, actions, topRisk }) {
       function buildScoreboard(metrics) {
         if (!metrics) return;
 
-        const { pipeline, topRisk, authentication, controls, summary } = metrics;
+        const { pipeline, topRisk, authentication, controls, summary, tierCounts } = metrics;
 
-        // ── Risk Score (#7: use aggregate mean-of-top-5 when available) ─
-        const aggregateScore = Number(summary?.aggregateRiskScore);
-        const topScore       = Number(topRisk?.score);
-        const score = Number.isFinite(aggregateScore) && aggregateScore > 0
-          ? Math.round(aggregateScore)
-          : (Number.isFinite(topScore) ? Math.round(topScore) : 0);
-        const scoreEl = document.getElementById("exec-score-value");
-        const gradeEl = document.getElementById("exec-score-grade");
-        if (scoreEl) {
-          scoreEl.textContent = score;
-          const cls = score >= 80 ? "score-critical" : score >= 60 ? "score-high" : score >= 40 ? "score-medium" : "score-low";
-          scoreEl.className = `exec-score-value ${cls}`;
-        }
-        if (gradeEl) {
-          gradeEl.textContent = score >= 80 ? "Critical Risk" : score >= 60 ? "High Risk" : score >= 40 ? "Medium Risk" : "Low Risk";
-        }
+        // ── Asset Tiers ─────────────────────────────────────────────
+        const cdnEl    = document.getElementById("em-tier-cdn");
+        const cloudEl  = document.getElementById("em-tier-cloud");
+        const onpremEl = document.getElementById("em-tier-onprem");
+        if (cdnEl)    cdnEl.textContent    = tierCounts?.cdn    ?? "-";
+        if (cloudEl)  cloudEl.textContent  = tierCounts?.cloud  ?? "-";
+        if (onpremEl) onpremEl.textContent = tierCounts?.onprem ?? "-";
 
         // ── Helper ──────────────────────────────────────────────────
         const set = (id, val) => {
           const el = document.getElementById(id);
-          if (el) el.textContent = (val != null && val !== "") ? val : "—";
+          if (el) el.textContent = (val != null && val !== "") ? val : "-";
         };
 
         // ── Attack Surface ──────────────────────────────────────────
@@ -3391,7 +4037,7 @@ function generateExecutiveSummary({ summarySignals, actions, topRisk }) {
       }
 
 
-// Visualisation builder — 9 charts (3×3 grid)
+// Visualisation builder - 9 charts (3×3 grid)
 function buildInsightsCharts({
   pipeline,
   headerCoverage,
@@ -3416,7 +4062,7 @@ function buildInsightsCharts({
     plugins: { legend: { display: false }, tooltip: tt },
   };
 
-  // 1 — Attack Surface Funnel (horizontal bar)
+  // 1 - Attack Surface Funnel (horizontal bar)
   const funnelCanvas = document.getElementById('funnelChart');
   if (funnelCanvas) {
     if (funnelChart) { try { funnelChart.destroy(); } catch(_){} }
@@ -3446,7 +4092,7 @@ function buildInsightsCharts({
     });
   }
 
-  // 2 — HTTP Status Breakdown (bar chart)
+  // 2 - HTTP Status Breakdown (bar chart)
   const scCanvas = document.getElementById('statusCodeChart');
   if (scCanvas) {
     if (statusCodeChart) { try { statusCodeChart.destroy(); } catch(_){} }
@@ -3477,7 +4123,7 @@ function buildInsightsCharts({
     });
   }
 
-  // 3 — Email Auth Coverage (stacked bar) — fixed keys
+  // 3 - Email Auth Coverage (stacked bar) - fixed keys
   const ecCanvas = document.getElementById('emailCoverageChart');
   if (ecCanvas) {
     if (emailCoverageChart) { try { emailCoverageChart.destroy(); } catch(_){} }
@@ -3508,7 +4154,7 @@ function buildInsightsCharts({
     });
   }
 
-  // 4 — Security Headers coverage — fixed: use label keys, not HTTP header names
+  // 4 - Security Headers coverage - fixed: use label keys, not HTTP header names
   const hcCanvas = document.getElementById('headerCoverageChart');
   if (hcCanvas) {
     if (headerCoverageChart) { try { headerCoverageChart.destroy(); } catch(_){} }
@@ -3538,7 +4184,7 @@ function buildInsightsCharts({
     });
   }
 
-  // 5 — DNS Resolution Status (doughnut)
+  // 5 - DNS Resolution Status (doughnut)
   const dnsCanvas = document.getElementById('dnsStatusChart');
   if (dnsCanvas) {
     if (dnsStatusChart) { try { dnsStatusChart.destroy(); } catch(_){} }
@@ -3563,7 +4209,7 @@ function buildInsightsCharts({
     });
   }
 
-  // 6 — Login Panel Exposure (bar: HTTP vs HTTPS)
+  // 6 - Login Panel Exposure (bar: HTTP vs HTTPS)
   const lpCanvas = document.getElementById('loginPanelsChart');
   if (lpCanvas) {
     if (loginPanelsChart) { try { loginPanelsChart.destroy(); } catch(_){} }
@@ -3588,7 +4234,7 @@ function buildInsightsCharts({
     });
   }
 
-  // 7 — Open Port Categories (doughnut)
+  // 7 - Open Port Categories (doughnut)
   const pcCanvas = document.getElementById('portCategoriesChart');
   if (pcCanvas) {
     if (portCategoriesChart) { try { portCategoriesChart.destroy(); } catch(_){} }
@@ -3613,7 +4259,7 @@ function buildInsightsCharts({
     });
   }
 
-  // 8 — TLS Certificate Health (doughnut)
+  // 8 - TLS Certificate Health (doughnut)
   const tcCanvas = document.getElementById('tlsCertChart');
   if (tcCanvas) {
     if (tlsCertChart) { try { tlsCertChart.destroy(); } catch(_){} }
@@ -3638,7 +4284,7 @@ function buildInsightsCharts({
     });
   }
 
-  // 9 — Cloud Asset Distribution (doughnut by provider or shielded/unshielded)
+  // 9 - Cloud Asset Distribution (doughnut by provider or shielded/unshielded)
   const cdCanvas = document.getElementById('cloudDistributionChart');
   if (cdCanvas) {
     if (cloudDistributionChart) { try { cloudDistributionChart.destroy(); } catch(_){} }
@@ -3678,9 +4324,86 @@ function buildInsightsCharts({
       let domainTableRows = [];
       let endpointTableRows = [];
       let ipTableRows = [];
+      let mailTableRows = [];
       let tlsTableRows = [];
       let cloudInfraTableRows = [];
       const tableFilterControllers = {};
+
+      // ── Global floating scorecard panel ──────────────────────────────
+      const BUCKET_CAPS = { exposure: 35, hygiene: 25, sensitivity: 40 };
+      let _scPanel = null;
+      let _scActiveBtn = null;
+
+      function _getScPanel() {
+        if (_scPanel) return _scPanel;
+        _scPanel = document.createElement('div');
+        _scPanel.id = 'global-score-panel';
+        _scPanel.className = 'score-card__panel';
+        _scPanel.setAttribute('role', 'tooltip');
+        document.body.appendChild(_scPanel);
+        return _scPanel;
+      }
+
+      function closeScoreCard() {
+        const p = document.getElementById('global-score-panel');
+        if (p) p.classList.remove('is-open');
+        if (_scActiveBtn) { _scActiveBtn.setAttribute('aria-expanded', 'false'); _scActiveBtn = null; }
+      }
+
+      function toggleScoreCard(btn) {
+        const panel = _getScPanel();
+        const isAlreadyOpen = panel.classList.contains('is-open') && _scActiveBtn === btn;
+        closeScoreCard();
+        if (isAlreadyOpen) return;
+
+        let data = {};
+        try { data = JSON.parse(btn.dataset.scorecard || '{}'); } catch (e) {}
+        const { breakdown = {}, reasons = [] } = data;
+
+        const bars = ['exposure', 'hygiene', 'sensitivity'].map(b => {
+          const val = Math.round((breakdown[b]) || 0);
+          const pct = Math.min(100, Math.round(val / (BUCKET_CAPS[b] || 1) * 100));
+          return `<div class="score-bar-row">
+            <span>${b.charAt(0).toUpperCase() + b.slice(1)}</span>
+            <div class="score-bar-track"><div class="score-bar__fill score-bar__fill--${b}" style="width:${pct}%"></div></div>
+            <span class="score-bar__val">${val}</span>
+          </div>`;
+        }).join('');
+        const items = (Array.isArray(reasons) ? reasons : []).map(txt => {
+          const scored = /\(\+\d+\)$/.test(String(txt));
+          return `<li class="${scored ? 'score-reason--scored' : 'score-reason--capped'}">${escapeHtml(String(txt))}</li>`;
+        }).join('') || '<li style="opacity:.5">No signals recorded</li>';
+        panel.innerHTML = `<div class="score-bars">${bars}</div><hr class="score-divider"><ul class="score-reasons">${items}</ul>`;
+
+        // Position using fixed coords from button rect
+        const rect = btn.getBoundingClientRect();
+        panel.style.position = 'fixed';
+        panel.style.zIndex = '9999';
+        panel.style.top = (rect.bottom + 6) + 'px';
+        panel.style.left = rect.left + 'px';
+        panel.style.transform = 'none';
+        panel.classList.add('is-open');
+        _scActiveBtn = btn;
+        btn.setAttribute('aria-expanded', 'true');
+
+        // Adjust if panel overflows viewport edges
+        requestAnimationFrame(() => {
+          const pr = panel.getBoundingClientRect();
+          if (pr.bottom > window.innerHeight - 8)
+            panel.style.top = (rect.top - pr.height - 6) + 'px';
+          if (pr.right > window.innerWidth - 8)
+            panel.style.left = (window.innerWidth - pr.width - 10) + 'px';
+        });
+      }
+
+      // ── Mini scorecard builder ────────────────────────────────────────
+      function buildScoreCard(score, breakdown, reasons) {
+        const r = Math.round(score);
+        const lvl = r >= 75 ? 'critical' : r >= 50 ? 'high' : r >= 25 ? 'moderate' : 'low';
+        const payload = JSON.stringify({ score: r, breakdown: breakdown || {}, reasons: reasons || [] })
+          .replace(/'/g, '&#39;');
+        return `<button class="score-card__btn score-badge score-badge--${lvl}" type="button" aria-expanded="false" onclick="event.stopPropagation();toggleScoreCard(this)" data-scorecard='${payload}'>${r}</button>`;
+      }
 
       // Build table rows
       function buildTableRows(combinedData, secMapDomain, secMapUrl, loginMap, apiMap, colleagueMap, portscanInsights, ipIntelMap, cloudInfraRecords) {
@@ -3689,6 +4412,7 @@ function buildInsightsCharts({
         domainTableRows = [];
         endpointTableRows = [];
         ipTableRows = [];
+        mailTableRows = [];
         tlsTableRows = [];
         cloudInfraTableRows = [];
         riskEntries = [];
@@ -3935,6 +4659,25 @@ function buildInsightsCharts({
           const key = (domainName || "").toLowerCase();
           return portscanByHost[key] || { entries: [], highlightCounts: {}, categoryCounts: {} };
         };
+        // Domain age helper
+        const domainAge = created => {
+          if (!created) return '-';
+          const ms = Date.now() - new Date(created).getTime();
+          const years = (ms / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1);
+          return isNaN(Number(years)) ? '-' : `${years}y`;
+        };
+
+        // NS clustering: count how many tracked domains share each NS host
+        const nsByHost = {};
+        Object.keys(secMapDomain).forEach(d => {
+          const nsRaw = secMapDomain[d]["NS Records"] || "";
+          const nsHosts = nsRaw.split(/\s+/).map(s => s.replace(/\.$/, '').toLowerCase()).filter(Boolean);
+          nsHosts.forEach(h => {
+            if (!nsByHost[h]) nsByHost[h] = 0;
+            nsByHost[h]++;
+          });
+        });
+
         Object.keys(combinedData).forEach(domain => {
           const { dns, http } = combinedData[domain];
           const dnsResolvers = dns && Array.isArray(dns.resolver) ? dns.resolver : (dns && dns.resolver ? [].concat(dns.resolver) : []);
@@ -4031,6 +4774,41 @@ function buildInsightsCharts({
           const dkimHtml = escapeHtml(dkimDisplay);
           const dmarcHtml = escapeHtml(dmarcDisplay);
           const dnssecHtml = escapeHtml(dnssecDisplay);
+
+          // New Phase 3 fields from securitycompliance.json
+          const bimiRaw = typeof domainSec["BIMI Record"] === "string" ? domainSec["BIMI Record"].trim() : "";
+          const bimiVal = bimiRaw && bimiRaw !== "Not Found" ? bimiRaw : "Not Found";
+          const bimiHtml = bimiVal !== "Not Found"
+            ? `<span class="badge badge--cyan">Present</span>`
+            : `<span class="badge badge--gray">Not Found</span>`;
+
+          const mtaStsRaw = typeof domainSec["MTA-STS"] === "string" ? domainSec["MTA-STS"].trim() : "not-found";
+          const mtaStsHtml = mtaStsRaw === "enforce"
+            ? `<span class="badge badge--green">enforce</span>`
+            : mtaStsRaw === "testing"
+              ? `<span class="badge badge--yellow">testing</span>`
+              : mtaStsRaw === "none"
+                ? `<span class="badge badge--orange">none</span>`
+                : `<span class="badge badge--gray">not-found</span>`;
+
+          const daneRaw = typeof domainSec["DANE/TLSA"] === "string" ? domainSec["DANE/TLSA"].trim() : "";
+          const daneHtml = daneRaw && daneRaw !== "Not Found"
+            ? `<span class="badge badge--cyan">Present</span> ${escapeHtml(daneRaw)}`
+            : `<span class="badge badge--gray">Not Found</span>`;
+
+          const registrarVal = escapeHtml(typeof domainSec["Registrar"] === "string" ? domainSec["Registrar"].trim() : "");
+          const domainCreatedVal = typeof domainSec["DomainCreated"] === "string" ? domainSec["DomainCreated"].trim() : "";
+          const domainExpiresVal = escapeHtml(typeof domainSec["DomainExpires"] === "string" ? domainSec["DomainExpires"].trim() : "");
+          const domainAgeVal = domainAge(domainCreatedVal);
+          const domainCreatedHtml = domainCreatedVal ? escapeHtml(domainCreatedVal) : "-";
+
+          // NS cluster badge
+          const nsHosts = (typeof domainSec["NS Records"] === "string" ? domainSec["NS Records"] : "")
+            .split(/\s+/).map(s => s.replace(/\.$/, '').toLowerCase()).filter(Boolean);
+          const nsClusterMax = nsHosts.reduce((max, h) => Math.max(max, nsByHost[h] || 0), 0);
+          const nsClusterHtml = nsClusterMax > 1
+            ? `${nsRecordHtml} <span class="badge badge--cyan" title="${nsClusterMax} domains share this NS">cluster:${nsClusterMax}</span>`
+            : nsRecordHtml;
           const resolutionStatusParts = [];
           if (dnsStatus && String(dnsStatus).trim()) {
             resolutionStatusParts.push(String(dnsStatus).trim());
@@ -4102,7 +4880,7 @@ function buildInsightsCharts({
                 const categoriesLabel = (Array.isArray(p.categories) && p.categories.length)
                   ? ` <span class="port-category-label">${escapeHtml(p.categories.join(", "))}</span>`
                   : "";
-                return `${escapeHtml(String(p.port))}/${proto} — ${serviceName}${categoriesLabel}`;
+                return `${escapeHtml(String(p.port))}/${proto} - ${serviceName}${categoriesLabel}`;
               }).join("<br>")
             : "No open ports";
           const chipsWrapper = renderHighlightChips(hostPortContext.highlightCounts);
@@ -4116,7 +4894,7 @@ function buildInsightsCharts({
             aRecordHtml,
             aaaaRecordHtml,
             cnameRecordHtml,
-            nsRecordHtml,
+            nsClusterHtml,
             mxRecordHtml,
             ptrRecordHtml,
             txtRecordsHtml,
@@ -4125,6 +4903,13 @@ function buildInsightsCharts({
             caaRecordHtml,
             zoneTransferHtml,
             whoisHtml,
+            registrarVal || '-',
+            escapeHtml(domainAgeVal),
+            domainCreatedHtml,
+            domainExpiresVal || '-',
+            bimiHtml,
+            mtaStsHtml,
+            daneHtml,
             escapeHtml(keywordHtml),
             spfHtml,
             dkimHtml,
@@ -4149,29 +4934,12 @@ function buildInsightsCharts({
           if (http && http.length) {
             http.forEach(h => {
               const port = h.port ? h.port : (h.url && h.url.startsWith("https") ? 443 : 80);
-              const screenshotKey = domain + "_" + port;
-              let screenshotHTML;
-              if (screenshotMap[screenshotKey]) {
-                screenshotHTML = `
-                  <span style="display:none;">has screenshot</span>
-                  <img
-                    src="${screenshotMap[screenshotKey]}"
-                    class="thumbnail"
-                    onclick="openModal('${screenshotMap[screenshotKey]}')"
-                    alt="screenshot"
-                  />
-                `;
-              } else {
-                screenshotHTML = `
-                  <span style="display:none;">no screenshot</span>
-                  No screenshot
-                `;
-              }
 
               const urlSec = secMapUrl[h.url] || domainSec;
               const tlsRecord = getTlsRecord(h.url, domain);
               const tlsDetails = describeTlsDetails(tlsRecord, urlSec);
-              const tlsDeprecated = Array.isArray(tlsRecord && tlsRecord.DeprecatedVersions) ? tlsRecord.DeprecatedVersions : [];
+              const publicKeyBits = tlsRecord ? (tlsRecord.PublicKeyBits || null) : null;
+              const publicKeyAlgo = tlsRecord ? (tlsRecord.PublicKeyAlgo || null) : null;
               const highestTlsVersion = tlsRecord && typeof tlsRecord.HighestVersion === "string" && tlsRecord.HighestVersion.trim()
                 ? tlsRecord.HighestVersion.trim()
                 : (tlsRecord && typeof tlsRecord.VersionSummary === "string" && tlsRecord.VersionSummary.trim()
@@ -4293,9 +5061,11 @@ function buildInsightsCharts({
               const tlsSubjectAN = tlsRecord ? (Array.isArray(tlsRecord.SubjectAN) ? tlsRecord.SubjectAN : (Array.isArray(tlsRecord.CertificateSANs) ? tlsRecord.CertificateSANs : [])) : [];
               const tlsProbeOk   = tlsRecord ? (tlsRecord.ProbeStatus !== false) : null;
               const uniquePageCount = (window.uniquePageCountMap && window.uniquePageCountMap[h.url]) || 0;
+              const urlDomain = (h.url || "").replace(/^https?:\/\//, "").split(/[/:?#]/)[0];
+              const linksForThisUrl = (window.linksMap || {})[h.url] || [];
               const { score, reasons, breakdown } = computePriority({
-                purpose: domainPurpose,
                 url: h.url,
+                finalUrl: h.final_url || "",
                 loginFound: loginMap[h.url] || "N/A",
                 loginDetails: (window.loginDetailsMap || {})[h.url] || [],
                 statusCode: h.status_code,
@@ -4303,12 +5073,13 @@ function buildInsightsCharts({
                 webserver: h.webserver || "",
                 corsHeader: acaoFlag,
                 sslVersion,
-                tlsDeprecated,
                 tlsCipher,
                 tlsIssuerCN,
                 tlsSubjectCN,
                 tlsSubjectAN,
                 tlsProbeOk,
+                publicKeyBits,
+                publicKeyAlgo,
                 certExpiry,
                 scheme: schemeValue || (urlValue.startsWith("https://") ? "https" : (urlValue.startsWith("http://") ? "http" : "")),
                 securityHeadersMissing: missingSecurityHeaders,
@@ -4324,7 +5095,11 @@ function buildInsightsCharts({
                 isApiSurface: apiDetected === "Yes",
                 isEmployeeAsset: colleagueStatus,
                 cloudProfile,
-                takeoverRisk
+                takeoverRisk,
+                domain: urlDomain,
+                linksForDomain: linksForThisUrl,
+                thirdPartyVendors: window.thirdPartyIntelData || [],
+                contentType: h.content_type || ""
               });
               const roundedScore = Math.round(score);
               if (score < minRiskScore) minRiskScore = score;
@@ -4346,10 +5121,16 @@ function buildInsightsCharts({
               });
               rowDataStore.push({ domain, prioScore: score });
 
+              const rowPrimaryIp = combinedIpList.length ? combinedIpList[0] : "";
+              const rowShodanPorts = (window.shodanByIp || {})[rowPrimaryIp] || [];
+              const rowShodanCell = rowShodanPorts.filter(p => p.service || p.banner).length
+                ? rowShodanPorts.filter(p => p.service || p.banner)
+                    .map(p => `${escapeHtml(String(p.port))}/${escapeHtml(p.protocol || 'tcp')}: ${escapeHtml(p.service || '-')}`)
+                    .join(', ')
+                : '-';
               const httpColumns = [
                 escapeHtml(port ? String(port) : "N/A"),
                 endpointUrlCell,
-                screenshotHTML,
                 redirectCell,
                 homepageTitleCell,
                 webServerCell,
@@ -4374,6 +5155,7 @@ function buildInsightsCharts({
                 cdnFlagCell,
                 openPortsCell,
                 notablePortsCell,
+                rowShodanCell,
                 hostnamesOnIpHtml,
                 asnProviderHtml,
                 networkBlockHtml
@@ -4382,6 +5164,18 @@ function buildInsightsCharts({
               const tlsEndpointIpCell = tlsDetails.endpointIp !== "N/A"
                 ? tlsDetails.endpointIp
                 : (combinedIpList.length ? escapeHtml(combinedIpList[0]) : "N/A");
+              // Derived TLS signals for master table
+              const mTlsSubjectCn = tlsRecord ? (tlsRecord.SubjectCN || tlsRecord.CertificateCommonName || "") : "";
+              const mTlsSubjectAn = tlsRecord ? (Array.isArray(tlsRecord.SubjectAN) ? tlsRecord.SubjectAN : (Array.isArray(tlsRecord.CertificateSANs) ? tlsRecord.CertificateSANs : [])) : [];
+              const mTlsIssuerCn  = tlsRecord ? (tlsRecord.IssuerCN || "") : "";
+              const mTlsIssuerLbl = (tlsRecord ? (tlsRecord.IssuerDN || mTlsIssuerCn || "") : "").toLowerCase();
+              const mIsWildcard   = mTlsSubjectCn.startsWith("*.") || mTlsSubjectAn.some(s => String(s).startsWith("*."));
+              const mIsSelfSigned = !!(mTlsSubjectCn && mTlsSubjectCn === mTlsIssuerCn);
+              const mIsLE         = mTlsIssuerLbl.includes("let's encrypt") || mTlsIssuerLbl.includes("letsencrypt");
+              const mKeyBits      = tlsRecord && tlsRecord.PublicKeyBits != null ? Number(tlsRecord.PublicKeyBits) : null;
+              const mKeyAlgo      = tlsRecord ? (tlsRecord.PublicKeyAlgo || "") : "";
+              const mIsEC         = mKeyAlgo.toUpperCase().startsWith("EC");
+              const mKeySzClass   = mKeyBits === null ? "" : (mIsEC || mKeyBits >= 4096 ? "badge--green" : mKeyBits >= 2048 ? "badge--yellow" : "badge--red");
               const tlsColumns = [
                 tlsDetails.version,
                 tlsDetails.cipher,
@@ -4394,7 +5188,12 @@ function buildInsightsCharts({
                 tlsDetails.subjectCn,
                 tlsDetails.subjectAn,
                 tlsDetails.serial,
-                tlsEndpointIpCell
+                tlsEndpointIpCell,
+                mKeyAlgo || '-',
+                mKeyBits !== null ? `<span class="badge ${mKeySzClass}">${mKeyBits}</span>` : '-',
+                mIsWildcard ? 'Yes' : 'No',
+                mIsSelfSigned ? 'Yes' : 'No',
+                mIsLE ? "Let's Encrypt" : (mTlsIssuerLbl ? 'Paid CA' : '-')
               ];
 
               const cloudProviderCell = cloudProfile ? cloudValueOrDefault(cloudProfile.CloudProvider, "Unknown") : "Not mapped";
@@ -4433,7 +5232,6 @@ function buildInsightsCharts({
                 <td>${statusCell}</td>
                 <td>${redirectCell}</td>
                 <td>${homepageTitleCell}</td>
-                <td>${screenshotHTML}</td>
                 <td>${webServerCell}</td>
                 <td>${techStackHtml}</td>
                 <td>${contentLengthCell}</td>
@@ -4457,9 +5255,7 @@ function buildInsightsCharts({
               const row = document.createElement("tr");
               row.innerHTML = masterCells.map(value => `<td>${value}</td>`).join("");
               const scoreCell = row.cells[0];
-              const reasonsText = Array.isArray(reasons) ? reasons.map(reason => String(reason || "")).join("\n") : "";
-              scoreCell.innerHTML = `<span class="score-badge" title="${escapeHtml(reasonsText)}">${roundedScore}</span>`;
-              scoreCell.title = reasonsText;
+              scoreCell.innerHTML = buildScoreCard(score, breakdown, reasons);
               const emailAuthMissing = [spf, dkim, dmarc].some(value => typeof value === "string" && value.toLowerCase().includes("no "));
               row.dataset.score = String(roundedScore);
               row.dataset.httpLogin = (loginMap[h.url] === "Yes" && (h.url || "").startsWith("http://")) ? "1" : "0";
@@ -4473,10 +5269,6 @@ function buildInsightsCharts({
             const colleagueCellValue = escapeHtml(colleagueStatus ? "Yes" : "No");
             const fallbackApiDetected = ((apiMap[domain] || "").toString().trim().toLowerCase() === "yes") ? "Yes" : "No";
             const fallbackApiCell = escapeHtml(fallbackApiDetected);
-            const fallbackScreenshot = `
-              <span style="display:none;">no screenshot</span>
-              No screenshot
-            `;
             const fallbackTlsRaw = getTlsRecord(buildEndpointUrl(domain, "443"), domain);
             const fallbackTlsDetails = describeTlsDetails(fallbackTlsRaw, domainSec);
             const fallbackTlsEndpointIp = fallbackTlsDetails.endpointIp !== "N/A"
@@ -4485,7 +5277,6 @@ function buildInsightsCharts({
             const fallbackHttpColumns = [
               "N/A",
               "N/A",
-              fallbackScreenshot,
               "N/A",
               "N/A",
               "N/A",
@@ -4510,6 +5301,13 @@ function buildInsightsCharts({
               "N/A",
               openPortsCell,
               notablePortsCell,
+              (() => {
+                const fbIp = combinedIpList.length ? combinedIpList[0] : "";
+                const fbPorts = (window.shodanByIp || {})[fbIp] || [];
+                return fbPorts.filter(p => p.service || p.banner).length
+                  ? fbPorts.filter(p => p.service || p.banner).map(p => `${String(p.port)}/${p.protocol || 'tcp'}: ${p.service || '-'}${p.version ? ' ' + p.version : ''}`).join(', ')
+                  : '-';
+              })(),
               hostnamesOnIpHtml,
               asnProviderHtml,
               networkBlockHtml
@@ -4526,7 +5324,8 @@ function buildInsightsCharts({
               fallbackTlsDetails.subjectCn,
               fallbackTlsDetails.subjectAn,
               fallbackTlsDetails.serial,
-              fallbackTlsEndpointIp
+              fallbackTlsEndpointIp,
+              '-', '-', '-', '-', '-'
             ];
             const fallbackCloudColumns = [
               "Not mapped",
@@ -4562,14 +5361,20 @@ function buildInsightsCharts({
             <td>${resolutionStatusHtml}</td>
             <td>${aRecordHtml}</td>
             <td>${aaaaRecordHtml}</td>
-            <td>${nsRecordHtml}</td>
-            <td>${mxRecordHtml}</td>
+            <td>${nsClusterHtml}</td>
             <td>${cnameRecordHtml}</td>
-            <td>${txtSummaryHtml}</td>
+            <td>${txtRecordsHtml}</td>
             <td>${soaRecordHtml}</td>
             <td>${srvRecordHtml}</td>
             <td>${caaRecordHtml}</td>
             <td>${zoneTransferHtml}</td>
+            <td>${registrarVal || '-'}</td>
+            <td>${domainCreatedHtml}</td>
+            <td>${domainExpiresVal || '-'}</td>
+            <td>${escapeHtml(domainAgeVal)}</td>
+            <td>${bimiHtml}</td>
+            <td>${mtaStsHtml}</td>
+            <td>${daneHtml}</td>
             <td>${whoisHtml}</td>
             <td>${keywordHtml}</td>
           `;
@@ -4689,6 +5494,73 @@ function buildInsightsCharts({
             ? issuerOrgArray.map(item => escapeHtml(String(item))).join("<br>")
             : "N/A";
 
+          // Phase 5: Derived TLS signals
+          const subjectCnRaw = record.SubjectCN || record.CertificateCommonName || "";
+          const subjectAnArr = Array.isArray(record.SubjectAN) ? record.SubjectAN
+            : (Array.isArray(record.CertificateSANs) ? record.CertificateSANs : []);
+          const issuerCnRaw = record.IssuerCN || "";
+          const isWildcard = subjectCnRaw.startsWith("*.") || subjectAnArr.some(s => String(s).startsWith("*."));
+          const isSelfSigned = !!(subjectCnRaw && subjectCnRaw === issuerCnRaw);
+          const issuerLabel = (record.IssuerDN || issuerCnRaw || "").toLowerCase();
+          const isLE = issuerLabel.includes("let's encrypt") || issuerLabel.includes("letsencrypt");
+          const keyBits = record.PublicKeyBits != null ? Number(record.PublicKeyBits) : null;
+          const keyAlgoRaw = (record.PublicKeyAlgo || "").trim();
+
+          const keyAlgoHtml = keyAlgoRaw
+            ? `<span class="badge badge--${keyAlgoRaw.toUpperCase().startsWith("EC") ? "cyan" : "gray"}">${escapeHtml(keyAlgoRaw)}</span>`
+            : '<span class="text-dim">-</span>';
+
+          let keySizeHtml = '<span class="text-dim">-</span>';
+          if (keyBits !== null) {
+            const isEC = keyAlgoRaw.toUpperCase().startsWith("EC");
+            const szClass = isEC || keyBits >= 4096 ? "badge--green"
+              : keyBits >= 2048 ? "badge--yellow"
+              : "badge--red";
+            keySizeHtml = `<span class="badge ${szClass}">${keyBits}</span>`;
+          }
+
+          const wildcardHtml = isWildcard
+            ? `<span class="badge badge--yellow">Yes</span>`
+            : `<span class="badge badge--gray">No</span>`;
+
+          const selfSignedHtml = isSelfSigned
+            ? `<span class="badge badge--red">Yes</span>`
+            : `<span class="badge badge--gray">No</span>`;
+
+          const caTypeHtml = isLE
+            ? `<span class="badge badge--cyan">Let's Encrypt</span>`
+            : (issuerLabel ? `<span class="badge badge--gray">Paid CA</span>` : '<span class="text-dim">-</span>');
+
+          // ── Cert Score (0–100, graded A–F) ─────────────────────────
+          let certScore = 100;
+          // TLS version penalty
+          const tlsVerLow = tlsVersionDisplay.toLowerCase();
+          if (tlsVerLow.includes("ssl") || tlsVerLow.includes("1.0")) certScore -= 50;
+          else if (tlsVerLow.includes("1.1"))                          certScore -= 30;
+          else if (tlsVerLow.includes("1.2"))                          certScore -= 5;
+          // Cipher weakness
+          const cipherLow = cipherDisplay.toLowerCase();
+          if (/rc4|des\b|3des|null|export|md5|anon/.test(cipherLow))  certScore -= 25;
+          // Self-signed
+          if (isSelfSigned)                                             certScore -= 40;
+          // Expiry
+          if (daysNumeric !== null) {
+            if (daysNumeric < 0)       certScore -= 40;
+            else if (daysNumeric < 30) certScore -= 25;
+            else if (daysNumeric < 90) certScore -= 10;
+          }
+          // Weak key
+          if (keyBits !== null && !keyAlgoRaw.toUpperCase().startsWith("EC")) {
+            if (keyBits < 2048) certScore -= 20;
+            else if (keyBits < 4096) certScore -= 5;
+          }
+          // Wildcard minor risk
+          if (isWildcard) certScore -= 5;
+          certScore = Math.max(0, Math.min(100, certScore));
+          const certGrade = certScore >= 90 ? "A" : certScore >= 75 ? "B" : certScore >= 60 ? "C" : certScore >= 45 ? "D" : "F";
+          const certScoreTier = certScore >= 75 ? "score-badge--low" : certScore >= 50 ? "score-badge--moderate" : certScore >= 30 ? "score-badge--high" : "score-badge--critical";
+          const certScoreHtml = `<span class="score-badge ${certScoreTier}" title="Cert Score: ${certScore}/100">${certGrade} ${certScore}</span>`;
+
           const tlsRow = document.createElement("tr");
           tlsRow.dataset.domain = domainKey || "";
           tlsRow.dataset.url = normalizedEndpoint;
@@ -4697,6 +5569,7 @@ function buildInsightsCharts({
           tlsRow.dataset.expiryDays = daysNumeric !== null ? String(daysNumeric) : "";
           tlsRow.innerHTML = `
             <td>${endpointCell}</td>
+            <td>${certScoreHtml}</td>
             <td>${ipCell}</td>
             <td>${escapeHtml(portDisplay)}</td>
             <td>${escapeHtml(tlsVersionDisplay)}</td>
@@ -4710,6 +5583,11 @@ function buildInsightsCharts({
             <td>${issuerDnCell}</td>
             <td>${issuerCnCell}</td>
             <td>${issuerOrgCell}</td>
+            <td>${keyAlgoHtml}</td>
+            <td>${keySizeHtml}</td>
+            <td>${wildcardHtml}</td>
+            <td>${selfSignedHtml}</td>
+            <td>${caTypeHtml}</td>
           `;
           prepareRowCells(tlsRow);
           tlsTableRows.push(tlsRow);
@@ -4737,10 +5615,16 @@ function buildInsightsCharts({
             ? ipSummary.entries.map(entry => {
                 const proto = escapeHtml((entry.protocol || "tcp").toUpperCase());
                 const serviceName = escapeHtml(entry.service || "unknown/custom");
-                return `${escapeHtml(String(entry.port))}/${proto} — ${serviceName}`;
+                return `${escapeHtml(String(entry.port))}/${proto} - ${serviceName}`;
               }).join("<br>")
             : "No open ports";
           const notableHtml = renderPortTagColumn(ipSummary.highlightCounts);
+          const shodanPorts = (window.shodanByIp || {})[ipValue] || [];
+          const shodanHtml = shodanPorts.filter(p => p.service || p.banner).length
+            ? shodanPorts.filter(p => p.service || p.banner)
+                .map(p => { const svc = escapeHtml(p.service || '-'); const ver = p.version ? ` <span style="opacity:0.7">${escapeHtml(p.version)}</span>` : ''; return `<span class="badge badge--mono">${escapeHtml(String(p.port))}/${escapeHtml(p.protocol || 'tcp')}: ${svc}${ver}</span>`; })
+                .join(' ')
+            : '<span class="text-dim">-</span>';
           const intel = ipIntelMap[ipValue] || {};
           const ptrDisplay = intel.ptr ? escapeHtml(intel.ptr) : "Not observed";
           const asnValue = (intel.asn || "").trim();
@@ -4758,6 +5642,7 @@ function buildInsightsCharts({
             <td>${networkDisplay}</td>
             <td>${servicesHtml}</td>
             <td>${notableHtml}</td>
+            <td>${shodanHtml}</td>
           `;
           prepareRowCells(ipRow);
           ipTableRows.push(ipRow);
@@ -4765,39 +5650,28 @@ function buildInsightsCharts({
 
         setupTableFilterControllers();
         refreshAllTableFilterOptions();
-        renderDomainTable();
-        renderEndpointsTable();
-        renderIpTable();
-        renderTlsTable();
-        renderCloudTable();
+        // Section tables are rendered lazily on first nav click - see applyView() in initializeViewControls()
       }
 
       function finalizeColors() {
         allTableRows.forEach(row => {
-          const scoreBadge = row.querySelector(".score-badge");
-          if (!scoreBadge) return;
-          const scoreValue = parseInt(scoreBadge.textContent, 10);
+          const btn = row.querySelector(".score-card__btn");
+          if (!btn) return;
+          const scoreValue = parseInt(btn.textContent, 10);
           if (!Number.isFinite(scoreValue)) return;
-          const scoreCell = scoreBadge.closest("td");
-          if (!scoreCell) return;
           const color = getDynamicColor(scoreValue, minRiskScore, maxRiskScore);
-          scoreCell.style.backgroundColor = color;
-          scoreCell.style.color = "#fff";
-          scoreCell.style.fontWeight = "700";
-          scoreCell.style.textAlign = "center";
-          scoreCell.style.verticalAlign = "middle";
-          scoreBadge.classList.remove("score-badge--critical", "score-badge--high", "score-badge--moderate", "score-badge--low");
-          if (scoreValue >= 100) {
-            scoreBadge.classList.add("score-badge--critical");
-          } else if (scoreValue >= 60) {
-            scoreBadge.classList.add("score-badge--high");
-          } else if (scoreValue >= 30) {
-            scoreBadge.classList.add("score-badge--moderate");
+          btn.classList.remove("score-badge--critical", "score-badge--high", "score-badge--moderate", "score-badge--low");
+          if (scoreValue >= 75) {
+            btn.classList.add("score-badge--critical");
+          } else if (scoreValue >= 50) {
+            btn.classList.add("score-badge--high");
+          } else if (scoreValue >= 25) {
+            btn.classList.add("score-badge--moderate");
           } else {
-            scoreBadge.classList.add("score-badge--low");
+            btn.classList.add("score-badge--low");
           }
-          scoreBadge.style.background = "rgba(255, 255, 255, 0.18)";
-          scoreBadge.style.color = "#fff";
+          btn.style.background = color;
+          btn.style.color = "#fff";
         });
       }
 
@@ -4821,12 +5695,6 @@ function buildInsightsCharts({
             if (!filter.value) continue;
             const cell = cells[filter.index];
             if (!cell) return false;
-            if (filter.id === "screenshot-filter") {
-              const hasImage = !!cell.querySelector("img");
-              if (filter.value === "has screenshot" && !hasImage) return false;
-              if (filter.value === "no screenshot" && hasImage) return false;
-              continue;
-            }
             const text = cellTexts[filter.index] || "";
             if (!text.includes(filter.value)) return false;
           }
@@ -4906,23 +5774,6 @@ function buildInsightsCharts({
         return filterRow;
       }
 
-      function decorateTableFilterSelects(tableId, selects) {
-        if (!Array.isArray(selects)) return;
-        if (tableId === "endpoints-table") {
-          const screenshotSelect = selects.find(select => select.dataset.columnIndex === "5");
-          if (screenshotSelect) {
-            screenshotSelect.id = "endpoints-screenshot-filter";
-            screenshotSelect.dataset.filterRole = "screenshot";
-          }
-        } else if (tableId === "domain-table") {
-          selects.forEach(select => {
-            if (select.id === "screenshot-filter") {
-              select.dataset.filterRole = "screenshot";
-            }
-          });
-        }
-      }
-
       function setupTableFilter(tableId, getRowsFn, renderFn) {
         if (tableFilterControllers[tableId]) {
           const controller = tableFilterControllers[tableId];
@@ -4935,6 +5786,7 @@ function buildInsightsCharts({
               controller.searchQuery = (searchInput.value || "").trim().toLowerCase();
               searchInput.addEventListener("input", () => {
                 controller.searchQuery = (searchInput.value || "").trim().toLowerCase();
+                if (sectionPagination[tableId]) sectionPagination[tableId].page = 1;
                 controller.render();
               });
             }
@@ -4944,7 +5796,6 @@ function buildInsightsCharts({
         const filterRow = ensureTableFilterRow(tableId);
         if (!filterRow) return;
         const selects = Array.from(filterRow.querySelectorAll("select"));
-        decorateTableFilterSelects(tableId, selects);
         const filterState = selects.map(() => "");
         const controller = {
           tableId,
@@ -4959,6 +5810,7 @@ function buildInsightsCharts({
         selects.forEach((select, idx) => {
           select.addEventListener("change", () => {
             controller.filterState[idx] = (select.value || "").toLowerCase();
+            if (sectionPagination[tableId]) sectionPagination[tableId].page = 1;
             controller.render();
           });
         });
@@ -4968,6 +5820,7 @@ function buildInsightsCharts({
           controller.searchQuery = (searchInput.value || "").trim().toLowerCase();
           searchInput.addEventListener("input", () => {
             controller.searchQuery = (searchInput.value || "").trim().toLowerCase();
+            if (sectionPagination[tableId]) sectionPagination[tableId].page = 1;
             controller.render();
           });
         }
@@ -4981,61 +5834,17 @@ function buildInsightsCharts({
         const { selects, filterState } = controller;
         if (!selects.length) return;
         const uniquePerColumn = selects.map(() => new Set());
-        const screenshotStatsByIndex = new Map();
         rows.forEach(row => {
           const cells = row.cells || [];
           selects.forEach((select, idx) => {
             const cell = cells[idx];
             if (!cell) return;
-            const isScreenshotFilter = Boolean(select && (select.id === "screenshot-filter" || select.dataset.filterRole === "screenshot"));
-            if (isScreenshotFilter) {
-              const hasImage = !!cell.querySelector("img");
-              const stats = screenshotStatsByIndex.get(idx) || { has: 0, none: 0 };
-              if (hasImage) {
-                stats.has += 1;
-              } else {
-                stats.none += 1;
-              }
-              screenshotStatsByIndex.set(idx, stats);
-              return;
-            }
             const text = getCellContentText(cell);
             if (!text) return;
             uniquePerColumn[idx].add(text);
           });
         });
         selects.forEach((select, idx) => {
-          const isScreenshotFilter = Boolean(select && (select.id === "screenshot-filter" || select.dataset.filterRole === "screenshot"));
-          if (isScreenshotFilter) {
-            const currentValue = select.value;
-            const stats = screenshotStatsByIndex.get(idx) || { has: 0, none: 0 };
-            const screenshotOptions = [
-              { value: "", label: "All" },
-              {
-                value: "has screenshot",
-                label: stats.has > 0 ? `Has screenshot (${stats.has})` : "Has screenshot"
-              },
-              {
-                value: "no screenshot",
-                label: stats.none > 0 ? `No screenshot (${stats.none})` : "No screenshot"
-              }
-            ];
-            select.innerHTML = "";
-            screenshotOptions.forEach(optionConfig => {
-              const option = document.createElement("option");
-              option.value = optionConfig.value;
-              option.textContent = optionConfig.label;
-              select.appendChild(option);
-            });
-            if (screenshotOptions.some(option => option.value === currentValue)) {
-              select.value = currentValue;
-              filterState[idx] = currentValue.toLowerCase();
-            } else {
-              select.value = "";
-              filterState[idx] = "";
-            }
-            return;
-          }
           const currentValue = select.value;
           Array.from(select.options).slice(1).forEach(opt => opt.remove());
           const values = Array.from(uniquePerColumn[idx]).sort((a, b) => a.localeCompare(b));
@@ -5081,14 +5890,6 @@ function buildInsightsCharts({
             if (!filterValue) return true;
             const cell = cells[idx];
             if (!cell) return false;
-            const select = selects[idx];
-            const isScreenshotFilter = Boolean(select && (select.id === "screenshot-filter" || select.dataset.filterRole === "screenshot"));
-            if (isScreenshotFilter) {
-              const hasImage = !!cell.querySelector("img");
-              if (filterValue === "has screenshot" && !hasImage) return false;
-              if (filterValue === "no screenshot" && hasImage) return false;
-              return true;
-            }
             const text = cellTexts[idx] || "";
             return text.includes(filterValue);
           });
@@ -5099,6 +5900,7 @@ function buildInsightsCharts({
         setupTableFilter("domain-table", () => domainTableRows, renderDomainTable);
         setupTableFilter("endpoints-table", () => endpointTableRows, renderEndpointsTable);
         setupTableFilter("ip-table", () => ipTableRows, renderIpTable);
+        setupTableFilter("mail-table", () => mailTableRows, renderMailTable);
         setupTableFilter("tls-table", () => tlsTableRows, renderTlsTable);
         setupTableFilter("cloud-table", () => cloudInfraTableRows, renderCloudTable);
       }
@@ -5109,53 +5911,303 @@ function buildInsightsCharts({
         return aVal.localeCompare(bVal);
       };
 
+      function renderPagedSection(tableId, tbodyId, paginationDivId, rows, comparator) {
+        const state = sectionPagination[tableId];
+        const sorted = comparator ? rows.slice().sort(comparator) : rows.slice();
+        const perPage = SECTION_PAGE_SIZE;
+        const total = sorted.length;
+        const totalPages = Math.max(1, Math.ceil(total / perPage));
+        if (state.page > totalPages) state.page = totalPages;
+        const start = (state.page - 1) * perPage;
+        const pageRows = sorted.slice(start, start + perPage);
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        tbody.innerHTML = "";
+        pageRows.forEach(row => {
+          if (row && !row.dataset.cellsPrepared) {
+            prepareRowCells(row);
+            row.dataset.cellsPrepared = "true";
+          }
+          tbody.appendChild(row);
+        });
+        if (pageRows.length) window.requestAnimationFrame(() => updateClampStates(pageRows));
+        renderSectionPaginationControls(paginationDivId, total, state.page, perPage, (newPage) => {
+          state.page = newPage;
+          renderPagedSection(tableId, tbodyId, paginationDivId, rows, comparator);
+        });
+      }
+
       function renderDomainTable() {
         const filtered = applyTableFilters("domain-table", domainTableRows);
-        renderTableBody("domain-table-body", filtered, compareByDataset("domain"));
+        renderPagedSection("domain-table", "domain-table-body", "domain-pagination", filtered, compareByDataset("domain"));
       }
 
       function renderEndpointsTable() {
         const filtered = applyTableFilters("endpoints-table", endpointTableRows);
-        renderTableBody(
-          "endpoints-table-body",
-          filtered,
-          (a, b) => {
-            const domainCompare = compareByDataset("domain")(a, b);
-            if (domainCompare !== 0) return domainCompare;
-            return (a.dataset.url || "").localeCompare(b.dataset.url || "");
-          }
-        );
+        renderPagedSection("endpoints-table", "endpoints-table-body", "endpoints-pagination", filtered, (a, b) => {
+          const domainCompare = compareByDataset("domain")(a, b);
+          if (domainCompare !== 0) return domainCompare;
+          return (a.dataset.url || "").localeCompare(b.dataset.url || "");
+        });
       }
 
       function renderIpTable() {
         const filtered = applyTableFilters("ip-table", ipTableRows);
-        renderTableBody("ip-table-body", filtered, compareByDataset("ip"));
+        renderPagedSection("ip-table", "ip-table-body", "ips-pagination", filtered, compareByDataset("ip"));
+      }
+
+      function renderMailTable() {
+        // Build mail rows from secMapDomain if not yet built
+        if (!mailTableRows.length) {
+          const mxProviderDetect = mx => {
+            if (!mx) return '-';
+            const m = mx.toLowerCase();
+            if (m.includes("google") || m.includes("gmail") || m.includes("aspmx")) return "Google Workspace";
+            if (m.includes("outlook") || m.includes("microsoft") || m.includes("protection.outlook")) return "Microsoft 365";
+            if (m.includes("proofpoint") || m.includes("pphosted")) return "Proofpoint";
+            if (m.includes("mimecast")) return "Mimecast";
+            if (m.includes("barracuda")) return "Barracuda";
+            if (m.includes("messagelabs") || m.includes("symantec")) return "Symantec";
+            if (m.includes("mailgun")) return "Mailgun";
+            if (m.includes("sendgrid")) return "SendGrid";
+            if (m.includes("amazonses") || m.includes("amazonaws")) return "Amazon SES";
+            if (m.includes("zoho")) return "Zoho Mail";
+            return "Other";
+          };
+          const spfBadge = spf => {
+            if (!spf || spf === "N/A" || /no spf/i.test(spf)) return `<span class="badge badge--red">Missing</span>`;
+            if (/~all/.test(spf)) return `<span class="badge badge--yellow">Soft-fail</span> <span class="text-dim">${escapeHtml(spf.substring(0,60))}</span>`;
+            if (/-all/.test(spf)) return `<span class="badge badge--green">Present</span> <span class="text-dim">${escapeHtml(spf.substring(0,60))}</span>`;
+            return `<span class="badge badge--cyan">Present</span> <span class="text-dim">${escapeHtml(spf.substring(0,60))}</span>`;
+          };
+          const dkimBadge = dkim => {
+            if (!dkim || dkim === "N/A" || /no dkim/i.test(dkim)) return `<span class="badge badge--red">Missing</span>`;
+            return `<span class="badge badge--green">Present</span>`;
+          };
+          const dmarcBadge = dmarc => {
+            if (!dmarc || dmarc === "N/A" || /no dmarc/i.test(dmarc)) return `<span class="badge badge--red">Missing</span>`;
+            const policy = (dmarc.match(/p=(\w+)/i) || [])[1] || "";
+            if (policy === "reject") return `<span class="badge badge--green">reject</span>`;
+            if (policy === "quarantine") return `<span class="badge badge--yellow">quarantine</span>`;
+            if (policy === "none") return `<span class="badge badge--orange">none</span>`;
+            return `<span class="badge badge--cyan">Present</span>`;
+          };
+          const secMapDomainData = window._secMapDomain || {};
+          Object.keys(secMapDomainData).forEach(domain => {
+            const d = secMapDomainData[domain] || {};
+            const spf = d["SPF Record"] || "";
+            const dkim = d["DKIM Record"] || "";
+            const dmarc = d["DMARC Record"] || "";
+            const mx = d["MX Records"] || "";
+            const bimi = d["BIMI Record"] || "Not Found";
+            const mtaSts = d["MTA-STS"] || "not-found";
+            const dane = d["DANE/TLSA"] || "Not Found";
+            // MX provider
+            const provider = mxProviderDetect(mx);
+            // Email risk score: +20 per missing control (SPF, DKIM, DMARC, MTA-STS, DANE)
+            let risk = 0;
+            if (!spf || /no spf/i.test(spf)) risk += 20;
+            if (!dkim || /no dkim/i.test(dkim)) risk += 20;
+            if (!dmarc || /no dmarc/i.test(dmarc)) risk += 20;
+            if (!mtaSts || mtaSts === "not-found" || mtaSts === "none" || mtaSts === "Not Found") risk += 20;
+            if (!dane || dane === "Not Found") risk += 20;
+            const riskColor = risk >= 80 ? "score-badge--critical" : risk >= 60 ? "score-badge--high" : risk >= 40 ? "score-badge--moderate" : "score-badge--low";
+            const bimiHtml = bimi !== "Not Found"
+              ? `<span class="badge badge--cyan">Present</span>`
+              : `<span class="text-dim">Not Found</span>`;
+            const mtaHtml = (mtaSts === "enforce" || mtaSts === "enforced")
+              ? `<span class="badge badge--green">enforce</span>`
+              : mtaSts === "testing"
+                ? `<span class="badge badge--yellow">testing</span>`
+                : mtaSts === "none"
+                  ? `<span class="badge badge--orange">none</span>`
+                  : `<span class="text-dim">Not Found</span>`;
+            const daneHtml = (dane && dane !== "Not Found")
+              ? `<span class="badge badge--cyan">Present</span> ${escapeHtml(dane)}`
+              : `<span class="text-dim">Not Found</span>`;
+            const mxHtml = mx ? escapeHtml(mx).replace(/\n/g, "<br>") : '-';
+            const tr = document.createElement("tr");
+            tr.dataset.domain = domain.toLowerCase();
+            tr.dataset.risk = String(risk);
+            tr.innerHTML = `
+              <td>${escapeHtml(domain)}</td>
+              <td><span class="score-badge ${riskColor}">${risk}</span></td>
+              <td>${mxHtml}</td>
+              <td>${escapeHtml(provider)}</td>
+              <td>${spfBadge(spf)}</td>
+              <td>${dkimBadge(dkim)}</td>
+              <td>${dmarcBadge(dmarc)}</td>
+              <td>${bimiHtml}</td>
+              <td>${mtaHtml}</td>
+              <td>${daneHtml}</td>
+            `;
+            mailTableRows.push(tr);
+          });
+          refreshTableFilterOptions("mail-table");
+        }
+        const filtered = applyTableFilters("mail-table", mailTableRows);
+        renderPagedSection("mail-table", "mail-table-body", "mail-pagination", filtered,
+          (a, b) => Number(a.dataset.risk || 0) - Number(b.dataset.risk || 0));
       }
 
       function renderTlsTable() {
         const filtered = applyTableFilters("tls-table", tlsTableRows);
-        renderTableBody(
-          "tls-table-body",
-          filtered,
-          (a, b) => {
-            const domainCompare = compareByDataset("domain")(a, b);
-            if (domainCompare !== 0) return domainCompare;
-            return (a.dataset.url || "").localeCompare(b.dataset.url || "");
-          }
-        );
+        renderPagedSection("tls-table", "tls-table-body", "tls-pagination", filtered, (a, b) => {
+          const domainCompare = compareByDataset("domain")(a, b);
+          if (domainCompare !== 0) return domainCompare;
+          return (a.dataset.url || "").localeCompare(b.dataset.url || "");
+        });
       }
 
       function renderCloudTable() {
         const filtered = applyTableFilters("cloud-table", cloudInfraTableRows);
-        renderTableBody(
-          "cloud-table-body",
-          filtered,
-          (a, b) => {
-            const assetA = (a.dataset.asset || "").toLowerCase();
-            const assetB = (b.dataset.asset || "").toLowerCase();
-            return assetA.localeCompare(assetB);
-          }
+        renderPagedSection("cloud-table", "cloud-table-body", "cloud-pagination", filtered, (a, b) => {
+          const assetA = (a.dataset.asset || "").toLowerCase();
+          const assetB = (b.dataset.asset || "").toLowerCase();
+          return assetA.localeCompare(assetB);
+        });
+      }
+
+      // ── Internet Footprint (Seed Expansion) tables ───────────────────────
+      function renderSeedExpansionTables() {
+        const data = window.seedExpansionData || {};
+
+        // CIDR blocks - stored as objects {asn, asn_name, cidr, source_domain}
+        const cidrRows = (data.cidr_blocks || []).map(r => {
+          const tr = document.createElement("tr");
+          const asn = typeof r === "string" ? "" : (r.asn || "");
+          const asnName = typeof r === "string" ? "" : (r.asn_name || "");
+          const cidr = typeof r === "string" ? r : (r.cidr || "");
+          const src = typeof r === "string" ? "" : (r.source_domain || "");
+          tr.innerHTML = `<td><strong>${asn}</strong></td><td>${asnName}</td><td><code>${cidr}</code></td><td>${src}</td>`;
+          return tr;
+        });
+        renderSimpleBody("seed-cidr-body", cidrRows);
+
+        const orgRows = (data.org_subdomains || []).map(h => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${h.hostname||h}</td><td>crt.sh O= filter</td>`;
+          return tr;
+        });
+        renderSimpleBody("seed-org-body", orgRows);
+
+        const tldRows = (data.tld_candidates || []).map(r => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${r.domain||r}</td><td>DNS-resolved ✓</td>`;
+          return tr;
+        });
+        renderSimpleBody("seed-tld-body", tldRows);
+
+        const whoisRows = (data.whois_candidates || []).map(r => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${r.domain||r}</td><td>${r.email||""}</td><td>candidate</td>`;
+          return tr;
+        });
+        renderSimpleBody("seed-whois-body", whoisRows);
+      }
+
+      // ── SaaS Tenant tables ────────────────────────────────────────────────
+      function renderSaasCloudTables() {
+        const tenants = window.saasTenants || [];
+        const saasRows = tenants.map(r => {
+          const code = r.status_code || "";
+          const is2xx3xx = /^[23]\d\d$/.test(code);
+          const statusBadge = is2xx3xx
+            ? `<span class="badge badge--green">${code}</span>`
+            : `<span class="badge badge--neutral">${code}</span>`;
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td><strong>${r.service||r.platform||""}</strong></td><td><a href="${r.url||"#"}" target="_blank" rel="noopener">${r.url||""}</a></td><td>${statusBadge}</td>`;
+          return tr;
+        });
+        renderSimpleBody("saas-table-body", saasRows);
+
+        // Open cloud buckets from cloudStorageData (status = open/accessible)
+        const cloudData = (typeof cloudStorageData !== "undefined" ? cloudStorageData : []) || [];
+        const openBuckets = cloudData.filter(r =>
+          /open|accessible/i.test(r.Status||r.status||"")
         );
+        const bucketRows = openBuckets.map(r => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td><a href="${r.URL||r.url||"#"}" target="_blank" rel="noopener">${r.URL||r.url||""}</a></td><td>${r.Provider||r.provider||""}</td><td><span class="badge badge--red">${r.Status||r.status||""}</span></td><td>${r.Variant||r.variant||""}</td>`;
+          return tr;
+        });
+        renderSimpleBody("open-buckets-body", bucketRows);
+      }
+
+      // ── Third-Party Vendor tables ─────────────────────────────────────────
+      function renderThirdPartyTables() {
+        const data = (typeof window.thirdPartyIntelData !== "undefined" ? window.thirdPartyIntelData : []) || [];
+
+        // ── Summary by category ──
+        const byCat = {};
+        const riskOrder = { low: 0, medium: 1, high: 2, critical: 3 };
+        data.forEach(r => {
+          const cat = r.category || "other";
+          if (!byCat[cat]) byCat[cat] = { count: 0, maxRisk: "low" };
+          byCat[cat].count++;
+          if ((riskOrder[r.risk] || 0) > (riskOrder[byCat[cat].maxRisk] || 0)) {
+            byCat[cat].maxRisk = r.risk;
+          }
+        });
+
+        const riskBadge = (risk) => {
+          const cls = { critical: "badge--red", high: "badge--red", medium: "badge--yellow", low: "badge--neutral" }[risk] || "badge--neutral";
+          return `<span class="badge ${cls}">${risk}</span>`;
+        };
+
+        const summaryRows = Object.entries(byCat).sort((a, b) => a[0].localeCompare(b[0])).map(([cat, info]) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td><strong>${cat}</strong></td><td>${info.count}</td><td>${riskBadge(info.maxRisk)}</td>`;
+          return tr;
+        });
+        renderSimpleBody("tpi-summary-body", summaryRows);
+
+        // ── Detail table ──
+        const detailRows = data.map(r => {
+          const tr = document.createElement("tr");
+          const sources = (r.sources || []).join(", ") || "-";
+          tr.innerHTML = `<td><strong>${r.service_name || r.domain}</strong></td><td><code>${r.domain}</code></td><td>${r.category || ""}</td><td>${riskBadge(r.risk || "low")}</td><td><small>${sources}</small></td>`;
+          return tr;
+        });
+        renderSimpleBody("tpi-detail-body", detailRows);
+      }
+
+      // ── Helper ─ render simple tbody from array of <tr> elements ─────────
+      function renderSimpleBody(tbodyId, rows) {
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        tbody.innerHTML = "";
+        if (!rows.length) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td colspan="99" style="text-align:center;color:var(--color-text-muted,#888)">No data</td>`;
+          tbody.appendChild(tr);
+          return;
+        }
+        rows.forEach(tr => tbody.appendChild(tr));
+      }
+
+      function renderSectionPaginationControls(divId, totalRows, page, perPage, onPageChange) {
+        const div = document.getElementById(divId);
+        if (!div) return;
+        div.innerHTML = "";
+        if (totalRows <= perPage) return;
+        const totalPages = Math.ceil(totalRows / perPage);
+        const info = document.createElement("span");
+        info.className = "section-pagination__info";
+        info.textContent = `Page ${page} of ${totalPages} (${totalRows} rows)`;
+        const prevBtn = document.createElement("button");
+        prevBtn.className = "section-pagination__btn";
+        prevBtn.textContent = "← Prev";
+        prevBtn.disabled = page === 1;
+        prevBtn.addEventListener("click", () => { if (page > 1) onPageChange(page - 1); });
+        const nextBtn = document.createElement("button");
+        nextBtn.className = "section-pagination__btn";
+        nextBtn.textContent = "Next →";
+        nextBtn.disabled = page === totalPages;
+        nextBtn.addEventListener("click", () => { if (page < totalPages) onPageChange(page + 1); });
+        div.appendChild(prevBtn);
+        div.appendChild(info);
+        div.appendChild(nextBtn);
       }
 
       function renderPaginationControls(totalRows) {
@@ -5204,7 +6256,6 @@ function buildInsightsCharts({
       function populateColumnFilters() {
         const filterSelects = Array.from(document.querySelectorAll("#filter-row select"));
         const uniqueValuesByColumn = new Map();
-        const screenshotStats = { has: 0, none: 0 };
         filterSelects.forEach(select => {
           const columnIndex = Number(select.dataset.columnIndex || "0");
           uniqueValuesByColumn.set(columnIndex, new Set());
@@ -5217,48 +6268,11 @@ function buildInsightsCharts({
             if (!values) return;
             const cell = cells[columnIndex];
             if (!cell) return;
-            if (select.id === "screenshot-filter") {
-              const hasImage = !!cell.querySelector("img");
-              if (hasImage) {
-                screenshotStats.has += 1;
-              } else {
-                screenshotStats.none += 1;
-              }
-              return;
-            }
             const text = getCellContentText(cell);
             if (text) values.add(text);
           });
         });
         filterSelects.forEach(select => {
-          const isScreenshotFilter = Boolean(select && (select.id === "screenshot-filter" || select.dataset.filterRole === "screenshot"));
-          if (isScreenshotFilter) {
-            const currentValue = select.value;
-            const screenshotOptions = [
-              { value: "", label: "All" },
-              {
-                value: "has screenshot",
-                label: screenshotStats.has > 0 ? `Has screenshot (${screenshotStats.has})` : "Has screenshot"
-              },
-              {
-                value: "no screenshot",
-                label: screenshotStats.none > 0 ? `No screenshot (${screenshotStats.none})` : "No screenshot"
-              }
-            ];
-            select.innerHTML = "";
-            screenshotOptions.forEach(optionConfig => {
-              const option = document.createElement("option");
-              option.value = optionConfig.value;
-              option.textContent = optionConfig.label;
-              select.appendChild(option);
-            });
-            if (screenshotOptions.some(option => option.value === currentValue)) {
-              select.value = currentValue;
-            } else {
-              select.value = "";
-            }
-            return;
-          }
           const columnIndex = Number(select.dataset.columnIndex || "0");
           const valueSet = uniqueValuesByColumn.get(columnIndex) || new Set();
           const currentValue = select.value;
@@ -5283,7 +6297,7 @@ function buildInsightsCharts({
           });
           if (currentValue && values.includes(currentValue)) {
             select.value = currentValue;
-          } else if (select.id !== "screenshot-filter") {
+          } else {
             select.value = "";
           }
         });
@@ -5303,6 +6317,15 @@ function buildInsightsCharts({
       initializeSidebarToggle();
       initializeViewControls();
       initializeTableScrollButtons();
+
+      // ── Score card - close on outside click or Escape ────────────────
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#global-score-panel') && !e.target.closest('.score-card__btn'))
+          closeScoreCard();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeScoreCard();
+      });
       // Async data loading and report building
       const INVALID_HOST_PATTERN = /[\s,]/;
       const normalizeHost = (value) => {
@@ -5349,4 +6372,3 @@ function buildInsightsCharts({
 
       async function loadData() {
         try {
-          

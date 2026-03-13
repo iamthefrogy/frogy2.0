@@ -1,0 +1,11 @@
+-prod
+-staging
+-backup
+-data
+-assets
+-files
+-public
+-static
+-dev
+-test
+-media

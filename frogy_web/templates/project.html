@@ -69,6 +69,26 @@
       </div>
     </details>
 
+    <!-- Exclusions expandable -->
+    <details id="exclusions-expandable" style="margin-top:8px">
+      <div class="targets-expandable">
+        <summary>Exclusions <span id="excl-count-badge" style="font-size:0.75rem;font-weight:400;color:var(--text-3);margin-left:6px">0 entries</span></summary>
+        <div id="excl-read-view" style="margin-top:10px">
+          <p class="targets-hint">Subdomains excluded from every scan of this project (exact match + all subdomains).</p>
+          <div id="excl-list-display" class="excl-list-display"></div>
+          <button type="button" class="btn btn--sm btn--ghost" style="margin-top:8px" onclick="editExclusions()">Edit</button>
+        </div>
+        <div id="excl-edit-view" style="display:none;margin-top:10px">
+          <p class="targets-hint">One domain or subdomain per line. e.g. <code>staging.example.com</code></p>
+          <textarea id="excl-textarea" class="targets-textarea" rows="5" placeholder="legacy.example.com&#10;test.example.com"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button type="button" class="btn btn--sm btn--primary" onclick="saveExclusions()">Save</button>
+            <button type="button" class="btn btn--sm btn--ghost" onclick="cancelEditExclusions()">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </details>
+
     <!-- Run history -->
     <div>
       <p class="section-title">Run History</p>
@@ -98,6 +118,10 @@
       <div class="modal-field">
         <label for="modal-targets">Primary domains <small>(one per line)</small></label>
         <textarea id="modal-targets" name="targets" rows="7" placeholder="example.com&#10;api.example.com" required></textarea>
+      </div>
+      <div class="modal-field">
+        <label for="modal-exclusions">Exclude assets <small>(optional — one domain/subdomain per line)</small></label>
+        <textarea id="modal-exclusions" name="exclusions" rows="3" placeholder="staging.example.com&#10;legacy.example.com"></textarea>
       </div>
       <div class="modal-field hidden" id="modal-schedule-field">
         <label for="modal-schedule">Schedule start</label>

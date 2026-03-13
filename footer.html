@@ -4,11 +4,11 @@
 // collected with -follow-redirects (final_url field present).
 //
 // Rules:
-//   A) http:80   → https:443  same host — suppress HTTP if HTTPS record exists
-//   B) http:N    → https:N    same host — suppress HTTP if HTTPS record exists
-//   C) same host + scheme + port, path-only redirect — keep, update url to final_url
-//   D) cross-subdomain redirect — keep both, annotate with _redirectsTo
-//   E) cross-domain redirect   — keep both, annotate with _redirectsTo
+//   A) http:80   → https:443  same host - suppress HTTP if HTTPS record exists
+//   B) http:N    → https:N    same host - suppress HTTP if HTTPS record exists
+//   C) same host + scheme + port, path-only redirect - keep, update url to final_url
+//   D) cross-subdomain redirect - keep both, annotate with _redirectsTo
+//   E) cross-domain redirect   - keep both, annotate with _redirectsTo
 function deduplicateHttpxRecords(records) {
   if (!records || records.length === 0) return records;
 
@@ -57,7 +57,7 @@ function deduplicateHttpxRecords(records) {
       }
     }
 
-    if (!targetUrl) return; // No redirect info — keep as-is
+    if (!targetUrl) return; // No redirect info - keep as-is
 
     const src = parseUrlParts(r.url || r.input || '');
     const tgt = parseUrlParts(targetUrl);
@@ -68,7 +68,7 @@ function deduplicateHttpxRecords(records) {
       if (src.scheme === 'http' && src.port === 80 && tgt.scheme === 'https' && tgt.port === 443) {
         const httpsIdx = existingKeys.get(`https:${tgt.host}:443`);
         if (httpsIdx !== undefined && httpsIdx !== idx) { suppressed.add(idx); return; }
-        // No separate HTTPS record — keep this one, upgrade url to final target
+        // No separate HTTPS record - keep this one, upgrade url to final target
         if (hasFinalUrl) updated.set(idx, { ...r, url: r.final_url, _redirectedFrom: r.url });
         return;
       }
@@ -81,18 +81,18 @@ function deduplicateHttpxRecords(records) {
         return;
       }
 
-      // Rule C: Same host, same scheme + port — path-only redirect
+      // Rule C: Same host, same scheme + port - path-only redirect
       if (src.scheme === tgt.scheme && src.port === tgt.port) {
         if (hasFinalUrl) updated.set(idx, { ...r, url: r.final_url, _redirectedFrom: r.url });
         return;
       }
 
-      // Same host, other scheme/port combo — check if target record already exists
+      // Same host, other scheme/port combo - check if target record already exists
       const tgtIdx = existingKeys.get(`${tgt.scheme}:${tgt.host}:${tgt.port}`);
       if (tgtIdx !== undefined && tgtIdx !== idx) { suppressed.add(idx); return; }
       updated.set(idx, { ...r, _redirectsTo: targetUrl });
     } else {
-      // Rule D: Cross-subdomain, Rule E: Cross-domain — keep both, annotate
+      // Rule D: Cross-subdomain, Rule E: Cross-domain - keep both, annotate
       updated.set(idx, { ...r, _redirectsTo: targetUrl });
     }
   });
@@ -133,7 +133,7 @@ const loginData = filterRecordsByHost(
     ...record,
     login_detection: {
       ...record.login_detection,
-      // #10: safe type normalization — guard against boolean true/false from scanner
+      // #10: safe type normalization - guard against boolean true/false from scanner
       login_found: (() => {
         const v = record?.login_detection?.login_found;
         if (!v) return "No";
@@ -234,7 +234,7 @@ if (typeof tlsInventoryData !== "undefined") {
             window.cloudInfraData = [];
           }
 
-          // #13: data quality flags — track which tools produced output so the report
+          // #13: data quality flags - track which tools produced output so the report
           // can distinguish "zero findings" from "tool did not run / data missing"
           const dataQuality = {
             dns:     dnsxData.length > 0,
@@ -264,6 +264,7 @@ const secMapDomain = {};
               secMapDomain[item.Domain] = item;
             }
           });
+          window._secMapDomain = secMapDomain;
           secHeadersArray.forEach(item => {
             if (!item || !item.URL) return;
             secMapUrl[item.URL] = item;
@@ -375,7 +376,7 @@ const secMapDomain = {};
             });
             window.linksMap = linksMap;
 
-            // Deduplicated unique page count per endpoint — strip query params, normalize
+            // Deduplicated unique page count per endpoint - strip query params, normalize
             // numeric path segments (/users/123 and /users/456 both → /users/{id}) so
             // pagination does not inflate the count.
             const uniquePageCountMap = {};
@@ -415,6 +416,23 @@ const secMapDomain = {};
           const portscanInsights = preparePortscanInsights(portscanData);
           window.portscanByHost = portscanInsights.byHost;
           window.portscanByIp = portscanInsights.byIp;
+
+          // ── Expansion module data windows ──────────────────────────
+          window.seedExpansionData   = (typeof seedExpansionData   !== 'undefined') ? seedExpansionData   : {};
+          window.brandCandidates     = (typeof brandCandidates     !== 'undefined') ? brandCandidates     : [];
+          window.githubSurfaceData   = (typeof githubSurfaceData   !== 'undefined') ? githubSurfaceData   : {};
+          window.faviconClusters     = (typeof faviconClusters     !== 'undefined') ? faviconClusters     : [];
+          window.saasTenants         = (typeof saasTenants         !== 'undefined') ? saasTenants         : [];
+          window.thirdPartyDeps      = (typeof thirdPartyDeps      !== 'undefined') ? thirdPartyDeps      : [];
+          window.thirdPartyIntelData = (typeof thirdPartyIntelData !== 'undefined') ? thirdPartyIntelData : [];
+          window.shodanBanners       = (typeof shodanBanners       !== 'undefined') ? shodanBanners       : [];
+          window.ipv6Data            = (typeof ipv6Data            !== 'undefined') ? ipv6Data            : [];
+
+          // Build shodanByIp lookup: ip -> ports array
+          window.shodanByIp = {};
+          (window.shodanBanners || []).forEach(entry => {
+            if (entry.ip) window.shodanByIp[entry.ip] = entry.ports || [];
+          });
 
           const combinedData = {};
           dnsxData.forEach(d => { combinedData[d.host] = { dns: d, http: [] }; });
@@ -707,7 +725,7 @@ const secMapDomain = {};
                 const dateStr = record.NotAfter || record.ValidTo || record['Cert Expiry Date'];
                 if (dateStr) {
                   const expiry = new Date(dateStr);
-                  // #9: Math.floor for conservative boundary — never round up remaining days
+                  // #9: Math.floor for conservative boundary - never round up remaining days
                   if (!isNaN(expiry.getTime())) days = Math.floor((expiry - Date.now()) / 86400000);
                 }
               }
@@ -733,7 +751,7 @@ const secMapDomain = {};
               const provider = (item.CloudProvider || "").trim();
               const resourceTypeRaw = (item.ResourceType || "").trim();
               const resourceType = resourceTypeRaw.toLowerCase();
-              // #4: explicit parentheses — provider alone is sufficient to recognize an asset
+              // #4: explicit parentheses - provider alone is sufficient to recognize an asset
               const recognized = (resourceType !== "" && resourceType !== "other") || (provider !== "");
               if (!recognized) return;
               stats.total += 1;
@@ -838,6 +856,16 @@ const secMapDomain = {};
             actionItems.push("Maintain current controls and monitor upcoming scans for emerging trends.");
           }
 
+          // ── Tier breakdown from host_classification.json ────────────
+          const tierCounts = { cdn: 0, cloud: 0, onprem: 0 };
+          if (typeof hostClassificationData !== "undefined" && Array.isArray(hostClassificationData)) {
+            hostClassificationData.forEach(h => {
+              if (h.tier === "cdn")         tierCounts.cdn++;
+              else if (h.tier === "cloud")  tierCounts.cloud++;
+              else                          tierCounts.onprem++;
+            });
+          }
+
           buildScoreboard({
             pipeline: {
               discovered: pipelineStats.discovered || 0,
@@ -845,6 +873,7 @@ const secMapDomain = {};
               liveAssets: pipelineStats.resolvable || 0,
               webHosts: pipelineStats.webHosts || 0
             },
+            tierCounts,
             topRisk: topRiskEntry ? {
               score: topRiskEntry.score,
               label: topRiskLabel,
@@ -899,9 +928,8 @@ const secMapDomain = {};
             cloudStats,
           });
 
-          // Endpoint gallery + cert coloring
+          // Cert coloring
           setTimeout(() => {
-            initEndpointViewToggle();
             applyTlsExpiryColoring();
           }, 100);
 
@@ -909,6 +937,7 @@ const secMapDomain = {};
       console.error("Error loading data or building report:", err);
       const sb = document.getElementById("scoreboard");
       if (sb) {
+        sb.style.display = "";
         sb.innerHTML = `<article class="summary-card"><div class="summary-card__header"><h2>Report Rendering Error</h2></div><pre style="white-space:pre-wrap;font-size:12px;margin:0;">${escapeHtml(err && err.stack ? err.stack : String(err))}</pre></article>`;
       }
     }
@@ -919,31 +948,6 @@ const secMapDomain = {};
     const visibleRows = Array.from(document.querySelectorAll("#report-table-body tr"));
     window.requestAnimationFrame(() => updateClampStates(visibleRows));
   });
-
-      const screenshotBackdrop = document.getElementById('screenshotModal');
-      const screenshotImg = document.getElementById('screenshotModalImg');
-      const screenshotClose = document.getElementById('closeModalBtn');
-
-      function openModal(imgSrc) {
-        if (!screenshotBackdrop || !screenshotImg) return;
-        screenshotImg.src = imgSrc;
-        screenshotBackdrop.classList.add('is-visible');
-      }
-      function closeModal() {
-        if (!screenshotBackdrop || !screenshotImg) return;
-        screenshotBackdrop.classList.remove('is-visible');
-        screenshotImg.src = "";
-      }
-      if (screenshotClose) {
-        screenshotClose.addEventListener('click', closeModal);
-      }
-      if (screenshotBackdrop) {
-        screenshotBackdrop.addEventListener('click', (event) => {
-          if (event.target === event.currentTarget) {
-            closeModal();
-          }
-        });
-      }
 
       function openLinksModal(url) {
         const list = (window.linksMap && window.linksMap[url]) ? window.linksMap[url] : [];
@@ -975,13 +979,12 @@ const secMapDomain = {};
       }
       window.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
-          closeModal();
           closeLinksModal();
         }
       });
 
       /* ═══════════════════════════════════════════════════════════
-         FEATURES — Gallery, Auth Badges, Certs
+         FEATURES - Gallery, Auth Badges, Certs
          ═══════════════════════════════════════════════════════════ */
 
       // ── Auth Badge helper ────────────────────────────────────────
@@ -990,63 +993,9 @@ const secMapDomain = {};
         return `<span class="auth-badge auth-badge--${ok ? 'ok' : 'bad'}">${ok ? '✓' : '✗'}</span>`;
       }
 
-      // ── Endpoint Gallery ─────────────────────────────────────────
-      function initEndpointViewToggle() {
-        const buttons = document.querySelectorAll('[data-endpoints-view]');
-        if (!buttons.length) return;
-        buttons.forEach(btn => {
-          btn.addEventListener('click', () => {
-            buttons.forEach(b => b.classList.remove('is-active'));
-            btn.classList.add('is-active');
-            const mode = btn.dataset.endpointsView;
-            const tableWrap = document.getElementById('endpoints-table')?.closest('.table-container');
-            const scrollControls = document.querySelector('.table-scroll-controls[data-view-group="endpoints"]');
-            const gallery = document.getElementById('endpoints-gallery');
-            if (mode === 'gallery') {
-              if (tableWrap) tableWrap.style.display = 'none';
-              if (scrollControls) scrollControls.style.display = 'none';
-              if (gallery) {
-                gallery.style.display = 'grid';
-                renderEndpointGallery(typeof httpxData !== 'undefined' ? httpxData : []);
-              }
-            } else {
-              if (tableWrap) tableWrap.style.display = '';
-              if (scrollControls) scrollControls.style.display = '';
-              if (gallery) gallery.style.display = 'none';
-            }
-          });
-        });
-      }
-
-      function renderEndpointGallery(data) {
-        const container = document.getElementById('endpoints-gallery');
-        if (!container || !Array.isArray(data)) return;
-        container.innerHTML = data.map(h => {
-          const screenshotKey = (h.host || '').replace(/\./g, '_') + '_' + (h.port || 443);
-          const screenshotPath = (typeof screenshotMap !== 'undefined' && screenshotMap?.[screenshotKey]) ? screenshotMap[screenshotKey] : null;
-          const sc = Number(h.status_code) || 0;
-          const scClass = sc >= 500 ? '5xx' : sc >= 400 ? '4xx' : sc >= 300 ? '3xx' : '2xx';
-          const techs = (Array.isArray(h.tech) ? h.tech : []).slice(0, 4);
-          const safeUrl = escapeHtml(screenshotPath || '');
-          return `<div class="endpoint-card" onclick="openModal('${safeUrl}')">
-            ${screenshotPath
-              ? `<img class="endpoint-card__thumb" src="${screenshotPath}" alt="screenshot" loading="lazy">`
-              : `<div class="endpoint-card__thumb-placeholder">No screenshot</div>`}
-            <div class="endpoint-card__body">
-              <div class="endpoint-card__url" title="${escapeHtml(h.url || '')}">${escapeHtml(h.host || '')}</div>
-              <div class="endpoint-card__row">
-                <span class="sc-badge sc-badge--${scClass}">${sc || '—'}</span>
-                ${h.title ? `<span style="font-size:0.72rem;color:var(--color-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${escapeHtml(h.title)}</span>` : ''}
-              </div>
-              ${techs.length ? `<div class="endpoint-card__row">${techs.map(t => `<span class="tech-chip">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
-            </div>
-          </div>`;
-        }).join('');
-      }
-
       // ── TLS Cert Expiry Coloring ──────────────────────────────────
       function certExpiryClass(dateStr) {
-        if (!dateStr || dateStr === '—') return '';
+        if (!dateStr || dateStr === '-') return '';
         const expiry = new Date(dateStr);
         if (isNaN(expiry.getTime())) return '';
         const days = Math.floor((expiry - Date.now()) / 86400000); // #9: Math.floor for conservative boundary
@@ -1056,10 +1005,11 @@ const secMapDomain = {};
         return 'expiry-ok';
       }
 
+
       function applyTlsExpiryColoring() {
         const tbody = document.getElementById('tls-table-body');
         if (!tbody) return;
-        // Column indices for "Not Before" and "Not After" in TLS table vary — scan all cells
+        // Column indices for "Not Before" and "Not After" in TLS table vary - scan all cells
         Array.from(tbody.querySelectorAll('tr')).forEach(row => {
           Array.from(row.cells).forEach(cell => {
             const text = cell.textContent.trim();
@@ -1081,6 +1031,1333 @@ const secMapDomain = {};
         const observer = new MutationObserver(() => applyTlsExpiryColoring());
         observer.observe(tbody, { childList: true, subtree: false });
       }
+
+    // ── Asset Topology Graph ──────────────────────────────────────────────────
+    // Builds graph data from all scan outputs and renders an interactive
+    // D3 force-directed SVG with 8 node types, 11 edge types.
+    // ────────────────────────────────────────────────────────────────────────────
+
+    function buildAssetGraphData() {
+      const nodeMap = {};   // id → node
+      const links = [];     // {source, target, type}
+      const edgeSet = new Set(); // dedup "src|tgt|type"
+
+      function addNode(id, type, label, meta) {
+        if (!nodeMap[id]) nodeMap[id] = { id, type, label, meta: meta || {}, degree: 0 };
+        else Object.assign(nodeMap[id].meta, meta || {});
+        return nodeMap[id];
+      }
+      function addLink(src, tgt, type) {
+        const key = src + '|' + tgt + '|' + type;
+        if (edgeSet.has(key)) return;
+        edgeSet.add(key);
+        links.push({ source: src, target: tgt, type: type });
+      }
+
+      // ── 1. DNS data → domain + IP + CNAME + NS + MX ──
+      const dns = (typeof dnsxData !== 'undefined' && Array.isArray(dnsxData)) ? dnsxData : [];
+      dns.forEach(r => {
+        const host = (r.host || '').toLowerCase().trim();
+        if (!host) return;
+        const domId = 'dom:' + host;
+        addNode(domId, 'dom', host, { status_code: r.status_code });
+
+        // A records → IP nodes + dns edges
+        (r.a || []).forEach(ip => {
+          const ipStr = (ip || '').trim();
+          if (!ipStr) return;
+          const ipId = 'ip:' + ipStr;
+          addNode(ipId, 'ip', ipStr, {});
+          addLink(domId, ipId, 'dns');
+        });
+        // AAAA records
+        (r.aaaa || []).forEach(ip => {
+          const ipStr = (ip || '').trim();
+          if (!ipStr) return;
+          const ipId = 'ip:' + ipStr;
+          addNode(ipId, 'ip', ipStr, { v6: true });
+          addLink(domId, ipId, 'dns');
+        });
+
+        // CNAME chain - each hop is a separate edge
+        const cnames = r.cname || [];
+        if (cnames.length > 0) {
+          let prev = domId;
+          cnames.forEach(cn => {
+            const cnHost = (cn || '').toLowerCase().trim().replace(/\.$/, '');
+            if (!cnHost) return;
+            const cnId = 'dom:' + cnHost;
+            addNode(cnId, 'dom', cnHost, { is_cname_target: true });
+            addLink(prev, cnId, 'cname');
+            prev = cnId;
+          });
+        }
+
+        // NS records
+        (r.ns || []).forEach(ns => {
+          const nsHost = (ns || '').toLowerCase().trim().replace(/\.$/, '');
+          if (!nsHost) return;
+          const nsId = 'ns:' + nsHost;
+          addNode(nsId, 'ns', nsHost, {});
+          addLink(domId, nsId, 'ns');
+        });
+
+        // MX records
+        (r.mx || []).forEach(mx => {
+          // MX can be "10 mail.example.com." - extract host
+          const parts = (mx || '').trim().split(/\s+/);
+          const mxHost = (parts.length > 1 ? parts[parts.length - 1] : parts[0] || '')
+            .toLowerCase().replace(/\.$/, '');
+          if (!mxHost) return;
+          const mxId = 'mx:' + mxHost;
+          addNode(mxId, 'mx', mxHost, {});
+          addLink(domId, mxId, 'mx');
+        });
+      });
+
+      // ── 2. IP enrichment → enrich IP nodes + ASN nodes ──
+      const ipIntel = (typeof ipIntelData !== 'undefined' && Array.isArray(ipIntelData)) ? ipIntelData : [];
+      ipIntel.forEach(r => {
+        const ipStr = (r.ip || '').trim();
+        if (!ipStr) return;
+        const ipId = 'ip:' + ipStr;
+        addNode(ipId, 'ip', ipStr, {
+          asn: r.asn, provider: r.provider, network: r.network,
+          ptr: r.ptr, country: r.country
+        });
+        // ASN edge
+        if (r.asn) {
+          const asnLabel = r.asn + (r.provider ? ' - ' + r.provider : '');
+          const asnId = 'asn:' + r.asn;
+          addNode(asnId, 'asn', asnLabel, { asn: r.asn, provider: r.provider });
+          addLink(ipId, asnId, 'asn');
+        }
+      });
+
+      // ── 3. Cloud infrastructure → cloud nodes + dom→cloud edges ──
+      const cloud = (typeof cloudInfraData !== 'undefined' && Array.isArray(cloudInfraData)) ? cloudInfraData : [];
+      cloud.forEach(r => {
+        const asset = (r.Asset || '').toLowerCase().trim();
+        if (!asset) return;
+        const provider = r.CloudProvider || 'Unknown';
+        const resType = r.ResourceType || 'Service';
+        const cloudLabel = provider + ' ' + resType;
+        const cloudId = 'cloud:' + provider + '-' + resType;
+        addNode(cloudId, 'cloud', cloudLabel, {
+          provider: provider, resource_type: resType,
+          region: r.Region, waf_shielding: r.WafShielding,
+          cname_chain: r.CNAMEChain || r.CnameChain
+        });
+        const domId = 'dom:' + asset;
+        addNode(domId, 'dom', asset, {});
+        addLink(domId, cloudId, 'cloud');
+      });
+
+      // ── 4. TLS certs → cert nodes grouped by Serial + SAN edges ──
+      const tls = (typeof tlsInventoryData !== 'undefined' && Array.isArray(tlsInventoryData)) ? tlsInventoryData : [];
+      const certGroups = {};
+      tls.forEach(r => {
+        const serial = r.Serial || r.SerialNumber || '';
+        if (!serial) return;
+        if (!certGroups[serial]) certGroups[serial] = r;
+      });
+      Object.entries(certGroups).forEach(([serial, r]) => {
+        const shortSerial = serial.length > 12 ? serial.slice(0, 12) + '…' : serial;
+        const certId = 'cert:' + serial;
+        const cn = r.SubjectCN || r.CertificateCommonName || '';
+        addNode(certId, 'cert', cn || shortSerial, {
+          subject_cn: cn,
+          issuer_cn: r.IssuerCN || '',
+          sans: r.SubjectAN || r.CertificateSANs || [],
+          days_until_expiry: r.DaysUntilExpiry,
+          tls_version: r.TLSVersion,
+          key_algo: r.PublicKeyAlgo,
+          key_bits: r.PublicKeyBits
+        });
+        // SAN edges → each SAN links cert to a domain
+        const sans = r.SubjectAN || r.CertificateSANs || [];
+        (Array.isArray(sans) ? sans : []).forEach(san => {
+          const sanHost = (san || '').toLowerCase().trim().replace(/^\*\./, '');
+          if (!sanHost) return;
+          const domId = 'dom:' + sanHost;
+          addNode(domId, 'dom', sanHost, {});
+          addLink(certId, domId, 'san');
+        });
+      });
+
+      // ── 5. Third-party intel → vendor nodes ──
+      const tpi = (typeof thirdPartyIntelData !== 'undefined' && Array.isArray(thirdPartyIntelData))
+        ? thirdPartyIntelData
+        : (typeof window !== 'undefined' && Array.isArray(window.thirdPartyIntelData) ? window.thirdPartyIntelData : []);
+      tpi.forEach(r => {
+        const svcName = r.service_name || r.service || r.domain || '';
+        if (!svcName) return;
+        const vendorId = 'vendor:' + svcName;
+        addNode(vendorId, 'vendor', svcName, {
+          category: r.category, risk: r.risk,
+          sources: r.sources || [], is_saas: false
+        });
+        // Find which domain it was found on
+        const dom = (r.domain || '').toLowerCase().trim();
+        if (dom) {
+          const domId = 'dom:' + dom;
+          addNode(domId, 'dom', dom, {});
+          addLink(domId, vendorId, 'vendor');
+        }
+      });
+
+      // ── 6. SaaS tenants → vendor nodes (merged) ──
+      const saas = (typeof saasTenants !== 'undefined' && Array.isArray(saasTenants))
+        ? saasTenants
+        : (typeof window !== 'undefined' && Array.isArray(window.saasTenants) ? window.saasTenants : []);
+      saas.forEach(r => {
+        const svc = r.service || r.name || '';
+        if (!svc) return;
+        const vendorId = 'vendor:' + svc;
+        addNode(vendorId, 'vendor', svc, { is_saas: true, saas_url: r.url });
+        // Link from first domain or slug
+        const dom = (r.domain || '').toLowerCase().trim();
+        if (dom) {
+          const domId = 'dom:' + dom;
+          addNode(domId, 'dom', dom, {});
+          addLink(domId, vendorId, 'vendor');
+        }
+      });
+
+      // ── 7. Takeover risk → takeover edges ──
+      const takeover = (typeof window !== 'undefined' && window.takeoverByDomain) ? window.takeoverByDomain : {};
+      Object.entries(takeover).forEach(([domain, info]) => {
+        const domId = 'dom:' + domain.toLowerCase();
+        if (!nodeMap[domId]) return; // only annotate existing domains
+        nodeMap[domId].meta.takeover = info;
+        const provider = info.provider || 'Unknown';
+        const vendorId = 'vendor:' + provider;
+        addNode(vendorId, 'vendor', provider, { is_takeover_target: true });
+        addLink(domId, vendorId, 'takeover');
+      });
+
+      // ── 8. HTTP redirect → dom→dom edges ──
+      const http = (typeof httpxData !== 'undefined' && Array.isArray(httpxData)) ? httpxData : [];
+      http.forEach(r => {
+        const targetUrl = r._redirectsTo || '';
+        if (!targetUrl) return;
+        const srcHost = (r.host || (r.input || '').split(':')[0] || '').toLowerCase().trim();
+        let tgtHost = '';
+        try { tgtHost = new URL(targetUrl).hostname.toLowerCase(); } catch { return; }
+        if (!srcHost || !tgtHost || srcHost === tgtHost) return;
+        const srcId = 'dom:' + srcHost;
+        const tgtId = 'dom:' + tgtHost;
+        if (nodeMap[srcId] || nodeMap[tgtId]) {
+          addNode(srcId, 'dom', srcHost, {});
+          addNode(tgtId, 'dom', tgtHost, {});
+          addLink(srcId, tgtId, 'redirect');
+        }
+      });
+
+      // ── 9. Favicon clusters → pairwise similarity edges ──
+      const favicons = (typeof faviconClusters !== 'undefined' && Array.isArray(faviconClusters))
+        ? faviconClusters
+        : (typeof window !== 'undefined' && Array.isArray(window.faviconClusters) ? window.faviconClusters : []);
+      favicons.forEach(cluster => {
+        const domains = cluster.domains || [];
+        if (domains.length < 2) return;
+        // Cap pairwise at 10 edges per cluster
+        let edgeCount = 0;
+        for (let i = 0; i < domains.length && edgeCount < 10; i++) {
+          for (let j = i + 1; j < domains.length && edgeCount < 10; j++) {
+            const a = (domains[i] || '').toLowerCase().trim();
+            const b = (domains[j] || '').toLowerCase().trim();
+            if (!a || !b) continue;
+            const aId = 'dom:' + a;
+            const bId = 'dom:' + b;
+            if (nodeMap[aId] && nodeMap[bId]) {
+              addLink(aId, bId, 'favicon');
+              edgeCount++;
+            }
+          }
+        }
+      });
+
+      // ── Enrich domain nodes with httpx metadata ──
+      http.forEach(r => {
+        const host = (r.host || (r.input || '').split(':')[0] || '').toLowerCase().trim();
+        if (!host) return;
+        const domId = 'dom:' + host;
+        if (!nodeMap[domId]) return;
+        const n = nodeMap[domId];
+        n.meta.httpx_count = (n.meta.httpx_count || 0) + 1;
+        if (r.tech && Array.isArray(r.tech) && r.tech.length) n.meta.tech = (n.meta.tech || []).concat(r.tech);
+        if (r.cdn_name) n.meta.cdn_name = r.cdn_name;
+      });
+      // API flag
+      const apiIdx = (typeof apiData !== 'undefined' && Array.isArray(apiData)) ? apiData : [];
+      apiIdx.forEach(r => {
+        const dom = (r.domain || '').toLowerCase().trim();
+        if (!dom) return;
+        const domId = 'dom:' + dom;
+        if (nodeMap[domId] && (r.api_endpoint === 'Yes' || r.api_endpoint === true)) nodeMap[domId].meta.is_api = true;
+      });
+      // Login flag
+      const logins = (typeof loginData !== 'undefined' && Array.isArray(loginData)) ? loginData : [];
+      logins.forEach(r => {
+        if (r.login_detection && r.login_detection.login_found === 'Yes') {
+          let host = '';
+          try { host = new URL(r.url || r.final_url || '').hostname.toLowerCase(); } catch {}
+          if (!host) return;
+          const domId = 'dom:' + host;
+          if (nodeMap[domId]) nodeMap[domId].meta.is_login = true;
+        }
+      });
+      // Colleague flag
+      const colData = (typeof colleagueData !== 'undefined' && Array.isArray(colleagueData)) ? colleagueData : [];
+      colData.forEach(r => {
+        const dom = (r.domain || '').toLowerCase().trim();
+        if (!dom) return;
+        const domId = 'dom:' + dom;
+        if (nodeMap[domId] && (r.colleague_endpoint === 'Yes' || r.colleague_endpoint === true)) nodeMap[domId].meta.is_colleague = true;
+      });
+      // IP port info from portscan
+      const psByIp = (typeof window !== 'undefined' && window.portscanByIp) ? window.portscanByIp : {};
+      Object.entries(psByIp).forEach(([ip, info]) => {
+        const ipId = 'ip:' + ip;
+        if (nodeMap[ipId]) {
+          nodeMap[ipId].meta.ports = (info.services || []).map(s => s.port);
+        }
+      });
+      // Shodan ports
+      const shByIp = (typeof window !== 'undefined' && window.shodanByIp) ? window.shodanByIp : {};
+      Object.entries(shByIp).forEach(([ip, ports]) => {
+        const ipId = 'ip:' + ip;
+        if (nodeMap[ipId]) nodeMap[ipId].meta.shodan_ports = ports;
+      });
+
+      // ── Compute degree ──
+      links.forEach(l => {
+        const srcId = (typeof l.source === 'object') ? l.source.id : l.source;
+        const tgtId = (typeof l.target === 'object') ? l.target.id : l.target;
+        if (nodeMap[srcId]) nodeMap[srcId].degree++;
+        if (nodeMap[tgtId]) nodeMap[tgtId].degree++;
+      });
+
+      return { nodes: Object.values(nodeMap), links: links };
+    }
+
+    // ── Render ──────────────────────────────────────────────────────────────────
+
+    let _agRendered = false;
+
+    function renderAssetTopologyGraph() {
+      if (_agRendered) return;
+      _agRendered = true;
+
+      if (typeof d3 === 'undefined') { console.error('D3 not loaded'); return; }
+
+      const { nodes, links } = buildAssetGraphData();
+      if (nodes.length === 0) {
+        document.getElementById('asset-graph-svg').innerHTML =
+          '<text x="50%" y="50%" text-anchor="middle" fill="#71717a" font-size="14" font-family="Inter,sans-serif">No graph data available</text>';
+        return;
+      }
+
+      // ── Large graph fallback ──
+      const LARGE_THRESHOLD = 800;
+      const disabledTypes = new Set();
+      if (nodes.length > LARGE_THRESHOLD) {
+        ['ns', 'mx', 'asn'].forEach(t => disabledTypes.add(t));
+        document.getElementById('ag-large-banner').style.display = '';
+        // Uncheck the filter pills
+        document.querySelectorAll('[data-ag-node="ns"],[data-ag-node="mx"],[data-ag-node="asn"]').forEach(cb => { cb.checked = false; });
+        document.querySelectorAll('[data-ag-edge="ns"],[data-ag-edge="mx"],[data-ag-edge="asn"]').forEach(cb => { cb.checked = false; });
+      }
+
+      // ── Color + shape config ──
+      const TYPE_CFG = {
+        dom:    { color: '#06b6d4', r: 6 },
+        ip:     { color: '#a78bfa', r: 5 },
+        asn:    { color: '#64748b', r: 8 },
+        ns:     { color: '#3b82f6', r: 5 },
+        mx:     { color: '#22c55e', r: 5 },
+        cloud:  { color: '#f97316', r: 7 },
+        cert:   { color: '#ec4899', r: 7 },
+        vendor: { color: '#eab308', r: 5 }
+      };
+      const EDGE_CFG = {
+        dns:      { color: '#06b6d4', dash: '' },
+        cname:    { color: '#2dd4bf', dash: '6,3' },
+        ns:       { color: '#3b82f6', dash: '' },
+        mx:       { color: '#22c55e', dash: '' },
+        asn:      { color: '#64748b', dash: '3,3' },
+        cloud:    { color: '#f97316', dash: '' },
+        san:      { color: '#ec4899', dash: '' },
+        vendor:   { color: '#eab308', dash: '6,3' },
+        takeover: { color: '#ef4444', dash: '' },
+        redirect: { color: '#71717a', dash: '6,3' },
+        favicon:  { color: '#f472b6', dash: '3,3' }
+      };
+
+      function nodeRadius(d) { return Math.min((TYPE_CFG[d.type] || {}).r || 6 + d.degree * 1.2, 28); }
+
+      // ── Filter active data ──
+      let activeNodeTypes = new Set(Object.keys(TYPE_CFG));
+      let activeEdgeTypes = new Set(Object.keys(EDGE_CFG));
+      disabledTypes.forEach(t => { activeNodeTypes.delete(t); activeEdgeTypes.delete(t); });
+
+      const filteredNodes = () => nodes.filter(n => activeNodeTypes.has(n.type));
+      const filteredLinks = () => links.filter(l => {
+        if (!activeEdgeTypes.has(l.type)) return false;
+        const src = (typeof l.source === 'object') ? l.source : nodes.find(n => n.id === l.source);
+        const tgt = (typeof l.target === 'object') ? l.target : nodes.find(n => n.id === l.target);
+        return src && tgt && activeNodeTypes.has(src.type) && activeNodeTypes.has(tgt.type);
+      });
+
+      // ── SVG setup ──
+      const svgEl = document.getElementById('asset-graph-svg');
+      const width = svgEl.clientWidth || 960;
+      const height = svgEl.clientHeight || 680;
+
+      const svg = d3.select(svgEl)
+        .attr('viewBox', [0, 0, width, height]);
+
+      // Clear any previous content (except defs)
+      svg.selectAll('g.ag-root').remove();
+      const root = svg.append('g').attr('class', 'ag-root');
+      const edgeG = root.append('g').attr('class', 'ag-edges');
+      const nodeG = root.append('g').attr('class', 'ag-nodes');
+
+      // ── Node shape path generators ──
+      function shapePath(type, r) {
+        switch (type) {
+          case 'ip': // diamond
+            return `M0,${-r} L${r},0 L0,${r} L${-r},0 Z`;
+          case 'asn': { // hexagon
+            const a = r;
+            return [0,1,2,3,4,5].map(i => {
+              const ang = Math.PI / 3 * i - Math.PI / 2;
+              return (i === 0 ? 'M' : 'L') + (a * Math.cos(ang)).toFixed(2) + ',' + (a * Math.sin(ang)).toFixed(2);
+            }).join(' ') + ' Z';
+          }
+          case 'ns': // square
+            return `M${-r},${-r} L${r},${-r} L${r},${r} L${-r},${r} Z`;
+          case 'mx': // triangle
+            return `M0,${-r} L${r},${r * 0.7} L${-r},${r * 0.7} Z`;
+          case 'cloud': { // pentagon
+            return [0,1,2,3,4].map(i => {
+              const ang = Math.PI * 2 / 5 * i - Math.PI / 2;
+              return (i === 0 ? 'M' : 'L') + (r * Math.cos(ang)).toFixed(2) + ',' + (r * Math.sin(ang)).toFixed(2);
+            }).join(' ') + ' Z';
+          }
+          case 'cert': // rounded rect
+            { const w = r * 1.4, h = r; return `M${-w},${-h} L${w},${-h} L${w},${h} L${-w},${h} Z`; }
+          default: return null; // circle
+        }
+      }
+
+      // ── Type clustering positions ──
+      const typeClusterX = { dom: 0, ip: 0.2, asn: 0.35, ns: -0.3, mx: -0.25, cloud: 0.3, cert: -0.15, vendor: -0.35 };
+      const typeClusterY = { dom: 0, ip: 0.15, asn: 0.35, ns: -0.2, mx: 0.3, cloud: -0.25, cert: -0.3, vendor: 0.2 };
+
+      // ── Force simulation ──
+      let fNodes = filteredNodes();
+      let fLinks = filteredLinks();
+
+      const simulation = d3.forceSimulation(fNodes)
+        .force('link', d3.forceLink(fLinks).id(d => d.id).distance(80).strength(0.4))
+        .force('charge', d3.forceManyBody().strength(-120))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collide', d3.forceCollide().radius(d => nodeRadius(d) + 4))
+        .force('x', d3.forceX().strength(0.04).x(d => width / 2 + (typeClusterX[d.type] || 0) * width * 0.4))
+        .force('y', d3.forceY().strength(0.04).y(d => height / 2 + (typeClusterY[d.type] || 0) * height * 0.4))
+        .alphaDecay(0.02)
+        .on('tick', ticked);
+
+      // ── Draw ──
+      let linkSel = edgeG.selectAll('line').data(fLinks).enter().append('line')
+        .attr('class', d => 'ag-edge' + (d.type === 'takeover' ? ' ag-edge--takeover' : ''))
+        .attr('stroke', d => (EDGE_CFG[d.type] || {}).color || '#555')
+        .attr('stroke-dasharray', d => (EDGE_CFG[d.type] || {}).dash || '')
+        .attr('stroke-width', d => d.type === 'takeover' ? 2.5 : 1)
+        .attr('marker-end', d => 'url(#ag-arrow-' + d.type + ')');
+
+      let nodeSel = nodeG.selectAll('g').data(fNodes, d => d.id).enter().append('g')
+        .attr('class', 'ag-node');
+
+      nodeSel.each(function(d) {
+        const g = d3.select(this);
+        const r = nodeRadius(d);
+        const cfg = TYPE_CFG[d.type] || {};
+        const path = shapePath(d.type, r);
+        if (path) {
+          g.append('path')
+            .attr('d', path)
+            .attr('fill', cfg.color)
+            .attr('class', 'ag-node-shape' + (d.meta.takeover ? ' ag--takeover' : ''));
+        } else {
+          g.append('circle')
+            .attr('r', r)
+            .attr('fill', cfg.color)
+            .attr('class', 'ag-node-shape' + (d.meta.takeover ? ' ag--takeover' : ''));
+        }
+        g.append('text')
+          .attr('class', 'ag-node-label')
+          .attr('dy', r + 12)
+          .text(d.label.length > 28 ? d.label.slice(0, 26) + '…' : d.label);
+      });
+
+      // ── Drag ──
+      nodeSel.call(d3.drag()
+        .on('start', (event, d) => {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x; d.fy = d.y;
+        })
+        .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+        .on('end', (event, d) => {
+          if (!event.active) simulation.alphaTarget(0);
+          // Keep pinned - user can double-click to unpin
+        })
+      );
+
+      // Double-click unpin
+      nodeSel.on('dblclick', (event, d) => {
+        d.fx = null; d.fy = null;
+        simulation.alpha(0.3).restart();
+        event.stopPropagation();
+      });
+
+      // ── Zoom ──
+      let currentZoom = d3.zoomIdentity;
+      const zoomBehavior = d3.zoom()
+        .scaleExtent([0.1, 8])
+        .on('zoom', (event) => {
+          currentZoom = event.transform;
+          root.attr('transform', event.transform);
+          // Toggle label visibility based on zoom level
+          svgEl.classList.toggle('ag-labels-visible', event.transform.k > 1.5);
+        });
+      svg.call(zoomBehavior);
+
+      // ── Tick ──
+      function ticked() {
+        linkSel
+          .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+          .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
+      }
+
+      // ── Click highlight (ego-network) ──
+      const infoPanel = document.getElementById('ag-info-panel');
+      const infoTitle = document.getElementById('ag-info-title');
+      const infoTypeBadge = document.getElementById('ag-info-type-badge');
+      const infoMeta = document.getElementById('ag-info-meta');
+      const infoConnections = document.getElementById('ag-info-connections');
+
+      function highlightNode(event, d) {
+        event.stopPropagation();
+        // Find neighbors
+        const neighborIds = new Set();
+        neighborIds.add(d.id);
+        const connEdges = new Set();
+        fLinks.forEach((l, i) => {
+          const srcId = (typeof l.source === 'object') ? l.source.id : l.source;
+          const tgtId = (typeof l.target === 'object') ? l.target.id : l.target;
+          if (srcId === d.id || tgtId === d.id) {
+            neighborIds.add(srcId);
+            neighborIds.add(tgtId);
+            connEdges.add(i);
+          }
+        });
+
+        // Apply classes
+        nodeSel.selectAll('.ag-node-shape')
+          .classed('ag--dimmed', n => !neighborIds.has(n.id))
+          .classed('ag--highlighted', n => neighborIds.has(n.id) && n.id !== d.id)
+          .classed('ag--selected', n => n.id === d.id);
+        nodeSel.selectAll('.ag-node-label')
+          .classed('ag--dimmed', n => !neighborIds.has(n.id))
+          .style('opacity', n => neighborIds.has(n.id) ? 1 : null);
+        linkSel.classed('ag--dimmed', (l, i) => !connEdges.has(i));
+
+        // Populate info panel
+        const typeLabel = { dom:'Domain', ip:'IP Address', asn:'ASN / Network', ns:'Nameserver', mx:'Mail Server', cloud:'Cloud Service', cert:'TLS Certificate', vendor:'Third-Party / SaaS' };
+        infoTitle.textContent = d.label;
+        infoTypeBadge.textContent = typeLabel[d.type] || d.type;
+        infoTypeBadge.style.background = (TYPE_CFG[d.type] || {}).color || '#555';
+        infoTypeBadge.style.color = '#fff';
+
+        // Meta
+        let metaHtml = '<dl>';
+        const m = d.meta || {};
+        if (d.type === 'dom') {
+          if (m.status_code) metaHtml += `<dt>DNS</dt><dd>${m.status_code}</dd>`;
+          if (m.httpx_count) metaHtml += `<dt>Endpoints</dt><dd>${m.httpx_count}</dd>`;
+          if (m.cdn_name) metaHtml += `<dt>CDN</dt><dd>${m.cdn_name}</dd>`;
+          if (m.tech && m.tech.length) metaHtml += `<dt>Tech</dt><dd>${[...new Set(m.tech)].join(', ')}</dd>`;
+          if (m.is_api) metaHtml += `<dt>API</dt><dd>Yes</dd>`;
+          if (m.is_login) metaHtml += `<dt>Login</dt><dd>Yes</dd>`;
+          if (m.is_colleague) metaHtml += `<dt>Internal</dt><dd>Yes</dd>`;
+          if (m.takeover) metaHtml += `<dt>Takeover</dt><dd style="color:#ef4444">${m.takeover.severity} - ${m.takeover.provider}</dd>`;
+        } else if (d.type === 'ip') {
+          if (m.asn) metaHtml += `<dt>ASN</dt><dd>${m.asn}</dd>`;
+          if (m.provider) metaHtml += `<dt>Provider</dt><dd>${m.provider}</dd>`;
+          if (m.network) metaHtml += `<dt>Network</dt><dd>${m.network}</dd>`;
+          if (m.ptr) metaHtml += `<dt>rDNS</dt><dd>${m.ptr}</dd>`;
+          if (m.country) metaHtml += `<dt>Country</dt><dd>${m.country}</dd>`;
+          if (m.ports && m.ports.length) metaHtml += `<dt>Ports</dt><dd>${m.ports.join(', ')}</dd>`;
+          if (m.shodan_ports && m.shodan_ports.length) metaHtml += `<dt>Shodan</dt><dd>${m.shodan_ports.map(p => p.port || p).join(', ')}</dd>`;
+        } else if (d.type === 'asn') {
+          if (m.asn) metaHtml += `<dt>ASN</dt><dd>${m.asn}</dd>`;
+          if (m.provider) metaHtml += `<dt>Provider</dt><dd>${m.provider}</dd>`;
+        } else if (d.type === 'cloud') {
+          if (m.provider) metaHtml += `<dt>Provider</dt><dd>${m.provider}</dd>`;
+          if (m.resource_type) metaHtml += `<dt>Type</dt><dd>${m.resource_type}</dd>`;
+          if (m.region) metaHtml += `<dt>Region</dt><dd>${m.region}</dd>`;
+          if (m.waf_shielding) metaHtml += `<dt>WAF</dt><dd>${m.waf_shielding}</dd>`;
+        } else if (d.type === 'cert') {
+          if (m.subject_cn) metaHtml += `<dt>CN</dt><dd>${m.subject_cn}</dd>`;
+          if (m.issuer_cn) metaHtml += `<dt>Issuer</dt><dd>${m.issuer_cn}</dd>`;
+          if (m.tls_version) metaHtml += `<dt>TLS</dt><dd>${m.tls_version}</dd>`;
+          if (m.key_algo) metaHtml += `<dt>Key</dt><dd>${m.key_algo}${m.key_bits ? ' ' + m.key_bits : ''}</dd>`;
+          if (m.days_until_expiry != null) metaHtml += `<dt>Expires</dt><dd>${m.days_until_expiry}d</dd>`;
+          if (m.sans && m.sans.length) metaHtml += `<dt>SANs</dt><dd>${m.sans.length} domains</dd>`;
+        } else if (d.type === 'vendor') {
+          if (m.category) metaHtml += `<dt>Category</dt><dd>${m.category}</dd>`;
+          if (m.risk) metaHtml += `<dt>Risk</dt><dd>${m.risk}</dd>`;
+          if (m.sources && m.sources.length) metaHtml += `<dt>Sources</dt><dd>${m.sources.join(', ')}</dd>`;
+          if (m.is_saas) metaHtml += `<dt>SaaS</dt><dd>Yes</dd>`;
+        }
+        metaHtml += '</dl>';
+        infoMeta.innerHTML = metaHtml;
+
+        // Connections
+        const connByType = {};
+        fLinks.forEach(l => {
+          const srcId = (typeof l.source === 'object') ? l.source.id : l.source;
+          const tgtId = (typeof l.target === 'object') ? l.target.id : l.target;
+          if (srcId === d.id || tgtId === d.id) {
+            const otherId = srcId === d.id ? tgtId : srcId;
+            const other = nodeMap[otherId];
+            if (!other) return;
+            const dir = srcId === d.id ? '→' : '←';
+            if (!connByType[l.type]) connByType[l.type] = [];
+            connByType[l.type].push({ label: other.label, dir: dir, type: other.type });
+          }
+        });
+        const edgeLabels = { dns:'DNS', cname:'CNAME', ns:'NS', mx:'MX', asn:'ASN', cloud:'Cloud', san:'TLS SAN', vendor:'Vendor', takeover:'Takeover', redirect:'Redirect', favicon:'Favicon' };
+        let connHtml = '';
+        Object.entries(connByType).forEach(([etype, items]) => {
+          connHtml += `<span class="ag-info-conn-type">${edgeLabels[etype] || etype} (${items.length})</span>`;
+          items.slice(0, 20).forEach(item => {
+            connHtml += `<span class="ag-info-conn-item">${item.dir} <code>${item.label}</code></span>`;
+          });
+          if (items.length > 20) connHtml += `<span class="ag-info-conn-item">… and ${items.length - 20} more</span>`;
+        });
+        infoConnections.innerHTML = connHtml || '<span style="color:var(--color-text-muted)">No connections</span>';
+
+        infoPanel.classList.add('ag-info--open');
+      }
+
+      nodeSel.on('click', highlightNode);
+
+      // Click background → reset
+      svg.on('click', () => {
+        nodeSel.selectAll('.ag-node-shape').classed('ag--dimmed', false).classed('ag--highlighted', false).classed('ag--selected', false);
+        nodeSel.selectAll('.ag-node-label').classed('ag--dimmed', false).style('opacity', null);
+        linkSel.classed('ag--dimmed', false);
+        infoPanel.classList.remove('ag-info--open');
+      });
+
+      // Info panel close button
+      document.getElementById('ag-info-close').addEventListener('click', () => {
+        infoPanel.classList.remove('ag-info--open');
+        nodeSel.selectAll('.ag-node-shape').classed('ag--dimmed', false).classed('ag--highlighted', false).classed('ag--selected', false);
+        nodeSel.selectAll('.ag-node-label').classed('ag--dimmed', false).style('opacity', null);
+        linkSel.classed('ag--dimmed', false);
+      });
+
+      // ── Search ──
+      const searchInput = document.getElementById('ag-search');
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (!q) return;
+        const match = fNodes.find(n => n.label.toLowerCase().includes(q));
+        if (!match || match.x == null) return;
+        // Smooth zoom to node
+        const scale = 3;
+        const tx = width / 2 - match.x * scale;
+        const ty = height / 2 - match.y * scale;
+        svg.transition().duration(600).call(
+          zoomBehavior.transform,
+          d3.zoomIdentity.translate(tx, ty).scale(scale)
+        );
+        // Highlight it
+        highlightNode({ stopPropagation: () => {} }, match);
+      });
+
+      // ── Rebuild graph on filter change ──
+      function rebuildGraph() {
+        // Gather active types
+        activeNodeTypes = new Set();
+        document.querySelectorAll('[data-ag-node]:checked').forEach(cb => activeNodeTypes.add(cb.dataset.agNode));
+        activeEdgeTypes = new Set();
+        document.querySelectorAll('[data-ag-edge]:checked').forEach(cb => activeEdgeTypes.add(cb.dataset.agEdge));
+
+        fNodes = filteredNodes();
+        fLinks = filteredLinks();
+
+        // Rebind links
+        linkSel = edgeG.selectAll('line').data(fLinks);
+        linkSel.exit().remove();
+        linkSel = linkSel.enter().append('line')
+          .attr('class', d => 'ag-edge' + (d.type === 'takeover' ? ' ag-edge--takeover' : ''))
+          .attr('stroke', d => (EDGE_CFG[d.type] || {}).color || '#555')
+          .attr('stroke-dasharray', d => (EDGE_CFG[d.type] || {}).dash || '')
+          .attr('stroke-width', d => d.type === 'takeover' ? 2.5 : 1)
+          .attr('marker-end', d => 'url(#ag-arrow-' + d.type + ')')
+          .merge(linkSel);
+
+        // Rebind nodes
+        nodeSel = nodeG.selectAll('g.ag-node').data(fNodes, d => d.id);
+        nodeSel.exit().remove();
+        const enter = nodeSel.enter().append('g').attr('class', 'ag-node');
+        enter.each(function(d) {
+          const g = d3.select(this);
+          const r = nodeRadius(d);
+          const cfg = TYPE_CFG[d.type] || {};
+          const path = shapePath(d.type, r);
+          if (path) {
+            g.append('path').attr('d', path).attr('fill', cfg.color)
+              .attr('class', 'ag-node-shape' + (d.meta.takeover ? ' ag--takeover' : ''));
+          } else {
+            g.append('circle').attr('r', r).attr('fill', cfg.color)
+              .attr('class', 'ag-node-shape' + (d.meta.takeover ? ' ag--takeover' : ''));
+          }
+          g.append('text').attr('class', 'ag-node-label').attr('dy', r + 12)
+            .text(d.label.length > 28 ? d.label.slice(0, 26) + '…' : d.label);
+        });
+        enter.call(d3.drag()
+          .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+          .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); })
+        );
+        enter.on('dblclick', (event, d) => { d.fx = null; d.fy = null; simulation.alpha(0.3).restart(); event.stopPropagation(); });
+        enter.on('click', highlightNode);
+        nodeSel = enter.merge(nodeSel);
+
+        // Restart simulation
+        simulation.nodes(fNodes);
+        simulation.force('link').links(fLinks);
+        simulation.alpha(0.6).restart();
+
+        updateStats();
+      }
+
+      // ── Filter listeners ──
+      document.querySelectorAll('[data-ag-node], [data-ag-edge]').forEach(cb => {
+        cb.addEventListener('change', rebuildGraph);
+      });
+
+      // ── Stats ──
+      function updateStats() {
+        document.getElementById('ag-stats').textContent = fNodes.length + ' nodes · ' + fLinks.length + ' edges';
+      }
+      updateStats();
+
+      // ── Zoom controls ──
+      document.getElementById('ag-zoom-in').addEventListener('click', () => {
+        svg.transition().duration(300).call(zoomBehavior.scaleBy, 1.4);
+      });
+      document.getElementById('ag-zoom-out').addEventListener('click', () => {
+        svg.transition().duration(300).call(zoomBehavior.scaleBy, 0.7);
+      });
+      document.getElementById('ag-zoom-fit').addEventListener('click', () => {
+        if (!fNodes.length) return;
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        fNodes.forEach(n => {
+          if (n.x < x0) x0 = n.x; if (n.y < y0) y0 = n.y;
+          if (n.x > x1) x1 = n.x; if (n.y > y1) y1 = n.y;
+        });
+        const pad = 60;
+        const bw = (x1 - x0) || 1, bh = (y1 - y0) || 1;
+        const scale = Math.min((width - pad * 2) / bw, (height - pad * 2) / bh, 4);
+        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+        svg.transition().duration(500).call(
+          zoomBehavior.transform,
+          d3.zoomIdentity.translate(width / 2 - cx * scale, height / 2 - cy * scale).scale(scale)
+        );
+      });
+      document.getElementById('ag-zoom-reset').addEventListener('click', () => {
+        // Unpin all nodes
+        fNodes.forEach(n => { n.fx = null; n.fy = null; });
+        svg.transition().duration(400).call(zoomBehavior.transform, d3.zoomIdentity);
+        simulation.alpha(0.8).restart();
+      });
+    }
+
+    // ── User Education System ─────────────────────────────────────────────────
+    // Phase 2: Section Intelligence content
+    const SECTION_INTEL = {
+      overview: {
+        title: 'Overview - Combined Intelligence Master View',
+        purpose: 'A single table that merges every data point from all 31 pipeline stages. Every subdomain, IP, port, cert, tech stack, and cloud resource appears here in one flat, filterable view. Use this when you want to cross-correlate signals across sections - e.g., a domain that has a login panel, weak TLS, and no WAF at once.',
+        redFlags: [
+          'High Attack Surface Score (≥70) on internet-facing endpoints with no WAF',
+          'Login interfaces that lack HSTS or X-Frame-Options headers',
+          'Subdomains resolving to deprecated or unregistered cloud services',
+          'Zone Transfer enabled - entire DNS zone can be downloaded by anyone',
+          'Wildcard or self-signed certificates on production-facing assets'
+        ],
+        source: 'All pipeline stages - dnsx, httpx, naabu, tlsx, nmap, shodan, crt.sh, whois, katana'
+      },
+      domain: {
+        title: 'Domain Intelligence - DNS & Registration Records',
+        purpose: 'DNS is the phonebook of the internet. This section maps every DNS record type (A, AAAA, CNAME, NS, MX, TXT, SOA, SRV, CAA) for every discovered subdomain. It also checks whether the domain allows zone transfers (a critical misconfiguration), when it was registered, and who owns it via WHOIS. Email authentication records (SPF, DKIM, DMARC) appear here too.',
+        redFlags: [
+          'Zone Transfer allowed - full DNS zone is publicly readable by attackers',
+          'Dangling CNAME pointing to an unclaimed cloud resource (takeover risk)',
+          'Missing CAA record - any certificate authority can issue certs for this domain',
+          'Domain expiring in <30 days - registrar expiry leads to immediate takeover',
+          'No SPF / DMARC - domain can be spoofed to send phishing emails'
+        ],
+        source: 'dnsx, dig, whois, subfinder, amass, crt.sh'
+      },
+      endpoints: {
+        title: 'Application Endpoints - Live Web Surfaces',
+        purpose: 'Every URL that returned an HTTP response is listed here. This is your inventory of reachable attack surface - web apps, APIs, admin panels, dev portals, staging servers, and internal tools accidentally exposed to the internet. Tech stack fingerprinting reveals what frameworks, CMS platforms, and libraries are running. Security headers show what browser protections are in place.',
+        redFlags: [
+          'Login panel with HTTP 200 exposed to the internet without WAF or rate-limiting',
+          'Admin or internal-facing portal (e.g. .internal., admin., dev.) reachable externally',
+          'Missing security headers: no HSTS, no CSP, no X-Frame-Options',
+          'API endpoint (detected by path pattern) with no authentication signals',
+          'Technology stack includes end-of-life software (e.g. jQuery <3, PHP 5.x, Struts)'
+        ],
+        source: 'httpx, katana, wappalyzer-style fingerprinting, nuclei header checks'
+      },
+      ips: {
+        title: 'IP Addresses - Network Ownership & Open Ports',
+        purpose: 'Each discovered hostname resolves to one or more IP addresses. This section shows who owns those IPs (via ASN and WHOIS), what network block they belong to, and what TCP/UDP ports are listening. Open ports are the doors into your infrastructure - every unnecessary open port is a potential entry point. Reverse DNS (PTR) records reveal hostnames attached to the IP that may not be in your domain inventory.',
+        redFlags: [
+          'Port 22 (SSH) or 3389 (RDP) open directly to the internet without VPN gateway',
+          'Database ports open (3306 MySQL, 5432 PostgreSQL, 27017 MongoDB)',
+          'Management interfaces reachable (8080, 8443, 9200 Elasticsearch, 6379 Redis)',
+          'PTR record pointing to an unexpected hostname - shadow asset or shared hosting',
+          'ASN belongs to a residential VPN/proxy - may indicate compromised relay host'
+        ],
+        source: 'naabu, nmap, shodan, ipinfo.io, dnsx PTR resolution'
+      },
+      mail: {
+        title: 'Mail Infrastructure - Email Security Stack',
+        purpose: 'Email is the #1 attack vector for phishing and BEC (Business Email Compromise). This section audits your email security controls per domain. SPF defines which servers may send email on your behalf. DKIM cryptographically signs outgoing mail. DMARC tells receivers what to do with unauthenticated email. BIMI lets you add a brand logo to authenticated email. MTA-STS and DANE enforce encryption in transit.',
+        redFlags: [
+          'No SPF record - anyone can send email that appears to come from this domain',
+          'SPF with "+all" - explicitly allows any server to send on your behalf',
+          'No DMARC or DMARC policy set to "none" - unauthenticated mail is not rejected',
+          'MX pointing to a third-party mail relay not listed in SPF - spoofing gap',
+          'No MTA-STS or DANE - mail in transit can be intercepted or downgraded to plaintext'
+        ],
+        source: 'dig (MX/TXT/TLSA), mta-sts.txt fetch, BIMI DNS lookup'
+      },
+      tls: {
+        title: 'TLS Certificates - Encryption Health',
+        purpose: 'Every HTTPS connection is protected (or not) by a TLS certificate. This section inventories the cert for every live web endpoint: which CA issued it, when it expires, what TLS version is negotiated, what cipher suite is used, and whether the cert covers multiple domains via SANs. Weak ciphers, expired certs, and self-signed certs are all active vulnerabilities.',
+        redFlags: [
+          'Certificate expiring in <30 days - browsers will warn users, breaking trust',
+          'Self-signed certificate - no third-party validation; trivially spoofed by an attacker',
+          'TLS 1.0 or 1.1 negotiated - deprecated protocols with known downgrade attacks',
+          'Weak cipher (RC4, DES, 3DES, NULL, EXPORT) - data can be decrypted offline',
+          'Wildcard cert (*.example.com) on a high-risk endpoint - compromise = all subdomains compromised'
+        ],
+        source: 'tlsx, openssl, naabu (TLS port scan)'
+      },
+      cloud: {
+        title: 'Cloud Infrastructure - Provider Mapping',
+        purpose: 'Modern organisations run assets across AWS, Azure, GCP, Cloudflare, Akamai, Fastly, and more. This section classifies each discovered host by cloud provider and resource type - load balancers, CDN edges, S3-style storage buckets, API gateways, etc. Understanding your cloud footprint helps identify misconfigured public storage, unprotected management interfaces, and shadow IT.',
+        redFlags: [
+          'Public S3 bucket, Azure Blob, or GCS bucket accessible without authentication',
+          'Cloud resource reachable on a custom domain that no longer has a CNAME (takeover risk)',
+          'CDN bypassed - origin IP exposed, WAF protection nullified',
+          'Multiple cloud providers in use - no centralised security posture or logging',
+          'Cloud metadata endpoint (169.254.169.254) reachable from SSRF-vulnerable endpoint'
+        ],
+        source: 'dnsx CNAME analysis, httpx response headers, host_classification heuristics'
+      },
+      'seed-expansion': {
+        title: 'Internet Footprint - ASN Ranges, CT Logs & TLD Variants',
+        purpose: 'Attackers don\'t just attack what you know about - they also attack what you\'ve forgotten. This section expands your known seed domains into additional assets: network ranges announced by your ASN (all IPs you own), domains found in Certificate Transparency logs (every cert ever issued mentioning your name), and brand-name domains registered under alternative TLDs (.io, .co, .net) that could be squatted or shadow IT.',
+        redFlags: [
+          'CT log reveals legacy subdomains (dev., old., staging.) never removed from DNS',
+          'Alternative TLD registered to a different registrant - brand squatting or typosquat',
+          'ASN range contains IPs with open ports that are not in your known asset inventory',
+          'WHOIS registrant email matches your org but domain is not in your asset inventory',
+          'Large ASN range with no CDN/WAF - entire block directly exposed to internet scanning'
+        ],
+        source: 'crt.sh CT logs, bgp.he.net ASN lookup, dnsx TLD bruteforce, whois pivot'
+      },
+      'saas-cloud': {
+        title: 'SaaS Tenants - Detected Software Services',
+        purpose: 'Most organisations use dozens of SaaS tools - Slack, Jira, Salesforce, GitHub, Zendesk, and more. Each service creates a tenant URL in the form {slug}.platform.com. This section probes those URLs using your organisation\'s likely slug (derived from your domain name). A non-404 response confirms the tenant exists, revealing your SaaS footprint. Open cloud buckets (S3, GCS, Azure) are also listed here.',
+        redFlags: [
+          'SaaS tenant accessible without SSO/MFA enforcement (check authentication method)',
+          'Legacy or unused SaaS tenants still active - abandoned accounts with stale data',
+          'Open S3/GCS/Azure bucket returning HTTP 200 - data publicly accessible',
+          'SaaS service not on approved vendor list - shadow IT risk',
+          'Bucket URL contains sensitive naming (backup, prod, confidential, dump)'
+        ],
+        source: 'custom slug-probe script, AWS/GCS/Azure bucket pattern matching, httpx'
+      },
+      'third-parties': {
+        title: 'Third-Party Vendors - Supply Chain Risk',
+        purpose: 'Every JavaScript tag, CDN domain, analytics pixel, and payment SDK you load is a potential supply chain attack vector. This section maps all third-party services found across your web surface - extracted from Content Security Policy headers, JavaScript source analysis, DNS records (MX/SPF/CNAME), and HTTP response headers. Understanding who you depend on reveals your blast radius if a vendor is compromised.',
+        redFlags: [
+          'Payment processor scripts (Stripe, PayPal, Braintree) loaded without SRI hashes',
+          'Analytics/ad-tech with broad CSP permissions (unsafe-inline or *) - XSS amplifier',
+          'Deprecated or abandoned JavaScript CDN still in use - served from attacker-controlled domain',
+          'Large number of unknown third-party domains in CSP - poor vendor inventory',
+          'Email routing through multiple third-party relays not in SPF - phishing risk'
+        ],
+        source: 'katana (JS crawl), httpx CSP header extraction, DNS MX/SPF/CNAME analysis'
+      },
+      'asset-topology': {
+        title: 'Asset Topology - Relationship Graph',
+        purpose: 'Flat tables cannot show you how your assets relate to each other. This interactive force-directed graph maps every relationship: which domains share an IP, which IPs belong to the same ASN, which certs cover multiple domains via SANs, which cloud resources host which endpoints, and which third-party vendors are embedded across your surface. Click any node to explore its connections. Clusters reveal shared infrastructure that multiplies blast radius.',
+        redFlags: [
+          'Many domains clustering on a single IP - shared hosting means one compromise exposes all',
+          'Red pulse nodes (takeover risk) - domain points to unclaimed resource',
+          'Cert node with many SAN edges - wildcard or multi-domain cert is a high-value target',
+          'Vendor node with many domain edges - critical third-party dependency with no redundancy',
+          'ASN node with direct edges to sensitive domains - no CDN/WAF layer in path'
+        ],
+        source: 'Aggregated from all pipeline stages - full relationship graph built post-collection'
+      }
+    };
+
+    // Phase 3: Column tooltip content
+    const COL_TIPS = {
+      // Domain Intelligence
+      'domain-name':       { field: 'Domain Name',          def: 'The subdomain or root domain discovered during reconnaissance.',                                                   atk: 'Attackers enumerate subdomains to find forgotten dev/staging apps and login panels.' },
+      'resolution-status': { field: 'Resolution Status',    def: 'Whether the domain currently resolves in DNS (NOERROR) or is dead (NXDOMAIN / SERVFAIL).',                        atk: 'Non-resolving domains with a CNAME can often be claimed by registering the target service.' },
+      'a-record':          { field: 'A Record',             def: 'IPv4 address(es) the domain points to.',                                                                           atk: 'The A record reveals the hosting IP - useful for bypassing CDN/WAF to hit the origin directly.' },
+      'aaaa-record':       { field: 'AAAA Record',          def: 'IPv6 address(es) the domain points to.',                                                                           atk: 'IPv6 addresses are often unfiltered by legacy firewalls designed for IPv4 only.' },
+      'ns-records':        { field: 'NS Records',           def: 'Name servers authoritative for this domain. Cluster = shared NS across many subdomains.',                          atk: 'Shared NS infrastructure means a compromise of one NS provider affects all clustered domains.' },
+      'cname-records':     { field: 'CNAME Records',        def: 'Canonical name aliases - this domain is an alias for another hostname.',                                           atk: 'A CNAME pointing to an unclaimed service (e.g. deleted S3 bucket) enables subdomain takeover.' },
+      'txt-records':       { field: 'TXT Records',          def: 'Arbitrary text records used for SPF, DMARC, domain verification tokens, and more.',                               atk: 'TXT records leak which third-party services the org uses (Mailgun, Sendgrid, Google Workspace).' },
+      'soa-record':        { field: 'SOA Record',           def: 'Start of Authority - identifies the primary nameserver and admin contact email for the zone.',                    atk: 'Admin email in SOA can be used for targeted phishing or OSINT pivot.' },
+      'srv-records':       { field: 'SRV Records',          def: 'Service location records specifying host:port for specific protocols (e.g. _sip._tcp, _jabber._tcp).',            atk: 'SRV records expose internal service ports and protocols not visible via web scanning.' },
+      'caa-records':       { field: 'CAA Records',          def: 'Certificate Authority Authorisation - limits which CAs may issue TLS certificates for this domain.',             atk: 'Missing CAA means any CA can issue a cert; attackers can obtain a valid cert via social engineering.' },
+      'zone-transfer':     { field: 'Zone Transfer',        def: 'AXFR/IXFR query - if allowed, dumps the entire DNS zone including all internal hostnames.',                       atk: 'Zone transfer leaks every internal hostname; attackers enumerate the full network topology in seconds.' },
+      'registrar':         { field: 'Registrar',            def: 'The domain registrar where this domain is registered.',                                                           atk: 'Knowing the registrar enables targeted account takeover attacks (password reset, social engineering).' },
+      'domain-created':    { field: 'Domain Created',       def: 'Date the domain was first registered.',                                                                           atk: 'Very new domains may be attacker-registered lookalikes; very old ones may have lapsed controls.' },
+      'domain-expires':    { field: 'Domain Expires',       def: 'Date the domain registration expires.',                                                                           atk: 'Domains expiring soon can be registered by attackers the moment they lapse, hijacking all traffic.' },
+      'domain-age':        { field: 'Domain Age',           def: 'How long the domain has been registered (in years).',                                                             atk: 'Young domains (<1yr) are higher-risk; old domains with stale ownership may have been transferred.' },
+      'bimi':              { field: 'BIMI',                 def: 'Brand Indicators for Message Identification - adds a verified logo to authenticated outbound email.',              atk: 'Absence of BIMI means attackers can send fake emails without a brand logo differentiator for users.' },
+      'mta-sts':           { field: 'MTA-STS',              def: 'Mail Transfer Agent Strict Transport Security - enforces TLS for inbound mail connections.',                      atk: 'Without MTA-STS, an attacker can intercept mail in transit via a TLS downgrade.' },
+      'dane-tlsa':         { field: 'DANE / TLSA',          def: 'DNS-Based Authentication of Named Entities - pins the certificate expected for SMTP connections in DNS.',          atk: 'Without DANE, rogue certificates issued by a compromised CA can intercept encrypted mail.' },
+      'whois-summary':     { field: 'WHOIS Summary',        def: 'Registrant organisation and country from WHOIS records.',                                                        atk: 'WHOIS data reveals the org structure; privacy-redacted records hide ownership and registration abuse.' },
+      'subdomain-category':{ field: 'Subdomain Category',  def: 'Keyword classification of the subdomain (admin, api, dev, mail, vpn, etc.).',                                    atk: 'High-risk keywords (admin, staging, dev) indicate sensitive apps frequently left unprotected.' },
+      // Application Endpoints
+      'ep-domain':       { field: 'Domain / Subdomain',    def: 'The hostname for this web endpoint.',                                                                              atk: 'Attackers enumerate all hostnames to map every web-reachable surface.' },
+      'ep-url':          { field: 'Endpoint URL',          def: 'Full URL (scheme://host:port) of the web endpoint that returned an HTTP response.',                               atk: 'Every reachable URL is a potential entry point - each port/path combination is a separate attack surface.' },
+      'ep-status':       { field: 'HTTP Status',           def: '3-digit HTTP response code (200 OK, 403 Forbidden, 301 Redirect, etc.).',                                        atk: '403 responses often indicate access controls that can be bypassed with path manipulation or header injection.' },
+      'ep-redirect':     { field: 'Final Redirect URL',    def: 'The ultimate URL after following all redirects.',                                                                  atk: 'Cross-domain redirects can expose tokens in the Referer header; open redirects enable phishing.' },
+      'ep-title':        { field: 'Homepage Title',        def: 'The <title> tag of the root page - often reveals the application or product name.',                              atk: 'Page titles reveal application type; "phpMyAdmin", "Jenkins", "Grafana" immediately signal attack value.' },
+      'ep-webserver':    { field: 'Web Server',            def: 'HTTP server software identified from response headers (Apache, Nginx, IIS, etc.).',                               atk: 'Server version reveals patching level; end-of-life versions have public exploits.' },
+      'ep-techstack':    { field: 'Technology Stack',      def: 'Frameworks, CMS platforms, and libraries fingerprinted from headers, HTML, and JS.',                              atk: 'Known stacks narrow the exploit search space - WordPress + old PHP = high exploit probability.' },
+      'ep-contentlength':{ field: 'Content Length',        def: 'Size of the HTTP response body in bytes.',                                                                        atk: 'Unusual content lengths can indicate hidden pages, verbose error messages, or debug endpoints.' },
+      'ep-login':        { field: 'Login Interface',       def: 'Whether a login form was detected on this endpoint.',                                                             atk: 'Login panels are prime targets for credential stuffing, brute force, and phishing campaigns.' },
+      'ep-api':          { field: 'API Detected',          def: 'Whether the endpoint exhibits API characteristics (JSON responses, /api/ paths, REST patterns).',                 atk: 'APIs often lack WAF protection and may expose unauthenticated endpoints or BOLA vulnerabilities.' },
+      'ep-internal':     { field: 'Colleague Facing Portal', def: 'Whether the endpoint appears intended for internal use (VPN, HR, employee portal, etc.).',                    atk: 'Internal portals exposed externally are high-value targets - employees reuse credentials from corporate SSO.' },
+      'ep-secheaders':   { field: 'Security Headers',      def: 'Count and presence of browser security headers (HSTS, CSP, X-Frame-Options, etc.).',                             atk: 'Missing headers enable clickjacking (no X-Frame-Options), XSS (no CSP), and protocol downgrade (no HSTS).' },
+      'ep-waf':          { field: 'WAF / CDN Presence',    def: 'Whether a Web Application Firewall or CDN was detected in front of this endpoint.',                              atk: 'Knowing which WAF is present helps attackers choose bypass techniques; no WAF = direct exploitation path.' },
+      'ep-crawledlinks': { field: 'Crawled Links Count',   def: 'Number of links discovered by crawling this endpoint one level deep.',                                           atk: 'High link count with diverse paths expands the attack surface; crawled paths may reveal admin or debug URLs.' },
+      // IP Addresses
+      'ip-address':     { field: 'IP Address',             def: 'The resolved IPv4 or IPv6 address of the discovered host.',                                                        atk: 'The IP is the actual network location - knowing it allows direct attack bypassing DNS-level controls.' },
+      'ip-hostnames':   { field: 'Hostnames on IP',        def: 'All known domain names that resolve to this IP address.',                                                         atk: 'Shared hosting means attacking one virtual host can expose others on the same IP.' },
+      'ip-ptr':         { field: 'Reverse DNS (PTR)',      def: 'The hostname returned when you look up the IP address in reverse DNS.',                                           atk: 'PTR records reveal hostnames not in public DNS - internal naming conventions, cloud resource names.' },
+      'ip-asn':         { field: 'ASN / Provider',         def: 'Autonomous System Number and organisation that owns this IP block.',                                              atk: 'ASN reveals the hosting provider; attackers pivot to find other assets in the same ASN range.' },
+      'ip-netblock':    { field: 'Network Block',          def: 'The CIDR range (e.g. 198.51.100.0/24) this IP belongs to.',                                                      atk: 'Network block shows adjacent IP space - attackers scan the entire /24 to find related infrastructure.' },
+      'ip-openports':   { field: 'Open Ports / Services',  def: 'All TCP/UDP ports found open on this IP by active scanning.',                                                     atk: 'Every open port is a potential entry point - unnecessary ports dramatically increase attack surface.' },
+      'ip-notableports':{ field: 'Notable Ports',          def: 'High-risk ports like SSH (22), RDP (3389), databases (3306, 5432), and management interfaces.',                   atk: 'Notable ports indicate directly exploitable services - databases and RDP should never be internet-facing.' },
+      'ip-shodan':      { field: 'Shodan Services',        def: 'Service banners collected by Shodan\'s continuous internet scanning, including software versions.',               atk: 'Shodan data reveals exact software versions - cross-referenced against CVE databases for known exploits.' },
+      // Mail Infrastructure
+      'mail-domain':    { field: 'Domain',                 def: 'The domain whose email configuration is being evaluated.',                                                        atk: 'Every domain without proper email auth controls can be used to send phishing emails on behalf of the org.' },
+      'mail-riskscore': { field: 'Email Risk Score',       def: 'A 0–100 score reflecting email security posture (higher = riskier). Based on SPF/DKIM/DMARC/BIMI/MTA-STS.',     atk: 'High scores indicate domains trivially spoofable for Business Email Compromise (BEC) attacks.' },
+      'mail-mx':        { field: 'MX Records',             def: 'Mail exchanger hostnames responsible for receiving email for this domain.',                                        atk: 'MX records reveal which mail provider is used - some providers have weaker security defaults.' },
+      'mail-provider':  { field: 'MX Provider',            def: 'Identified mail provider (Google Workspace, Microsoft 365, Proofpoint, etc.).',                                   atk: 'Provider identity helps attackers target credential harvesting for the specific SSO login page.' },
+      'mail-spf':       { field: 'SPF',                    def: 'Sender Policy Framework - a DNS record defining which servers are authorised to send email for this domain.',     atk: 'Missing or overly permissive SPF ("+all") allows anyone to send email appearing to come from this domain.' },
+      'mail-dkim':      { field: 'DKIM',                   def: 'DomainKeys Identified Mail - cryptographically signs outgoing email to prove it came from an authorised server.',  atk: 'No DKIM means outbound emails can be modified in transit without detection.' },
+      'mail-dmarc':     { field: 'DMARC',                  def: 'Domain-based Message Authentication - policy telling receivers what to do if SPF/DKIM fail (none/quarantine/reject).', atk: 'DMARC policy "none" = monitoring only; phishing emails still reach inboxes. Only "reject" actually blocks them.' },
+      'mail-bimi':      { field: 'BIMI',                   def: 'Brand logo attached to authenticated emails in supporting clients.',                                               atk: 'Absence means attackers\' phishing emails look identical to real org emails in most inboxes.' },
+      'mail-mta-sts':   { field: 'MTA-STS',                def: 'Policy enforcing TLS for mail connections to this domain\'s MX servers.',                                         atk: 'Without MTA-STS, an on-path attacker can strip TLS from SMTP and read or modify email in transit.' },
+      'mail-dane':      { field: 'DANE / TLSA',            def: 'DNS record that pins the expected TLS certificate for SMTP, validated via DNSSEC.',                              atk: 'Without DANE, a rogue CA certificate can be used to impersonate the mail server and intercept encrypted mail.' },
+      // TLS Certificates
+      'tls-asset':      { field: 'Asset',                  def: 'The hostname:port this certificate is serving.',                                                                   atk: 'Every TLS endpoint is a target - weak certs on critical assets make man-in-the-middle attacks viable.' },
+      'tls-certscore':  { field: 'Cert Score',             def: 'A–F grade summarising certificate health (TLS version, cipher, expiry, key, self-signed).',                      atk: 'Low grades signal certs trivially bypassed by MITM or downgrade attacks.' },
+      'tls-ip':         { field: 'IP Address',             def: 'IP where the TLS connection was probed.',                                                                          atk: 'Directly connecting to the IP (bypassing hostname routing) may reveal different certs or no cert at all.' },
+      'tls-port':       { field: 'Port',                   def: 'TCP port where TLS is active (443 HTTPS, 8443, 465 SMTPS, etc.).',                                               atk: 'Non-standard ports running TLS are often excluded from certificate management tooling and oversight.' },
+      'tls-version':    { field: 'TLS Version',            def: 'TLS protocol version negotiated (TLS 1.0, 1.1, 1.2, 1.3).',                                                      atk: 'TLS 1.0 and 1.1 are deprecated with known attacks (POODLE, BEAST); TLS 1.3 is the current standard.' },
+      'tls-cipher':     { field: 'Cipher',                 def: 'Cipher suite negotiated for the connection (e.g. ECDHE-RSA-AES256-GCM-SHA384).',                                 atk: 'Weak ciphers (RC4, DES, 3DES, EXPORT) allow offline decryption of recorded traffic.' },
+      'tls-notafter':   { field: 'Not After',              def: 'The certificate\'s expiry date in UTC.',                                                                           atk: 'Expired certs cause browser warnings and may indicate abandoned endpoints no longer maintained.' },
+      'tls-expiry':     { field: 'Days Until Expiry',      def: 'How many days remain before this certificate expires.',                                                           atk: '<30 days = imminent outage risk; expired = browsers block users and attacker can register lookalike cert.' },
+      'tls-subjectdn':  { field: 'Subject DN',             def: 'Full Distinguished Name in the certificate Subject field.',                                                       atk: 'Subject DN reveals org name, country, and state used during certificate issuance.' },
+      'tls-subjectcn':  { field: 'Subject CN',             def: 'Common Name - the primary hostname the cert was issued for.',                                                     atk: 'Mismatch between Subject CN and the hostname being served causes browser TLS errors - easy to miss in automation.' },
+      'tls-subjectan':  { field: 'Subject AN',             def: 'Subject Alternative Names - additional hostnames covered by this certificate.',                                   atk: 'SANs reveal related assets on the same certificate - shadow domains, internal hostnames, old services.' },
+      'tls-serial':     { field: 'Serial',                 def: 'Unique identifier for this certificate instance, issued by the CA.',                                             atk: 'Serial numbers can be used to look up the cert in CT logs and find related issued certificates.' },
+      'tls-issuerdn':   { field: 'Issuer DN',              def: 'Full Distinguished Name of the Certificate Authority that signed this cert.',                                     atk: 'Non-public CAs or internal PKI issuers may indicate self-maintained PKI with weaker controls.' },
+      'tls-issuercn':   { field: 'Issuer CN',              def: 'Common Name of the CA that issued the certificate.',                                                              atk: 'Unusual issuers (not DigiCert/Let\'s Encrypt/Sectigo) may indicate internal CA or compromised issuance.' },
+      'tls-issuerorg':  { field: 'Issuer Org',             def: 'Organisation name of the issuing CA.',                                                                            atk: 'Free CAs (Let\'s Encrypt) confirm domain control only - no organisational validation performed.' },
+      'tls-keyalgo':    { field: 'Key Algorithm',          def: 'Cryptographic algorithm used for the certificate key (RSA, ECDSA, Ed25519).',                                    atk: 'RSA keys < 2048-bit are crackable with sufficient compute; ECDSA is more efficient and equally strong.' },
+      'tls-keysize':    { field: 'Key Size',               def: 'Bit length of the certificate public key.',                                                                       atk: 'RSA-1024 can be factored; RSA-2048 is minimum safe; RSA-4096 or ECDSA-256 preferred for high-value assets.' },
+      'tls-wildcard':   { field: 'Wildcard Cert',          def: 'Whether this cert covers all subdomains (*.example.com).',                                                        atk: 'Wildcard cert compromise exposes ALL subdomains - a single key theft = entire subdomain space at risk.' },
+      'tls-selfsigned': { field: 'Self-Signed',            def: 'Whether the certificate was issued by the same entity it was issued to (no third-party CA).',                    atk: 'Self-signed certs provide no trust assurance - trivially replicated by an attacker for MITM attacks.' },
+      'tls-catype':     { field: 'CA Type',                def: 'Classification of the issuing CA: public (trusted by browsers), private (internal PKI), or free.',               atk: 'Private CAs have no external audit; compromising the CA signs any cert the attacker wants.' },
+      // Cloud Infrastructure
+      'cloud-asset':       { field: 'Asset',                  def: 'The hostname or resource identifier for this cloud asset.',                                               atk: 'Cloud assets are prime targets - misconfigured permissions are the #1 cloud breach cause.' },
+      'cloud-resourcetype':{ field: 'Resource Type',          def: 'What kind of cloud resource this is (load balancer, CDN edge, storage bucket, API gateway, etc.).',      atk: 'Resource type determines attack vectors - storage = data exfil, API gateway = token theft, LB = origin bypass.' },
+      'cloud-provider':    { field: 'Cloud Provider',         def: 'The cloud platform hosting this resource (AWS, Azure, GCP, Cloudflare, Fastly, Akamai, etc.).',         atk: 'Provider identity directs the attacker to provider-specific attack techniques and misconfiguration checks.' },
+      'cloud-servicefamily':{ field: 'Service Family',        def: 'Broad category of cloud service (compute, storage, CDN, serverless, database, etc.).',                   atk: 'Service family reveals the data exposure risk - storage services hold data; compute may have code.' },
+      'cloud-resourceid':  { field: 'Resource Identifier',   def: 'Cloud-specific resource name or slug (e.g. S3 bucket name, Azure resource ID).',                          atk: 'Bucket names can be enumerated - knowing the naming pattern allows discovery of adjacent buckets.' },
+      'cloud-lb':          { field: 'Load Balancer',         def: 'Whether a load balancer or traffic manager is in the network path to this asset.',                        atk: 'LBs often cache sensitive data; misconfigured header forwarding exposes internal hostnames (X-Forwarded-For).' },
+      'cloud-waf':         { field: 'WAF / CDN Shielding',   def: 'Whether a WAF or CDN is fronting this asset, filtering malicious traffic.',                              atk: 'No WAF = unfiltered attack traffic reaches origin directly; origin IP exposed = WAF bypass.' },
+      'cloud-storage':     { field: 'Storage',               def: 'Whether a cloud storage resource (S3, GCS, Azure Blob) is associated with this asset.',                   atk: 'Public storage buckets are one of the most common data breach vectors - one misconfigured bucket = data leak.' },
+      'cloud-evidence':    { field: 'Evidence',              def: 'The signals used to classify this asset as cloud-hosted (CNAME pattern, response headers, IP range).',    atk: 'Understanding how the classification was made helps validate whether the asset is actually cloud-hosted.' },
+      // Internet Footprint
+      'seed-asn':    { field: 'ASN',              def: 'Autonomous System Number - a unique identifier for a network operator that routes IP traffic.',                          atk: 'Knowing your ASN lets attackers find all IPs your org advertises - your full network footprint.' },
+      'seed-netname':{ field: 'Network Name',     def: 'Human-readable name of the Autonomous System (e.g. "AMAZON-02", "ACME-CORP").',                                         atk: 'Network names confirm ownership and reveal which cloud provider manages the AS.' },
+      'seed-prefix': { field: 'Announced Prefix', def: 'IP CIDR range actively routed by this ASN (e.g. 203.0.113.0/24).',                                                     atk: 'Announced prefixes reveal all IP space your org owns - attackers scan every address in each range.' },
+      'seed-domain': { field: 'Seed Domain',      def: 'The domain used to look up this ASN record.',                                                                          atk: 'Multiple seed domains on the same ASN indicate shared infrastructure - a common attack pivot point.' },
+      'ct-hostname': { field: 'Hostname',         def: 'A domain name found in certificate transparency logs for this organisation.',                                           atk: 'CT logs are public - attackers query them to find internal/dev/legacy subdomains the org forgot about.' },
+      'ct-source':   { field: 'Source',           def: 'Which CT log or source found this hostname (crt.sh, Google Argon, Cloudflare Nimbus, etc.).',                          atk: 'Source confirms authenticity - all major CAs submit to public CT logs, making enumeration reliable.' },
+      'tld-domain':  { field: 'Domain',           def: 'A brand-name domain registered under an alternative TLD (e.g. acme.io, acme.co, acme.app).',                          atk: 'Alternative TLDs are attack vectors - phishing from acme.io vs acme.com is hard to spot.' },
+      'tld-resolved':{ field: 'Resolved',         def: 'Whether the alternative TLD domain resolves via DNS.',                                                                  atk: 'Resolving TLD variants confirm real infrastructure; non-resolving ones may be registered defensively.' },
+      'whois-domain':   { field: 'Domain',           def: 'A domain found via WHOIS registrant email pivot - registered by the same person/org.',                              atk: 'WHOIS pivots reveal domains an org registered but never publicly disclosed - shadow IT or old acquisitions.' },
+      'whois-regemail': { field: 'Registrant Email', def: 'The email address in the WHOIS record used to find this related domain.',                                          atk: 'Registrant emails link domains across registrars - one leaked email = all org-registered domains exposed.' },
+      'whois-confidence':{ field: 'Confidence',      def: 'Confidence level that this domain belongs to the target org (high/medium/low).',                                   atk: 'Low-confidence matches should be validated before assuming ownership - may be a competitor or squatter.' },
+      // SaaS Tenants
+      'saas-service': { field: 'Service',     def: 'The SaaS platform probed (Slack, Jira, GitHub, Salesforce, Zendesk, etc.).',                                                  atk: 'Active SaaS tenants expose login pages that can be targeted with credential stuffing attacks.' },
+      'saas-url':     { field: 'Tenant URL',  def: 'The full URL probed (e.g. acme.slack.com or github.com/acme-org).',                                                           atk: 'Tenant URLs reveal which org slug/identifier the org uses - useful for social engineering and phishing.' },
+      'saas-status':  { field: 'HTTP Status', def: 'HTTP response code - 200/302 confirms the tenant exists; 404 means it does not.',                                            atk: 'Confirmed SaaS tenants are high-value targets; even 403 confirms existence for brute-force attacks.' },
+      'bucket-url':   { field: 'Bucket URL',  def: 'URL of the cloud storage bucket that was probed.',                                                                           atk: 'Public buckets with sensitive filenames (backup, prod, dump) often contain credentials or source code.' },
+      'bucket-provider':{ field: 'Provider',  def: 'Cloud storage provider (AWS S3, Google Cloud Storage, Azure Blob, Wasabi, etc.).',                                           atk: 'Provider identity determines which CLI tools and APIs can be used to enumerate bucket contents.' },
+      'bucket-status':{ field: 'Status',      def: 'HTTP response indicating bucket accessibility (200 = public, 403 = exists but private, 404 = does not exist).',              atk: '200 on a storage bucket = data is publicly readable by anyone on the internet.' },
+      'bucket-slug':  { field: 'Slug Variant', def: 'The naming variant used when probing (e.g. acme-prod, acme.io, acme-backup).',                                            atk: 'Naming convention reveals how the org names resources - helps enumerate other adjacent buckets.' },
+      // Third Parties
+      'tpi-category': { field: 'Category',      def: 'Type of vendor (Analytics, CDN, Payments, Identity Provider, Marketing, etc.).',                                          atk: 'Category reveals the sensitivity level - payment and identity vendors are the highest-risk third parties.' },
+      'tpi-vendors':  { field: 'Vendors Found', def: 'Number of distinct vendors identified in this category.',                                                                  atk: 'Many vendors in one category = high complexity and potential for orphaned/unmonitored integrations.' },
+      'tpi-maxrisk':  { field: 'Max Risk',      def: 'Highest risk level of any vendor in this category (critical/high/medium/low).',                                           atk: 'Max risk flags whether any vendor in this category could be a critical supply chain attack vector.' },
+      'tpi-service':  { field: 'Service',       def: 'Name of the third-party vendor or service.',                                                                              atk: 'Each vendor is a supply chain dependency - compromise of the vendor = compromise of every customer.' },
+      'tpi-domain':   { field: 'Domain',        def: 'Primary domain used by this third-party service.',                                                                        atk: 'Third-party domains loaded as JS or iframes can serve malicious content if the vendor is compromised.' },
+      'tpi-cat':      { field: 'Category',      def: 'Classification of this vendor (Analytics, CDN, Auth, CRM, Chat, Payments, etc.).',                                       atk: 'Payment and auth categories carry the highest breach impact - they handle money and identity.' },
+      'tpi-risk':     { field: 'Risk',          def: 'Risk level assigned to this vendor based on category and access level.',                                                  atk: 'Critical-risk vendors (payment processors, SSO providers) should have SRI hashes and strict CSP rules.' },
+      'tpi-evidence': { field: 'Evidence',      def: 'Where this vendor was discovered (CSP header, JS source, DNS MX/SPF/CNAME, response header).',                           atk: 'Evidence source shows how deeply embedded the vendor is - JS in every page is riskier than a DNS entry.' }
+    };
+
+    (function initEducationSystem() {
+      // Column micro-tooltips: inject ?-chips into th[data-col-key]
+      document.querySelectorAll('th[data-col-key]').forEach(th => {
+        const key = th.dataset.colKey;
+        const tip = COL_TIPS[key];
+        if (!tip) return;
+        const wrap = document.createElement('span');
+        wrap.className = 'col-tip-wrap';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'col-tip-btn';
+        btn.setAttribute('aria-label', 'Column info');
+        btn.textContent = '?';
+        const tooltip = document.createElement('span');
+        tooltip.className = 'col-tip';
+        tooltip.innerHTML = '<strong>' + tip.field + '</strong>' + tip.def +
+          (tip.atk ? '<span class="col-tip-atk">\u26D1 ' + tip.atk + '</span>' : '');
+        wrap.appendChild(btn);
+        wrap.appendChild(tooltip);
+        th.appendChild(wrap);
+      });
+
+      // Column tooltip hover delegation
+      document.addEventListener('mouseover', function(e) {
+        const btn = e.target.closest('.col-tip-btn');
+        if (!btn) return;
+        const tip = btn.nextElementSibling;
+        if (tip) tip.classList.add('is-visible');
+      });
+      document.addEventListener('mouseout', function(e) {
+        const btn = e.target.closest('.col-tip-btn');
+        if (!btn) return;
+        const tip = btn.nextElementSibling;
+        if (tip) tip.classList.remove('is-visible');
+      });
+
+      // Section intel panel open/close
+      document.addEventListener('click', function(e) {
+        if (e.target.closest('#si-close')) {
+          const panel = document.getElementById('section-intel-panel');
+          if (panel) panel.classList.remove('si--open');
+          return;
+        }
+        const btn = e.target.closest('.about-section-btn');
+        if (!btn) return;
+        const key = btn.dataset.section;
+        const info = SECTION_INTEL[key];
+        if (!info) return;
+        const panel = document.getElementById('section-intel-panel');
+        if (!panel) return;
+        document.getElementById('si-title').textContent = info.title;
+        document.getElementById('si-purpose').textContent = info.purpose;
+        const flagsEl = document.getElementById('si-flags');
+        flagsEl.innerHTML = (info.redFlags || []).map(function(f) {
+          return '<li>' + f + '</li>';
+        }).join('');
+        document.getElementById('si-source').textContent = info.source;
+        panel.classList.add('si--open');
+      });
+    })();
+
+    /* ── Column Visibility Toggle ──────────────────────────────────────── */
+    (function() {
+      var COL_VIS_TABLES = [
+        { id: 'report-table', hasFilterRow: true },
+        { id: 'domain-table' },
+        { id: 'endpoints-table' },
+        { id: 'ip-table' },
+        { id: 'mail-table' },
+        { id: 'tls-table' },
+        { id: 'cloud-table' },
+        { id: 'seed-cidr-table' },
+        { id: 'seed-org-table' },
+        { id: 'seed-tld-table' },
+        { id: 'seed-whois-table' },
+        { id: 'saas-table' },
+        { id: 'open-buckets-table' },
+        { id: 'tpi-summary-table' },
+        { id: 'tpi-detail-table' }
+      ];
+
+      var COL_VIS = {
+        state: {},          // tableId -> Set of hidden col indices (0-based)
+        _currentTable: null,
+
+        init: function() {
+          this.load();
+          COL_VIS_TABLES.forEach(function(def) {
+            COL_VIS.injectButton(def);
+          });
+          this.applyCSS();
+          this._bindGlobal();
+        },
+
+        injectButton: function(def) {
+          // Guard: never inject twice for the same table
+          if (document.querySelector('.col-vis-btn[data-table-id="' + def.id + '"]')) return;
+
+          var table = document.getElementById(def.id);
+          if (!table) return;
+
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'col-vis-btn';
+          btn.setAttribute('data-table-id', def.id);
+          btn.textContent = 'Columns \u25be';
+
+          var container = table.closest('.table-container');
+          if (container) {
+            var viewGroup = container.getAttribute('data-view-group');
+            // Use data-view-group to find the exact .table-top-controls for this section
+            if (viewGroup) {
+              var controls = document.querySelector('.table-top-controls[data-view-group="' + viewGroup + '"]');
+              if (controls) {
+                controls.appendChild(btn);
+                return;
+              }
+            }
+            // Fallback for tables with no .table-top-controls (seed/saas/tpi sub-tables):
+            // Create a view-block wrapper right before THIS specific table-container
+            var wrap = document.createElement('div');
+            wrap.style.cssText = 'padding:4px 0';
+            if (viewGroup) {
+              wrap.className = 'view-block';
+              wrap.setAttribute('data-view-group', viewGroup);
+              // Apply initial hidden state so the wrapper doesn't appear in wrong section
+              var activeView = document.body.dataset.activeView || 'overview';
+              if (viewGroup !== activeView && viewGroup !== 'all') {
+                wrap.setAttribute('hidden', 'true');
+              }
+            }
+            wrap.appendChild(btn);
+            container.parentNode.insertBefore(wrap, container);
+            return;
+          }
+          // Last resort: insert immediately before the table
+          table.parentNode.insertBefore(btn, table);
+        },
+
+        open: function(tableId, triggerEl) {
+          this._currentTable = tableId;
+          var table = document.getElementById(tableId);
+          if (!table) return;
+
+          // Build checkbox list from thead first row
+          var ths = table.querySelectorAll('thead tr:first-child th');
+          var listEl = document.getElementById('col-vis-list');
+          var hiddenSet = this.state[tableId] || new Set();
+          var html = '';
+          ths.forEach(function(th, idx) {
+            var clone = th.cloneNode(true);
+            clone.querySelectorAll('.col-tip-wrap').forEach(function(el) { el.remove(); });
+            var label = clone.textContent.trim() || ('Col ' + (idx + 1));
+            var checked = hiddenSet.has(idx) ? '' : 'checked';
+            html += '<label class="col-vis-item">'
+              + '<input type="checkbox" data-col-idx="' + idx + '" ' + checked + '>'
+              + '<span>' + label + '</span>'
+              + '</label>';
+          });
+          listEl.innerHTML = html;
+
+          // Show dropdown first so we can measure its height
+          var dropdown = document.getElementById('col-vis-dropdown');
+          dropdown.removeAttribute('hidden');
+
+          var rect = triggerEl.getBoundingClientRect();
+          var dw = dropdown.offsetWidth || 260;
+          var dh = dropdown.scrollHeight || 300;
+
+          // Horizontal: align left edge with button, keep within viewport
+          var left = Math.min(rect.left, window.innerWidth - dw - 8);
+          dropdown.style.left = Math.max(8, left) + 'px';
+
+          // Vertical: prefer below; flip above if there isn't enough room
+          var spaceBelow = window.innerHeight - rect.bottom - 8;
+          var spaceAbove = rect.top - 8;
+          var maxH;
+          if (spaceBelow >= Math.min(dh, 200) || spaceBelow >= spaceAbove) {
+            maxH = Math.min(420, Math.max(spaceBelow, 120));
+            dropdown.style.top = (rect.bottom + 4) + 'px';
+          } else {
+            maxH = Math.min(420, Math.max(spaceAbove, 120));
+            dropdown.style.top = (rect.top - maxH - 4) + 'px';
+          }
+          dropdown.style.maxHeight = maxH + 'px';
+        },
+
+        close: function() {
+          var dropdown = document.getElementById('col-vis-dropdown');
+          if (dropdown) dropdown.setAttribute('hidden', '');
+          this._currentTable = null;
+        },
+
+        toggle: function(tableId, colIdx) {
+          if (!this.state[tableId]) this.state[tableId] = new Set();
+          var s = this.state[tableId];
+          if (s.has(colIdx)) { s.delete(colIdx); } else { s.add(colIdx); }
+          this.applyCSS();
+          this.save();
+        },
+
+        showAll: function(tableId) {
+          if (this.state[tableId]) this.state[tableId].clear();
+          this.applyCSS();
+          this.save();
+          this._refreshDropdown(tableId);
+        },
+
+        reset: function(tableId) {
+          this.showAll(tableId);
+        },
+
+        _refreshDropdown: function(tableId) {
+          // Re-check all checkboxes in the open dropdown
+          var listEl = document.getElementById('col-vis-list');
+          if (!listEl) return;
+          listEl.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+            cb.checked = true;
+          });
+        },
+
+        applyCSS: function() {
+          var lines = [];
+          Object.keys(this.state).forEach(function(tid) {
+            var hiddenSet = COL_VIS.state[tid];
+            var def = COL_VIS_TABLES.find(function(d) { return d.id === tid; });
+            hiddenSet.forEach(function(idx) {
+              var n = idx + 1;
+              lines.push('#' + tid + ' thead th:nth-child(' + n + '), #' + tid + ' tbody td:nth-child(' + n + ') { display: none !important; }');
+              if (def && def.hasFilterRow) {
+                lines.push('#filter-row th:nth-child(' + n + ') { display: none !important; }');
+              }
+            });
+          });
+          var styleEl = document.getElementById('col-vis-css');
+          if (styleEl) styleEl.textContent = lines.join('\n');
+        },
+
+        save: function() {
+          try {
+            var serial = {};
+            Object.keys(this.state).forEach(function(tid) {
+              var arr = Array.from(COL_VIS.state[tid]);
+              if (arr.length > 0) serial[tid] = arr;
+            });
+            localStorage.setItem('frogy_col_vis_v1', JSON.stringify(serial));
+          } catch(e) {}
+        },
+
+        load: function() {
+          try {
+            var raw = localStorage.getItem('frogy_col_vis_v1');
+            if (!raw) return;
+            var parsed = JSON.parse(raw);
+            Object.keys(parsed).forEach(function(tid) {
+              COL_VIS.state[tid] = new Set(parsed[tid]);
+            });
+          } catch(e) {}
+        },
+
+        _bindGlobal: function() {
+          // Delegate button clicks
+          document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.col-vis-btn');
+            if (btn) {
+              e.stopPropagation();
+              var tid = btn.getAttribute('data-table-id');
+              var dropdown = document.getElementById('col-vis-dropdown');
+              var isOpen = !dropdown.hasAttribute('hidden') && COL_VIS._currentTable === tid;
+              if (isOpen) { COL_VIS.close(); } else { COL_VIS.open(tid, btn); }
+              return;
+            }
+            // Checkbox toggle
+            var cb = e.target.closest('input[type="checkbox"]');
+            if (cb && cb.closest('#col-vis-list')) {
+              var idx = parseInt(cb.getAttribute('data-col-idx'), 10);
+              COL_VIS.toggle(COL_VIS._currentTable, idx);
+              return;
+            }
+            // All button
+            if (e.target.id === 'col-vis-all') {
+              COL_VIS.showAll(COL_VIS._currentTable);
+              return;
+            }
+            // Reset button
+            if (e.target.id === 'col-vis-reset') {
+              COL_VIS.reset(COL_VIS._currentTable);
+              return;
+            }
+            // Close on outside click
+            var dropdown2 = document.getElementById('col-vis-dropdown');
+            if (dropdown2 && !dropdown2.hasAttribute('hidden') && !dropdown2.contains(e.target)) {
+              COL_VIS.close();
+            }
+          });
+
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') COL_VIS.close();
+          });
+        }
+      };
+
+      // Init after DOM ready (footer runs after body, so DOM is ready)
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { COL_VIS.init(); });
+      } else {
+        COL_VIS.init();
+      }
+    })();
 
     </script>
 

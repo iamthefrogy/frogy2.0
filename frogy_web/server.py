@@ -32,8 +32,9 @@ REPO_ROOT = BASE_DIR.parent
 OUTPUT_DIR = REPO_ROOT / "output"
 PROJECTS_DIR = OUTPUT_DIR / "projects"
 FROGY_SCRIPT = REPO_ROOT / "frogy.sh"
+CONFIG_FILE = OUTPUT_DIR / "config.json"
 
-TOTAL_PIPELINE_STEPS = 17
+TOTAL_PIPELINE_STEPS = 31
 MAX_LOG_LINES = 2000
 QUEUE_HISTORY_LIMIT = 20
 
@@ -56,9 +57,38 @@ DATASET_FILES: Dict[str, str] = {
     "cloud_infrastructure": "cloud_infrastructure.json",
     "ip_enrichment": "ip_enrichment.json",
     "katana_links": "katana_links.json",
-    "screenshot_map": "screenshot_map.json",
     "portscan": "portscan.json",
+    # Expansion datasets (may not exist on older runs)
+    "seed_expansion": "seed_expansion.json",
+    "brand_candidates": "brand_candidates.json",
+    "github_surface": "github_surface.json",
+    "favicon_clusters": "favicon_clusters.json",
+    "saas_tenants": "saas_tenants.json",
+    "third_party_deps": "third_party_deps.json",
+    "shodan_banners": "shodan_banners.json",
+    "ipv6_data": "dnsx_ipv6.json",
 }
+
+
+def _load_config() -> Dict:
+    if CONFIG_FILE.exists():
+        try:
+            return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"api_keys": {}, "settings": {}}
+
+
+def _save_config(cfg: Dict) -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+
+def _mask_key(value: str) -> str:
+    """Return last-4-char preview of an API key without exposing full value."""
+    if not value or len(value) < 4:
+        return "****"
+    return "..." + value[-4:]
 
 
 def utc_now() -> datetime:
@@ -256,6 +286,7 @@ class FrogyJob:
     targets_file: Path
     start_mode: str = "immediate"
     scheduled_for: Optional[datetime] = None
+    company_name: str = ""
     id: str = field(default_factory=lambda: f"job-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}")
     created_at: datetime = field(default_factory=utc_now)
     enqueued_at: datetime = field(default_factory=utc_now)
@@ -564,6 +595,17 @@ class JobManager:
         try:
             job.open_log(inflight_log)
             env = os.environ.copy()
+            if job.company_name:
+                env["FROGY_COMPANY_NAME"] = job.company_name
+            if CONFIG_FILE.exists():
+                env["FROGY_CONFIG_FILE"] = str(CONFIG_FILE)
+            proj_dir = PROJECTS_DIR / job.project_slug
+            proj_meta = load_metadata(proj_dir)
+            exclusions = proj_meta.get("exclusions", [])
+            if exclusions:
+                excl_file = proj_dir / "exclusions.txt"
+                excl_file.write_text("\n".join(exclusions) + "\n", encoding="utf-8")
+                env["FROGY_EXCLUSIONS_FILE"] = str(excl_file)
             cmd = ["bash", str(FROGY_SCRIPT), str(job.targets_file)]
 
             def stream_reader(pipe, tag: str) -> None:
@@ -748,6 +790,14 @@ def create_app() -> Flask:
         entry["report"] = f"runs/{job.run_dir_name}/report.html" if job.run_dir_name else None
         runs.append(entry)
         runs.sort(key=lambda item: item.get("started_at", ""), reverse=True)
+        summary_stats: Dict = {}
+        if job.run_dir_name:
+            summary_file = project_dir / job.run_dir_name / "scan_summary.json"
+            if summary_file.exists():
+                try:
+                    summary_stats = json.loads(summary_file.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
         metadata["last_run"] = {
             "id": run_identifier,
             "status": status,
@@ -755,6 +805,7 @@ def create_app() -> Flask:
             "completed_at": entry["completed_at"],
             "report": entry["report"],
             "error": error,
+            "summary_stats": summary_stats,
         }
         metadata["latest_targets"] = job.targets
         save_metadata(project_dir, metadata)
@@ -903,6 +954,8 @@ def create_app() -> Flask:
                     "is_running": status == "running",
                     "is_queued": status == "queued",
                     "is_scheduled": status == "scheduled",
+                    "summary_stats": last_run.get("summary_stats", {}),
+                    "exclusions": metadata.get("exclusions", []),
                 }
             )
 
@@ -936,6 +989,7 @@ def create_app() -> Flask:
         targets_file: Path,
         start_mode: str,
         scheduled_for: Optional[datetime],
+        company_name: str = "",
     ) -> Tuple[FrogyJob, str]:
         job = FrogyJob(
             project_name=project_name,
@@ -944,6 +998,7 @@ def create_app() -> Flask:
             targets_file=targets_file,
             start_mode=start_mode,
             scheduled_for=scheduled_for,
+            company_name=company_name,
         )
         job.status = "pending"
         job.status_message = "Queued"
@@ -999,6 +1054,26 @@ def create_app() -> Flask:
             "runs": runs[:30],
         })
 
+    @app.route("/api/projects/<slug>/exclusions", methods=["GET"])
+    def get_project_exclusions(slug):
+        project_dir = PROJECTS_DIR / slug
+        if not (project_dir / "metadata.json").exists():
+            return jsonify({"error": "not found"}), 404
+        meta = load_metadata(project_dir)
+        return jsonify({"exclusions": meta.get("exclusions", [])})
+
+    @app.route("/api/projects/<slug>/exclusions", methods=["PUT"])
+    def put_project_exclusions(slug):
+        project_dir = PROJECTS_DIR / slug
+        if not (project_dir / "metadata.json").exists():
+            return jsonify({"error": "not found"}), 404
+        data = request.get_json(force=True) or {}
+        entries = [e.strip() for e in data.get("exclusions", []) if e.strip()]
+        meta = load_metadata(project_dir)
+        meta["exclusions"] = entries
+        save_metadata(project_dir, meta)
+        return jsonify({"message": "Exclusions saved.", "count": len(entries)})
+
     @app.route("/api/status", methods=["GET"])
     def api_status():
         return jsonify(manager.snapshot())
@@ -1011,6 +1086,7 @@ def create_app() -> Flask:
     def api_create_scan():
         payload = request.get_json(force=True, silent=False) or {}
         project_name = (payload.get("project_name") or "").strip()
+        company_name = (payload.get("company_name") or "").strip()
         targets_raw = payload.get("targets") or ""
         start_mode = (payload.get("start_mode") or "immediate").strip().lower()
         scheduled_raw = (payload.get("scheduled_for") or "").strip()
@@ -1041,13 +1117,19 @@ def create_app() -> Flask:
         project_dir = PROJECTS_DIR / slug
         project_dir.mkdir(parents=True, exist_ok=False)
 
+        exclusions_raw = payload.get("exclusions") or []
+        exclusions = [e.strip() for e in exclusions_raw if isinstance(e, str) and e.strip()]
+
         metadata = {
             "name": project_name,
             "slug": slug,
             "created_at": isoformat(utc_now()),
             "latest_targets": targets,
+            "exclusions": exclusions,
             "runs": [],
         }
+        if company_name:
+            metadata["company_name"] = company_name
         save_metadata(project_dir, metadata)
 
         targets_file = write_targets_file(project_dir, targets)
@@ -1055,7 +1137,7 @@ def create_app() -> Flask:
         message = "Scan saved."
 
         if start_mode in {"immediate", "queue", "schedule"}:
-            job, message = submit_scan_job(project_name, slug, targets, targets_file, start_mode, scheduled_for)
+            job, message = submit_scan_job(project_name, slug, targets, targets_file, start_mode, scheduled_for, company_name)
             job_info = job.to_dict()
 
         metadata["latest_targets"] = targets
@@ -1072,6 +1154,7 @@ def create_app() -> Flask:
     def api_update_scan(slug: str):
         payload = request.get_json(force=True, silent=False) or {}
         project_name = (payload.get("project_name") or "").strip()
+        company_name = (payload.get("company_name") or "").strip()
         targets_raw = payload.get("targets") or ""
         start_mode = (payload.get("start_mode") or "none").strip().lower()
         scheduled_raw = (payload.get("scheduled_for") or "").strip()
@@ -1112,10 +1195,16 @@ def create_app() -> Flask:
             (PROJECTS_DIR / slug).rename(PROJECTS_DIR / new_slug)
             slug = new_slug
 
+        exclusions_raw = payload.get("exclusions") or []
+        exclusions = [e.strip() for e in exclusions_raw if isinstance(e, str) and e.strip()]
+
         project_dir = PROJECTS_DIR / slug
         metadata["name"] = project_name
         metadata["slug"] = slug
         metadata["latest_targets"] = targets
+        metadata["exclusions"] = exclusions
+        if company_name:
+            metadata["company_name"] = company_name
         save_metadata(project_dir, metadata)
 
         targets_file = write_targets_file(project_dir, targets)
@@ -1123,7 +1212,7 @@ def create_app() -> Flask:
         message = "Scan updated."
         job_info = None
         if start_mode in {"immediate", "queue", "schedule"}:
-            job, message = submit_scan_job(project_name, slug, targets, targets_file, start_mode, scheduled_for)
+            job, message = submit_scan_job(project_name, slug, targets, targets_file, start_mode, scheduled_for, company_name)
             job_info = job.to_dict()
 
         save_metadata(project_dir, metadata)
@@ -1265,7 +1354,10 @@ def create_app() -> Flask:
         project_dir.mkdir(parents=True, exist_ok=True)
         targets_file = write_targets_file(project_dir, targets)
 
-        job, message = submit_scan_job(metadata.get("name", slug), slug, targets, targets_file, "immediate", None)
+        job, message = submit_scan_job(
+            metadata.get("name", slug), slug, targets, targets_file, "immediate", None,
+            metadata.get("company_name", ""),
+        )
         rows = assemble_scan_rows()
         scan_row = next((row for row in rows if row["slug"] == slug), None)
         return jsonify({"message": message, "scan": scan_row, "job": job.to_dict()})
@@ -1342,5 +1434,136 @@ def create_app() -> Flask:
         cursor = min(cursor, len(all_lines))
         lines = all_lines[cursor:]
         return jsonify({"lines": lines, "cursor": cursor + len(lines), "done": True})
+
+    # ── Config API ─────────────────────────────────────────────────────────
+    _KNOWN_API_KEYS = [
+        "github_token",
+        "shodan_api_key",
+        "censys_api_key",
+        "otx_api_key",
+        "virustotal_api_key",
+        "whoisxml_api_key",
+        "chaos_api_key",
+    ]
+
+    @app.route("/api/config", methods=["GET"])
+    def api_config_get():
+        cfg = _load_config()
+        masked: Dict[str, Any] = {}
+        for key in _KNOWN_API_KEYS:
+            val = cfg.get("api_keys", {}).get(key, "")
+            masked[key] = {
+                "configured": bool(val),
+                "preview": _mask_key(val) if val else "",
+            }
+        return jsonify({"api_keys": masked, "settings": cfg.get("settings", {})})
+
+    @app.route("/api/config", methods=["PUT"])
+    def api_config_put():
+        payload = request.get_json(force=True, silent=False) or {}
+        cfg = _load_config()
+        new_keys = payload.get("api_keys") or {}
+        for key, value in new_keys.items():
+            if key not in _KNOWN_API_KEYS:
+                continue
+            value = str(value).strip()
+            if value:
+                cfg.setdefault("api_keys", {})[key] = value
+            elif key in cfg.get("api_keys", {}):
+                del cfg["api_keys"][key]
+        new_settings = payload.get("settings") or {}
+        cfg.setdefault("settings", {}).update(new_settings)
+        _save_config(cfg)
+        return jsonify({"message": "Configuration saved."})
+
+    @app.route("/api/config/test/<key_name>", methods=["POST"])
+    def api_config_test(key_name: str):
+        if key_name not in _KNOWN_API_KEYS:
+            return jsonify({"error": "Unknown key name."}), 400
+        cfg = _load_config()
+        value = cfg.get("api_keys", {}).get(key_name, "")
+        if not value:
+            return jsonify({"ok": False, "message": "Key not configured."})
+
+        import urllib.request
+        import urllib.error
+
+        ok = False
+        message = "Unknown result."
+        try:
+            if key_name == "github_token":
+                req = urllib.request.Request(
+                    "https://api.github.com/rate_limit",
+                    headers={"Authorization": f"token {value}", "User-Agent": "frogy/2.0"},
+                )
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    ok = r.status == 200
+                    message = "GitHub token valid." if ok else f"HTTP {r.status}"
+            elif key_name == "shodan_api_key":
+                req = urllib.request.Request(
+                    f"https://api.shodan.io/api-info?key={value}",
+                    headers={"User-Agent": "frogy/2.0"},
+                )
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    ok = r.status == 200
+                    message = "Shodan key valid." if ok else f"HTTP {r.status}"
+            elif key_name == "otx_api_key":
+                req = urllib.request.Request(
+                    "https://otx.alienvault.com/api/v1/user/me",
+                    headers={"X-OTX-API-KEY": value, "User-Agent": "frogy/2.0"},
+                )
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    ok = r.status == 200
+                    message = "OTX key valid." if ok else f"HTTP {r.status}"
+            elif key_name == "censys_api_key":
+                import base64 as _b64
+                _b64creds = _b64.b64encode(f"{value}:{value}".encode()).decode()
+                req = urllib.request.Request(
+                    "https://search.censys.io/api/v1/account",
+                    headers={"Authorization": f"Basic {_b64creds}", "User-Agent": "frogy/2.0"},
+                )
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    ok = r.status == 200
+                    message = "Censys key valid." if ok else f"HTTP {r.status}"
+            elif key_name == "virustotal_api_key":
+                req = urllib.request.Request(
+                    "https://www.virustotal.com/api/v3/domains/google.com",
+                    headers={"x-apikey": value, "User-Agent": "frogy/2.0"},
+                )
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    ok = r.status == 200
+                    message = "VirusTotal key valid." if ok else f"HTTP {r.status}"
+            elif key_name == "whoisxml_api_key":
+                req = urllib.request.Request(
+                    f"https://www.whoisxmlapi.com/whoisserver/WhoisService?apiKey={value}&domainName=google.com&outputFormat=JSON",
+                    headers={"User-Agent": "frogy/2.0"},
+                )
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    import json as _json
+                    body = _json.loads(r.read().decode())
+                    # API returns error message when key is invalid
+                    if r.status == 200 and "WhoisRecord" in body:
+                        ok = True
+                        message = "WhoisXML key valid."
+                    else:
+                        ok = False
+                        message = body.get("ErrorMessage", {}).get("msg", f"HTTP {r.status}")
+            elif key_name == "chaos_api_key":
+                req = urllib.request.Request(
+                    "https://api.projectdiscovery.io/v1/user?utm_source=frogy",
+                    headers={"X-Api-Key": value, "User-Agent": "frogy/2.0"},
+                )
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    ok = r.status == 200
+                    message = "Chaos/PDCP key valid." if ok else f"HTTP {r.status}"
+            else:
+                message = "Live test not implemented for this key — key is stored."
+                ok = True
+        except urllib.error.HTTPError as exc:
+            message = f"HTTP {exc.code}: {exc.reason}"
+        except Exception as exc:  # pylint: disable=broad-except
+            message = str(exc)
+
+        return jsonify({"ok": ok, "message": message})
 
     return app

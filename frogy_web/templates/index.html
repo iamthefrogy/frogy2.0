@@ -21,6 +21,10 @@
       <a href="/" class="sidebar-nav-item is-active">
         <span>📁</span> Projects
       </a>
+      <span class="sidebar-nav-label">Config</span>
+      <button class="sidebar-nav-item" id="api-settings-btn" type="button">
+        <span>🔑</span> API Keys
+      </button>
     </nav>
 
     <div class="sidebar-dev-credit">
@@ -87,7 +91,6 @@
         <span>Project</span>
         <span>Status</span>
         <span>Progress</span>
-        <span>Discovery</span>
         <span></span>
       </div>
       <div id="scan-table-body" role="list"></div>
@@ -115,12 +118,20 @@
     </header>
     <form id="modal-form" novalidate>
       <div class="modal-field">
-        <label for="modal-project-name">Company name</label>
+        <label for="modal-project-name">Project slug <small>(used as folder name)</small></label>
         <input id="modal-project-name" name="project-name" type="text" placeholder="acme-security" required autocomplete="off">
       </div>
       <div class="modal-field">
+        <label for="modal-company-name">Full company name <small>(optional — enables org pivoting)</small></label>
+        <input id="modal-company-name" name="company-name" type="text" placeholder="ACME Corporation" autocomplete="off">
+      </div>
+      <div class="modal-field">
         <label for="modal-targets">Primary domains <small>(one per line)</small></label>
-        <textarea id="modal-targets" name="targets" rows="7" placeholder="example.com&#10;api.example.com" required></textarea>
+        <textarea id="modal-targets" name="targets" rows="6" placeholder="example.com&#10;api.example.com" required></textarea>
+      </div>
+      <div class="modal-field">
+        <label for="modal-exclusions">Exclude assets <small>(optional — one domain/subdomain per line)</small></label>
+        <textarea id="modal-exclusions" name="exclusions" rows="3" placeholder="staging.example.com&#10;legacy.example.com"></textarea>
       </div>
       <div class="modal-field hidden" id="modal-schedule-field">
         <label for="modal-schedule">Schedule start</label>
@@ -163,6 +174,18 @@
     <button id="log-panel-close" class="icon-btn" aria-label="Close">✕</button>
   </div>
   <div id="log-output" class="log-output"></div>
+</div>
+
+<!-- API Keys Panel -->
+<div id="api-panel-backdrop" class="log-backdrop hidden"></div>
+<div id="api-panel" class="log-panel hidden" role="dialog" aria-label="API Keys Configuration">
+  <div class="log-panel-header">
+    <span class="log-panel-title">API Keys Configuration</span>
+    <button id="api-panel-close" class="icon-btn" aria-label="Close">✕</button>
+  </div>
+  <div id="api-panel-body" class="api-panel-body">
+    <p class="api-panel-loading">Loading…</p>
+  </div>
 </div>
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>
