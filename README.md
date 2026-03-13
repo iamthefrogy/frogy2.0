@@ -19,6 +19,8 @@
 
 You give it a list of domains. It does the rest.
 
+You give it a list of domains. It does the rest.
+
 ```
 google.com          →   Frogy 2.0 discovers:
 apple.com                  • 2,000+ subdomains (passive + active enumeration)
@@ -28,39 +30,40 @@ example.com                • Every open port across all live hosts
                            • TLS certificates, cipher strengths, expiry dates
                            • Subdomain takeover candidates (55+ service fingerprints)
                            • Cloud asset inventory (AWS / Azure / GCP / Cloudflare)
-                           • SPF / DKIM / DMARC / DNSSEC coverage
-                           • Screenshots of every website
+                           • SPF / DKIM / DMARC / DNSSEC / BIMI / MTA-STS / DANE
+                           • Third-party vendor dependencies across all surfaces
+                           • Interactive asset relationship graph
                            → Risk-scored, prioritised, searchable HTML report
 ```
 
 ## Pipeline Overview
 
-Frogy 2.0 runs a **22-step bash pipeline** against your targets, fully automated from discovery to report:
+Frogy 2.0 runs a **31-step bash pipeline** against your targets — fully automated from discovery to report, all stages run unconditionally.
 
 | Phase | Steps | What happens |
 |-------|-------|-------------|
-| **Discovery** | 1–6 | Subfinder + Assetfinder + crt.sh + GAU → merge + DNS resolve (A, AAAA, CNAME, MX, NS, SPF, DMARC, DNSSEC) |
-| **Takeover** | 7 | CNAME chains checked against 55+ dangling-DNS fingerprints — Confirmed / Potential / Safe |
-| **Port + Web** | 8–10 | Naabu port scan → HTTPX web fingerprint (follow redirects, tech stack, server, CORS, TLS) |
-| **Exposed Files** | 11 | 100+ sensitive paths probed per site (`.env`, `.git/config`, `swagger.json`, private keys, backups…) |
-| **Crawl + JS** | 12–13 | Katana deep crawl → JS file analysis (API keys, cloud credentials, internal URLs) |
-| **Screenshots** | 14 | Visual snapshot of every live endpoint |
-| **Security Analysis** | 15–18 | Login panel detection · TLS/cipher grading · header compliance · CORS / email auth checks |
-| **Intelligence** | 19–21 | API surface mapping · employee portal classification · full cloud infrastructure inventory |
-| **Score + Report** | 22 | Three-bucket risk scoring → change detection → self-contained HTML report |
+| **Seed Expansion** | 1–3 | crt.sh org filter · ARIN RDAP ASN→CIDR · TLD sweep · brand variation · SEC EDGAR · WhoisXML registrant pivot (API-optional) |
+| **Discovery** | 4–9 | Subfinder + Assetfinder + crt.sh + GAU + Wayback CDX + RapidDNS + OTX/VT (API-optional) → merge + exclusion filter |
+| **DNS & Takeover** | 10–11 | DNSX full resolution (A/AAAA/CNAME/MX/NS/SPF/DMARC/DKIM/DNSSEC/BIMI/MTA-STS/DANE) · CDN/cloud tier classify · 55+ dangling-DNS fingerprints |
+| **Port + Web** | 12–16 | IPv6 discovery · Naabu port scan (~500 ports, CDN-aware) · web-port URL expansion · HTTPX fingerprinting · Shodan banner enrichment (API-optional) |
+| **Crawl + JS** | 18–19 | Katana deep crawl (JS-aware, depth 3) → JS file analysis (secrets, endpoints, SDK refs) |
+| **Security Analysis** | 21–23 | Login panel detection · TLS/cipher grading · security header compliance · CORS / BIMI / MTA-STS / DANE / WHOIS structured fields |
+| **Intelligence** | 24–29 | SaaS tenants · third-party vendor intel (100+ patterns) · API surface · colleague identification · GitHub org surface · favicon hash clustering |
+| **Cloud** | 30 | Cloud infra inventory + WAF shielding status · open storage check · bucket permutation |
+| **Score + Report** | 31 | Three-bucket risk scoring (70+ signals) → self-contained HTML report with 11 tabs |
 
-> **Runtime estimates** (Docker, 2 vCPU / 4–8 GB, 50–100 Mbps):
-> `≤100 subdomains` ~20–40 min · `100–999` ~45–120 min · `1k–10k` ~3–6 hrs · `10k+` ~8–18 hrs
+---
 
 ## Key Features
 
 <details>
 <summary><b>Subdomain Discovery & DNS Intelligence</b></summary>
 
-- Aggregates from **Subfinder**, **Assetfinder**, **crt.sh**, and **GAU** (Wayback Machine)
+- Aggregates from **Subfinder**, **Assetfinder**, **crt.sh**, **GAU** (Wayback Machine), RapidDNS, OTX, VirusTotal
 - Full DNS resolution: A, AAAA, CNAME, MX, NS, SPF, DMARC, DKIM, DNSSEC
-- WHOIS registrar, creation date, expiry per domain
-- Change detection — new assets, disappeared assets, new findings vs. previous scan
+- BIMI, MTA-STS, DANE/TLSA records per domain
+- WHOIS: Registrar, creation date, expiry, RegistrantOrg, RegistrantCountry per domain
+- **Per-project Exclusion List** — assets marked out-of-scope are filtered before DNS resolution and from all future rescans
 </details>
 
 <details>
@@ -87,6 +90,26 @@ Frogy 2.0 runs a **22-step bash pipeline** against your targets, fully automated
 - Protocol version (TLS 1.3 down to SSL 3.0)
 - Self-signed detection, wildcard SAN detection, broken handshakes
 - Certificate expiry with colour-coded urgency (expired → within 7d → within 30d → ok)
+- **Key algorithm** (RSA / ECDSA) and **key size** (colour-coded: red < 2048, yellow = 2048, green ≥ 4096 / any ECDSA)
+- **CA type** detection: Let's Encrypt vs. paid CA
+- **Cert Score A–F** (0–100) per certificate — TLS version + cipher + expiry + key + self-signed + wildcard
+</details>
+
+<details>
+<summary><b>Mail Infrastructure Mapping</b></summary>
+
+- Per-domain **MX record** collection + automatic mail provider detection (Google Workspace, Microsoft 365, ProofPoint, Mimecast, etc.)
+- **SPF / DKIM / DMARC / DNSSEC** evaluated per domain
+- **BIMI** record detection, **MTA-STS** mode (enforce/testing/none), **DANE/TLSA** records (ports 443 and 25)
+- Dedicated **Mail Infrastructure** report tab with per-domain **Email Risk Score 0–100**
+</details>
+
+<details>
+<summary><b>Domain Intelligence Enrichment</b></summary>
+
+- Structured **WHOIS fields** per domain: Registrar, DomainCreated, DomainExpires, DomainAge, RegistrantOrg, RegistrantCountry
+- **NS cluster badge** — groups domains sharing the same nameservers
+- **Shodan service banners** surfaced in the IP Addresses table (port · protocol · service pills)
 </details>
 
 <details>
@@ -108,9 +131,37 @@ Frogy 2.0 runs a **22-step bash pipeline** against your targets, fully automated
 <details>
 <summary><b>Crawl-Based Complexity Scoring</b></summary>
 
-- Katana crawls every live site (configurable depth)
+- Katana crawls every live site (depth 3)
 - **Deduplicated unique page count** per endpoint: numeric path segments normalised (`/users/123` → `/users/{id}`), query strings stripped
 - Log-scaled score contribution (+2 to +12) — measures real application complexity, not URL count inflation
+</details>
+
+<details>
+<summary><b>Third-Party Vendor Intelligence</b></summary>
+
+- Multi-source collection: CSP headers, Katana JS analysis, MX/SPF/CNAME records, HTTP response headers
+- **100+ vendor patterns** classify into Analytics, CDN, Auth/Identity, Payment, Marketing, Cloud, Monitoring, and more
+- Dedicated **Third Parties** report tab with per-category summary and full vendor detail table
+</details>
+
+<details>
+<summary><b>Asset Topology Graph</b></summary>
+
+- Interactive **D3 v7 force-directed graph** in the report — no external dependencies
+- **8 node types**: Domain · IP · ASN · NS · MX · Cloud · TLS Cert · Vendor
+- **11 edge types**: DNS · CNAME · NS · MX · ASN · Cloud · TLS SAN · Vendor · Takeover · Redirect · Favicon
+- Click any node for ego-network highlight; filter by node type or edge type; search by name
+</details>
+
+<details>
+<summary><b>Interactive Report UX</b></summary>
+
+- **Clickable per-endpoint scorecard** — click any Attack Surface Score to see a breakdown of every contributing signal
+- **Column visibility toggle** per table — hide/show columns, state persisted in localStorage
+- **Section intelligence drawer** — ⓘ About button in each section opens an analyst-written explanation with red flags to look for
+- **Column micro-tooltips** — hover the `?` chip on any column header for a one-sentence definition and attacker use case
+- **9-chart analytics grid** in the Overview
+- **Dark / Light theme** — shared between dashboard and report
 </details>
 
 ## Risk Scoring
@@ -119,15 +170,40 @@ Every endpoint is scored through **three capped buckets** (max 100). The aggrega
 
 | Bucket | Cap | Measures |
 |--------|-----|----------|
-| **Exposure** | 45 | Directly dangerous or reachable attack surfaces |
-| **Hygiene** | 35 | Misconfigurations, certificate health, compliance gaps |
-| **Sensitivity** | 20 | Asset criticality, stack complexity, data-handling classification |
+| **Sensitivity** | 40 | Asset criticality, stack complexity, data-handling classification |
+| **Exposure** | 35 | Directly dangerous or reachable attack surfaces |
+| **Hygiene** | 25 | Misconfigurations, certificate health, compliance gaps |
+
+<details>
+<summary><b>Sensitivity signals</b></summary>
+
+| Signal | Points |
+|--------|--------|
+| Employee-facing / internal asset | +12 |
+| Admin / monitoring tool in stack (Kibana, Grafana, Jenkins, phpMyAdmin, k8s Dashboard) | +12 |
+| Crawl surface size — unique deduplicated pages (log-scaled) | up to +12 |
+| Identity / auth service (Keycloak, Okta, Auth0, LDAP, SAML) | +8 |
+| Object storage endpoint exposed | +8 |
+| Error / debug page publicly visible | +8 |
+| Non-production environment in title (dev / staging / test / UAT) | +6 |
+| API surface detected | +6 |
+| CMS admin surface (WordPress, Drupal, Magento) | +6 |
+| Managed database footprint reachable | +7 |
+| Business-critical TLD / financial-themed path in crawl | up to +8 |
+| High-risk third-party vendor in use | up to +6 |
+| Cloud API / serverless resource | +5 |
+| SaaS tenant footprint detected | +3 |
+| Cloud managed surface | +3 |
+| Full-stack framework detected | +2 |
+| Authentication-protected surface (HTTP 401) | +3 |
+</details>
 
 <details>
 <summary><b>Exposure signals</b></summary>
 
 | Signal | Points |
 |--------|--------|
+| Open / publicly accessible cloud storage bucket | +20 |
 | Login interface served over HTTP | +20 |
 | Authenticated surface (HTTPS login) | +12 |
 | High-value login panel (phpMyAdmin, Jenkins, k8s, Portainer, Grafana, remote-access) | +8 – +10 bonus |
@@ -162,10 +238,11 @@ Every endpoint is scored through **three capped buckets** (max 100). The aggrega
 | Certificate expires within 7 days | +12 |
 | Self-signed certificate | +8 |
 | Error / debug / stack trace page public | +8 |
-| Legacy protocol / deprecated cipher support | +8 |
 | CBC cipher in use (BEAST / POODLE) | +6 |
 | Development server exposed (Werkzeug, Flask dev) | +6 |
 | Certificate expires within 30 days | +6 |
+| HTTP → HTTPS redirect downgrade detected | +6 |
+| Weak RSA key < 2048 bits | +8 |
 | Missing security headers (HSTS, CSP, X-Frame-Options…) | up to +12 |
 | DMARC not published | +6 |
 | SPF not published | +4 |
@@ -176,31 +253,7 @@ Every endpoint is scored through **three capped buckets** (max 100). The aggrega
 | Server version disclosed in headers | +5 |
 </details>
 
-<details>
-<summary><b>Sensitivity signals</b></summary>
-
-| Signal | Points |
-|--------|--------|
-| Employee-facing / internal asset | +12 |
-| Admin / monitoring tool in stack (Kibana, Grafana, Jenkins, phpMyAdmin, k8s Dashboard) | +12 |
-| Crawl surface size — unique deduplicated pages (log-scaled) | up to +12 |
-| Identity / auth service (Keycloak, Okta, Auth0, LDAP, SAML) | +8 |
-| Object storage endpoint exposed | +8 |
-| Error / debug page publicly visible | +8 |
-| Non-production environment in title (dev / staging / test / UAT) | +6 |
-| API surface detected | +6 |
-| CMS admin surface (WordPress, Drupal, Magento) | +6 |
-| Managed database footprint reachable | +7 |
-| Cloud API / serverless resource | +5 |
-| Cloud managed surface | +3 |
-| Full-stack framework detected (dynamic app indicator) | +2 |
-| Authentication-protected surface (HTTP 401) | +3 |
-</details>
-
-> **Why it matters:** - An internal admin panel with an expired self-signed cert, a wildcard CORS header, and port 3306 exposed scores far higher than a static marketing page — so your team skips the noise and starts where it matters.
-
-**Why This Matters** - This approach helps you quickly **prioritize** which assets warrant deeper testing. Subdomains with high counts of open ports, advanced internal usage, missing headers, or login panels are more complex, more privileged, or more likely to be misconfigured—therefore, your security team can focus on those first.
-
+> **Why it matters:** An internal admin panel with an expired self-signed cert, a wildcard CORS header, and port 3306 exposed scores far higher than a static marketing page — so your team skips the noise and starts where it matters.
 
 # Screenshots
 
@@ -245,7 +298,16 @@ docker run --rm --privileged --cap-add=NET_RAW \
 http://localhost:8787
 ```
 
-Access-key authentication is required on first load. The key is printed to container stdout on startup.
+### 4. Start your first scan
+
+1. Click **+ New Scan** — enter a project name and paste your domains (one per line)
+2. Optionally paste any **out-of-scope assets** in the Exclusion List textarea (exact or suffix match)
+3. Click **Run Now** or **Add to Queue**
+4. Watch live progress: `Step X of 31`, elapsed timer, real-time log streaming
+5. When complete, click **Report →** to open the self-contained HTML report
+
+
+Results are written to `output/run-<timestamp>/`.
 
 ## Report Tour
 
@@ -253,32 +315,33 @@ The generated report is a **self-contained HTML file** — no server needed, ope
 
 | Tab | Contents |
 |-----|----------|
-| **Overview** | Executive banner (risk score + grade + 4 metric groups) · 9-chart analytics grid · risk leaderboard |
-| **Domain Intelligence** | All subdomains · DNS records · email auth posture (SPF/DKIM/DMARC/DNSSEC) · WHOIS |
-| **Application Endpoints** | Every live endpoint — status, title, tech stack, login detection, security headers, CORS, CDN, screenshots · Table or Gallery view |
-| **IP Addresses** | Reverse DNS · ASN · network blocks · geolocation |
-| **TLS Certificates** | Cipher · protocol version · expiry (colour-coded) · SANs · issuer · grade |
+| **Overview** | Executive banner (Asset Tiers + 5 metric groups) · 9-chart analytics grid · risk leaderboard with clickable Attack Surface Score |
+| **Domain Intelligence** | All subdomains · DNS records · NS cluster badge · Registrar · Domain Age · BIMI/MTA-STS/DANE badges · WHOIS structured fields |
+| **Application Endpoints** | Every live endpoint — status, title, tech stack, login detection, security headers, CORS, CDN |
+| **IP Addresses** | Reverse DNS · ASN · network blocks · geolocation · Shodan service banners (port/protocol/service/version pills) |
+| **Mail Infrastructure** | Per-domain: MX routing · auto-detected mail provider · SPF/DKIM/DMARC/BIMI/MTA-STS/DANE badges · Email Risk Score 0–100 |
+| **TLS Certificates** | Cipher · protocol version · expiry (colour-coded) · SANs · issuer · Cert Score A–F · Key Algorithm · Key Size · Wildcard flag · Self-Signed flag · CA Type |
 | **Cloud Infrastructure** | Asset map by provider · resource type · shielding status |
-| **Subdomain Takeover** | Confirmed + potential findings with provider + evidence |
-| **Exposed Files** | Sensitive paths reachable on live hosts |
-| **JS Findings** | Secrets and internal URLs extracted from JavaScript |
-| **Changes** | Delta vs. previous scan — new / disappeared assets, new findings |
+| **Internet Footprint** | CIDR blocks · crt.sh org subdomains · TLD sweep results · WHOIS registrant pivot candidates |
+| **SaaS Tenants** | SaaS tenant footprint · open/accessible cloud storage buckets |
+| **Third Parties** | Vendor classification from CSP, JS refs, MX/SPF/CNAME, and response headers · 100+ vendor patterns |
+| **Asset Topology** | Interactive D3 force-directed graph · 8 node types · 11 edge types · ego-network click · search · type filters |
 
-**Every table** has full-text search, column filters, and CSV + JSON export.
-
----
+**Every table** has full-text search, **column visibility toggle** (hidden columns persisted per browser), and the **ⓘ About** button explains what each section means and what to look for.
 
 ## Orbis Dashboard
 
 The web UI at `localhost:8787` is branded **Orbis — Full-Spectrum Attack Surface Intelligence**.
 
-- **Project cards** — status badge, live progress bar (`Step X of 22`), elapsed/total duration
+- **Project cards** — status badge, live progress bar (`Step X of 31`), elapsed/total duration
 - **KPI row** — Total projects · Active scans · Completed · Queued
 - **Filter tabs** — All / Running / Done / Queued
-- **View Logs** — live log streaming side panel, polls every 1.5 s during active scans
+- **📋 View Logs** — live log streaming side panel, polls every 1.5 s during active scans
 - **Project detail page** — full per-project run history with individual report + log access
 - **Bulk operations** — select multiple projects for batch deletion
 - **Modify / Rescan / Cancel** any project from the `···` context menu
+- **Per-project Exclusion List** — edit out-of-scope assets from the New Scan / Modify modal
+- **API Keys panel** — configure optional enrichment keys with live validation and individual Clear buttons
 - **Dark / Light theme** — persisted via `frogyTheme` localStorage key (shared with reports)
 
 ## Tech Stack
@@ -295,6 +358,43 @@ The web UI at `localhost:8787` is branded **Orbis — Full-Spectrum Attack Surfa
 | TLS analysis | tlsx |
 | System utilities | jq · curl · whois · dnsutils · openssl |
 | Container base | Ubuntu 24.04 · Go 1.24 (tool compilation) |
+
+## Configuration
+
+Access the **API Keys** panel from the sidebar (`🔑 API Keys`) to configure:
+
+### API Keys (optional but unlock additional sources)
+
+| Key | Unlocks |
+|-----|---------|
+| `github_token` | GitHub org surface discovery, secret detection |
+| `shodan_api_key` | Shodan banner enrichment (non-HTTP ports) + favicon hash clustering (MMH3) |
+| `censys_api_key` | Censys favicon hash clustering (MD5) — single key, new platform format |
+| `otx_api_key` | AlienVault OTX enhanced passive DNS |
+| `virustotal_api_key` | VirusTotal passive subdomain feed |
+| `whoisxml_api_key` | WHOIS registrant pivot for seed expansion / org ASN mapping |
+| `chaos_api_key` | ProjectDiscovery PDCP — runs `chaos` CLI per domain for live subdomain results |
+
+All keys are **optional** — the pipeline runs fully without them, skipping only the enrichment steps that require a specific key. Each key has a **live validation test** and a **Clear** button in the API Keys panel.
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Web dashboard | Python · Flask 3.x |
+| Scanner pipeline | Bash 5.x · 31-step workflow |
+| Subdomain discovery | Subfinder · Assetfinder · crt.sh · GAU · Wayback CDX · RapidDNS · OTX · VirusTotal |
+| DNS resolution | DNSX (A, AAAA, CNAME, MX, NS, SPF, DMARC, DKIM, DNSSEC, BIMI, MTA-STS, DANE) |
+| Port scanning | Naabu (CDN/cloud-tier classification via Team Cymru ASN) |
+| Web fingerprinting | HTTPX (follow-redirects, CORS, redirect dedup) |
+| Web crawling | Katana (unique-page dedup, numeric segment normalisation) |
+| TLS analysis | tlsx (cipher, key algo, key size, wildcard, self-signed, CA type, Cert Score A–F) |
+| Banner enrichment | Shodan API · Censys API (both API-optional) |
+| Email / DNS intel | dig · BIMI · MTA-STS · DANE/TLSA · structured WHOIS fields |
+| Report visualisation | Chart.js (9 charts) · D3 v7 (Asset Topology force graph) |
+| System utilities | jq · curl · whois · dnsutils · openssl |
+| Container base | Ubuntu 24.04 · Go 1.24 (tool compilation) |
+
 
 ## BlackHat Arsenal
 
