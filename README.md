@@ -1,7 +1,6 @@
 <div align="center">
 
-# Orbis - Attack Surface Intelligence
-### Full-Spectrum Attack Surface Intelligence
+# PROJECT IS ABANDONED - KINDLY USE THE NEW TOOL - https://github.com/iamthefrogy/frogscope
 
 [![BlackHat](https://img.shields.io/badge/BlackHat%20Arsenal-Presented-black?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyTDIgN2wxMCA1IDEwLTV6TTIgMTdsOSA1IDktNXYtNUwyIDEyeiIvPjwvc3ZnPg==)](https://www.youtube.com/watch?v=LHlU4CYNj1M)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
